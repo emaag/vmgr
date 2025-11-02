@@ -129,6 +129,15 @@ CONFIG_AUTO_SAVE=true # Auto-save settings on change
 CONFIG_AUTO_LOAD=true # Auto-load settings on startup
 CONFIG_PROFILE="default" # Active configuration profile
 
+# Multi-Drive Catalog System
+CATALOG_ENABLED=true # Enable catalog system
+CATALOG_DB="$HOME/.video-manager-catalog.json" # Catalog database file
+CATALOG_DRIVES_DB="$HOME/.video-manager-drives.json" # Known drives database
+CATALOG_AUTO_SCAN=false # Auto-scan on drive connect
+CATALOG_INCLUDE_METADATA=true # Extract video metadata (duration, resolution)
+CATALOG_INCLUDE_HASH=true # Calculate file hashes (slower but detects duplicates)
+CATALOG_OFFLINE_RETENTION=90 # Days to keep offline drive data (0=forever)
+
 # Statistics tracking
 declare -A STATS
 STATS[files_processed]=0
@@ -2604,6 +2613,414 @@ generate_subtitles_in_directory() {
     fi
 }
 
+################################################################################
+# MULTI-DRIVE CATALOG SYSTEM
+################################################################################
+
+# Get unique drive identifier (UUID, Volume ID, or Serial Number)
+# Args: $1=mount_point
+# Returns: unique drive ID
+get_drive_id() {
+    local mount_point="$1"
+    local drive_id=""
+
+    # Method 1: Try to get filesystem UUID (Linux)
+    if [[ -d "$mount_point" ]]; then
+        # For WSL drives, use volume label + serial
+        if [[ "$mount_point" =~ ^/mnt/[a-z]$ ]]; then
+            # WSL drive (C:, D:, etc)
+            local drive_letter="${mount_point##*/}"
+            # Get Windows volume serial number via PowerShell
+            drive_id=$(powershell.exe -NoProfile -Command "(Get-Volume -DriveLetter ${drive_letter}).UniqueId" 2>/dev/null | tr -d '\r\n' | tr -d '{}'  )
+            if [[ -z "$drive_id" ]]; then
+                # Fallback: use volume label + drive letter
+                local vol_label=$(powershell.exe -NoProfile -Command "(Get-Volume -DriveLetter ${drive_letter}).FileSystemLabel" 2>/dev/null | tr -d '\r\n')
+                drive_id="${drive_letter}_${vol_label}"
+            fi
+        else
+            # Try Linux UUID method
+            local dev=$(df "$mount_point" 2>/dev/null | tail -1 | awk '{print $1}')
+            if [[ -n "$dev" ]]; then
+                drive_id=$(blkid -s UUID -o value "$dev" 2>/dev/null)
+            fi
+
+            # Fallback: use mount point hash
+            if [[ -z "$drive_id" ]]; then
+                drive_id=$(echo -n "$mount_point" | md5sum | awk '{print $1}')
+            fi
+        fi
+    fi
+
+    echo "$drive_id"
+}
+
+# Get drive label/name
+# Args: $1=mount_point
+# Returns: friendly drive name
+get_drive_label() {
+    local mount_point="$1"
+    local label=""
+
+    if [[ "$mount_point" =~ ^/mnt/[a-z]$ ]]; then
+        local drive_letter="${mount_point##*/}"
+        label=$(powershell.exe -NoProfile -Command "(Get-Volume -DriveLetter ${drive_letter}).FileSystemLabel" 2>/dev/null | tr -d '\r\n')
+        [[ -z "$label" ]] && label="Drive ${drive_letter^^}"
+    else
+        label=$(basename "$mount_point")
+    fi
+
+    echo "$label"
+}
+
+# Detect drive type (USB, NAS, Local, Network)
+# Args: $1=mount_point
+# Returns: drive type
+detect_drive_type() {
+    local mount_point="$1"
+    local drive_type="Unknown"
+
+    # Check mount info
+    local mount_info=$(mount | grep "$mount_point")
+
+    if [[ "$mount_point" =~ ^/mnt/[a-z]$ ]]; then
+        # WSL drive
+        local drive_letter="${mount_point##*/}"
+        local bus_type=$(powershell.exe -NoProfile -Command "(Get-PhysicalDisk | Where-Object {(\$_.DeviceID -eq (Get-Partition -DriveLetter ${drive_letter}).DiskNumber)}).BusType" 2>/dev/null | tr -d '\r\n')
+
+        case "$bus_type" in
+            USB) drive_type="USB" ;;
+            SATA|SAS|ATA) drive_type="Local" ;;
+            NVMe|RAID) drive_type="Local" ;;
+            iSCSI|FC) drive_type="NAS" ;;
+            *) drive_type="Local" ;;
+        esac
+    elif echo "$mount_info" | grep -q "cifs\|smb"; then
+        drive_type="Network"
+    elif echo "$mount_info" | grep -q "nfs"; then
+        drive_type="NAS"
+    elif echo "$mount_info" | grep -q "fuse\|9p"; then
+        drive_type="Network"
+    else
+        drive_type="Local"
+    fi
+
+    echo "$drive_type"
+}
+
+# Initialize catalog database
+init_catalog_db() {
+    if [[ ! -f "$CATALOG_DB" ]]; then
+        echo '{"videos":[],"last_updated":"'$(date -Iseconds)'","version":"1.0"}' > "$CATALOG_DB"
+        log_verbose "Created catalog database: $CATALOG_DB"
+    fi
+
+    if [[ ! -f "$CATALOG_DRIVES_DB" ]]; then
+        echo '{"drives":[],"last_updated":"'$(date -Iseconds)'"}' > "$CATALOG_DRIVES_DB"
+        log_verbose "Created drives database: $CATALOG_DRIVES_DB"
+    fi
+}
+
+# Register a drive in the drives database
+# Args: $1=mount_point
+# Returns: drive_id
+register_drive() {
+    local mount_point="$1"
+
+    init_catalog_db
+
+    local drive_id=$(get_drive_id "$mount_point")
+    local drive_label=$(get_drive_label "$mount_point")
+    local drive_type=$(detect_drive_type "$mount_point")
+    local timestamp=$(date -Iseconds)
+
+    log_info "Registering drive: $drive_label ($drive_id)"
+    log_verbose "  Mount point: $mount_point"
+    log_verbose "  Type: $drive_type"
+
+    # Read existing drives
+    local drives_json=$(cat "$CATALOG_DRIVES_DB")
+
+    # Check if drive already exists
+    local existing=$(echo "$drives_json" | jq -r ".drives[] | select(.drive_id == \"$drive_id\") | .drive_id")
+
+    if [[ -n "$existing" ]]; then
+        # Update existing drive
+        drives_json=$(echo "$drives_json" | jq \
+            --arg id "$drive_id" \
+            --arg mp "$mount_point" \
+            --arg ts "$timestamp" \
+            '(.drives[] | select(.drive_id == $id)) |= {
+                drive_id: $id,
+                drive_label: .drive_label,
+                drive_type: .drive_type,
+                last_mount_point: $mp,
+                last_seen: $ts,
+                status: "online",
+                total_videos: .total_videos
+            } | .last_updated = $ts')
+    else
+        # Add new drive
+        drives_json=$(echo "$drives_json" | jq \
+            --arg id "$drive_id" \
+            --arg label "$drive_label" \
+            --arg type "$drive_type" \
+            --arg mp "$mount_point" \
+            --arg ts "$timestamp" \
+            '.drives += [{
+                drive_id: $id,
+                drive_label: $label,
+                drive_type: $type,
+                last_mount_point: $mp,
+                last_seen: $ts,
+                status: "online",
+                total_videos: 0
+            }] | .last_updated = $ts')
+    fi
+
+    echo "$drives_json" > "$CATALOG_DRIVES_DB"
+    log_success "Drive registered: $drive_label"
+
+    echo "$drive_id"
+}
+
+# Scan a drive and catalog all videos
+# Args: $1=mount_point $2=recursive(true/false)
+catalog_drive() {
+    local mount_point="$1"
+    local recursive="${2:-false}"
+
+    if [[ ! -d "$mount_point" ]]; then
+        log_error "Mount point does not exist: $mount_point"
+        return 1
+    fi
+
+    log_info "Starting catalog scan: $mount_point"
+
+    # Register drive
+    local drive_id=$(register_drive "$mount_point")
+
+    # Initialize counters
+    local video_count=0
+    local new_count=0
+    local updated_count=0
+    local start_time=$(date +%s)
+
+    # Find all video files
+    local -a video_files
+    if [[ "$recursive" == true ]]; then
+        while IFS= read -r -d '' file; do
+            video_files+=("$file")
+        done < <(find "$mount_point" -type f -print0 2>/dev/null | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    else
+        while IFS= read -r -d '' file; do
+            video_files+=("$file")
+        done < <(find "$mount_point" -maxdepth 1 -type f -print0 2>/dev/null | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    fi
+
+    local total=${#video_files[@]}
+    log_info "Found $total video files to catalog"
+
+    if [[ $total -eq 0 ]]; then
+        log_warning "No video files found on this drive"
+        return 0
+    fi
+
+    # Read existing catalog
+    local catalog_json=$(cat "$CATALOG_DB")
+
+    # Process each video
+    for file in "${video_files[@]}"; do
+        ((video_count++))
+
+        # Calculate relative path from mount point
+        local rel_path="${file#$mount_point/}"
+        local filename=$(basename "$file")
+        local file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+        local timestamp=$(date -Iseconds)
+
+        # Progress indicator
+        if (( video_count % 10 == 0 )); then
+            echo -ne "\r${COLOR_CYAN}  Cataloging: [$video_count/$total]${COLOR_RESET}"
+        fi
+
+        # Extract studio from bracket notation
+        local studio=""
+        if [[ "$filename" =~ ^\[([^\]]+)\] ]]; then
+            studio="${BASH_REMATCH[1]}"
+        fi
+
+        # Get file hash if enabled
+        local file_hash=""
+        if [[ "$CATALOG_INCLUDE_HASH" == true ]]; then
+            file_hash=$(calculate_hash "$file")
+        fi
+
+        # Get metadata if enabled
+        local duration=""
+        local resolution=""
+        if [[ "$CATALOG_INCLUDE_METADATA" == true ]]; then
+            duration=$(get_video_duration "$file")
+            # Get resolution (requires ffprobe)
+            if command -v ffprobe >/dev/null 2>&1; then
+                resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$file" 2>/dev/null)
+            fi
+        fi
+
+        # Check if video already in catalog
+        local existing=$(echo "$catalog_json" | jq -r ".videos[] | select(.drive_id == \"$drive_id\" and .relative_path == \"$rel_path\") | .video_id")
+
+        if [[ -n "$existing" ]]; then
+            # Update existing entry
+            catalog_json=$(echo "$catalog_json" | jq \
+                --arg vid "$existing" \
+                --arg size "$file_size" \
+                --arg hash "$file_hash" \
+                --arg dur "$duration" \
+                --arg res "$resolution" \
+                --arg ts "$timestamp" \
+                '(.videos[] | select(.video_id == ($vid|tonumber))) |= {
+                    video_id: .video_id,
+                    drive_id: .drive_id,
+                    relative_path: .relative_path,
+                    filename: .filename,
+                    file_size: ($size|tonumber),
+                    hash: $hash,
+                    duration: ($dur|tonumber),
+                    resolution: $res,
+                    studio: .studio,
+                    last_scanned: $ts,
+                    status: "exists"
+                }')
+            ((updated_count++))
+        else
+            # Add new entry
+            local video_id=$(echo "$catalog_json" | jq '.videos | length')
+            catalog_json=$(echo "$catalog_json" | jq \
+                --arg vid "$video_id" \
+                --arg did "$drive_id" \
+                --arg rpath "$rel_path" \
+                --arg fname "$filename" \
+                --arg size "$file_size" \
+                --arg hash "$file_hash" \
+                --arg dur "$duration" \
+                --arg res "$resolution" \
+                --arg studio "$studio" \
+                --arg ts "$timestamp" \
+                '.videos += [{
+                    video_id: ($vid|tonumber),
+                    drive_id: $did,
+                    relative_path: $rpath,
+                    filename: $fname,
+                    file_size: ($size|tonumber),
+                    hash: $hash,
+                    duration: ($dur|tonumber),
+                    resolution: $res,
+                    studio: $studio,
+                    last_scanned: $ts,
+                    status: "exists"
+                }]')
+            ((new_count++))
+        fi
+    done
+
+    echo -ne "\r\033[K"  # Clear line
+
+    # Update catalog
+    catalog_json=$(echo "$catalog_json" | jq --arg ts "$(date -Iseconds)" '.last_updated = $ts')
+    echo "$catalog_json" > "$CATALOG_DB"
+
+    # Update drive video count
+    local drives_json=$(cat "$CATALOG_DRIVES_DB")
+    drives_json=$(echo "$drives_json" | jq \
+        --arg id "$drive_id" \
+        --arg count "$total" \
+        '(.drives[] | select(.drive_id == $id)).total_videos = ($count|tonumber)')
+    echo "$drives_json" > "$CATALOG_DRIVES_DB"
+
+    local end_time=$(date +%s)
+    local elapsed=$((end_time - start_time))
+
+    echo ""
+    log_success "Catalog scan complete!"
+    log_info "  Total videos: $total"
+    log_info "  New entries: $new_count"
+    log_info "  Updated entries: $updated_count"
+    log_info "  Duration: ${elapsed}s"
+}
+
+# List all cataloged drives
+list_cataloged_drives() {
+    init_catalog_db
+
+    local drives_json=$(cat "$CATALOG_DRIVES_DB")
+    local drive_count=$(echo "$drives_json" | jq '.drives | length')
+
+    if [[ $drive_count -eq 0 ]]; then
+        log_warning "No drives cataloged yet"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}  CATALOGED DRIVES${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+
+    echo "$drives_json" | jq -r '.drives[] | "\(.drive_label)|\(.drive_type)|\(.status)|\(.total_videos)|\(.last_seen)"' | \
+    while IFS='|' read -r label type status videos last_seen; do
+        local status_color="$COLOR_GREEN"
+        [[ "$status" == "offline" ]] && status_color="$COLOR_RED"
+
+        echo -e "  ${COLOR_WHITE}Drive:${COLOR_RESET}   ${COLOR_BRIGHT_CYAN}$label${COLOR_RESET}"
+        echo -e "  ${COLOR_WHITE}Type:${COLOR_RESET}    $type"
+        echo -e "  ${COLOR_WHITE}Status:${COLOR_RESET}  ${status_color}${status}${COLOR_RESET}"
+        echo -e "  ${COLOR_WHITE}Videos:${COLOR_RESET}  $videos"
+        echo -e "  ${COLOR_WHITE}Last Seen:${COLOR_RESET} $last_seen"
+        echo ""
+    done
+
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+}
+
+# Search catalog for videos
+# Args: $1=search_term
+search_catalog() {
+    local search_term="$1"
+
+    init_catalog_db
+
+    local catalog_json=$(cat "$CATALOG_DB")
+    local results=$(echo "$catalog_json" | jq -r --arg term "$search_term" \
+        '.videos[] | select(.filename | test($term; "i")) |
+        "\(.drive_id)|\(.filename)|\(.file_size)|\(.studio)|\(.status)"')
+
+    if [[ -z "$results" ]]; then
+        log_warning "No videos found matching: $search_term"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}Search Results for: \"$search_term\"${COLOR_RESET}"
+    echo ""
+
+    local count=0
+    echo "$results" | while IFS='|' read -r drive_id filename size studio status; do
+        ((count++))
+
+        # Get drive info
+        local drive_label=$(cat "$CATALOG_DRIVES_DB" | jq -r --arg id "$drive_id" \
+            '.drives[] | select(.drive_id == $id) | .drive_label')
+
+        local status_icon="$SYMBOL_CHECK"
+        [[ "$status" != "exists" ]] && status_icon="$SYMBOL_WARN"
+
+        echo -e "${COLOR_CYAN}[$count]${COLOR_RESET} $status_icon $filename"
+        echo -e "    Drive: ${COLOR_BRIGHT_CYAN}$drive_label${COLOR_RESET}"
+        [[ -n "$studio" ]] && echo -e "    Studio: ${COLOR_YELLOW}$studio${COLOR_RESET}"
+        echo -e "    Size: $(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")"
+        echo ""
+    done
+}
+
 # Batch subtitle generation for multiple directories
 batch_generate_subtitles() {
     echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_FOLDER} Batch Subtitle Generation${COLOR_RESET}"
@@ -2791,8 +3208,9 @@ show_main_menu() {
     echo " 1. File Operations (rename, organize)"
     echo " 2. Subtitles (generate, edit)"
     echo " 3. Duplicates (find, remove)"
-    echo " 4. Utilities (undo, favorites, watch folders)"
-    echo " 5. Settings"
+    echo " 4. Catalog (scan drives, search)"
+    echo " 5. Utilities (undo, favorites, watch folders)"
+    echo " 6. Settings"
     echo ""
     echo " q. Quit"
     echo ""
@@ -2892,6 +3310,40 @@ show_subtitle_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Advanced Settings"
     echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Edit Existing Subtitle"
     echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Check Whisper Installation"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_catalog_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}CATALOG SYSTEM${COLOR_RESET}"
+    echo ""
+
+    # Check if jq is available
+    if ! command -v jq >/dev/null 2>&1; then
+        echo -e "${COLOR_YELLOW}⚠ jq is not installed. Install it with: sudo apt-get install jq${COLOR_RESET}"
+        echo ""
+    fi
+
+    # Show catalog stats
+    if [[ -f "$CATALOG_DRIVES_DB" ]]; then
+        local drive_count=$(cat "$CATALOG_DRIVES_DB" 2>/dev/null | jq '.drives | length' 2>/dev/null || echo "0")
+        local video_count=$(cat "$CATALOG_DB" 2>/dev/null | jq '.videos | length' 2>/dev/null || echo "0")
+        echo -e "${COLOR_WHITE}Status:${COLOR_RESET}"
+        echo -e "  Cataloged Drives: ${COLOR_CYAN}$drive_count${COLOR_RESET}"
+        echo -e "  Cataloged Videos: ${COLOR_CYAN}$video_count${COLOR_RESET}"
+        echo ""
+    fi
+
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Scan & Catalog a Drive"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} List All Cataloged Drives"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Search Catalog"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Catalog Multiple Drives (Batch)"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Export Catalog Report"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Catalog Settings"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
     echo ""
@@ -3513,6 +3965,195 @@ handle_subtitles() {
     done
 }
 
+# Handle catalog operations
+handle_catalog() {
+    # Check if jq is available
+    if ! command -v jq >/dev/null 2>&1; then
+        log_error "jq is not installed. Please install it first:"
+        echo "  sudo apt-get install jq"
+        read -p "Press Enter to continue..."
+        return 1
+    fi
+
+    while true; do
+        show_catalog_menu
+        read -r choice
+
+        case "$choice" in
+            1)
+                # Scan & catalog a drive
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Scan & Catalog a Drive${COLOR_RESET}"
+                echo ""
+                echo "Available mount points:"
+                echo "  /mnt/c  - Windows C: drive"
+                echo "  /mnt/d  - Windows D: drive"
+                echo "  /media/* - USB drives (if mounted)"
+                echo ""
+                read -p "Enter mount point to catalog: " mount_point
+
+                if [[ -z "$mount_point" ]]; then
+                    log_error "No mount point specified"
+                    read -p "Press Enter to continue..."
+                    continue
+                fi
+
+                read -p "Scan recursively? (y/n): " -n 1 -r
+                echo ""
+                local recursive=false
+                [[ $REPLY =~ ^[Yy]$ ]] && recursive=true
+
+                start_operation "Catalog Drive: $mount_point"
+                catalog_drive "$mount_point" "$recursive"
+                end_operation
+                read -p "Press Enter to continue..."
+                ;;
+
+            2)
+                # List all cataloged drives
+                clear
+                start_operation "List Cataloged Drives"
+                list_cataloged_drives
+                end_operation
+                read -p "Press Enter to continue..."
+                ;;
+
+            3)
+                # Search catalog
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Search Catalog${COLOR_RESET}"
+                echo ""
+                read -p "Enter search term: " search_term
+
+                if [[ -n "$search_term" ]]; then
+                    start_operation "Search Catalog"
+                    search_catalog "$search_term"
+                    end_operation
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+
+            4)
+                # Catalog multiple drives (batch)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Batch Catalog Multiple Drives${COLOR_RESET}"
+                echo ""
+                echo "Enter mount points to catalog (one per line, empty line to finish):"
+                echo ""
+
+                local -a mount_points
+                while true; do
+                    read -p "Mount point: " mp
+                    [[ -z "$mp" ]] && break
+                    mount_points+=("$mp")
+                done
+
+                if [[ ${#mount_points[@]} -eq 0 ]]; then
+                    log_warning "No mount points specified"
+                    read -p "Press Enter to continue..."
+                    continue
+                fi
+
+                read -p "Scan recursively? (y/n): " -n 1 -r
+                echo ""
+                local recursive=false
+                [[ $REPLY =~ ^[Yy]$ ]] && recursive=true
+
+                start_operation "Batch Catalog Drives"
+                for mp in "${mount_points[@]}"; do
+                    echo ""
+                    catalog_drive "$mp" "$recursive"
+                done
+                end_operation
+                read -p "Press Enter to continue..."
+                ;;
+
+            5)
+                # Export catalog report
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Export Catalog Report${COLOR_RESET}"
+                echo ""
+
+                local report_file="$HOME/video-catalog-report-$(date +%Y%m%d-%H%M%S).txt"
+                {
+                    echo "Video Catalog Report"
+                    echo "Generated: $(date)"
+                    echo ""
+                    echo "=== CATALOGED DRIVES ==="
+                    echo ""
+                    cat "$CATALOG_DRIVES_DB" | jq -r '.drives[] | "Drive: \(.drive_label)\nType: \(.drive_type)\nStatus: \(.status)\nVideos: \(.total_videos)\nLast Seen: \(.last_seen)\n"'
+                    echo ""
+                    echo "=== VIDEO SUMMARY ==="
+                    echo ""
+                    echo "Total Videos: $(cat "$CATALOG_DB" | jq '.videos | length')"
+                    echo ""
+                    echo "By Studio:"
+                    cat "$CATALOG_DB" | jq -r '.videos[].studio' | sort | uniq -c | sort -rn | head -20
+                } > "$report_file"
+
+                log_success "Report exported to: $report_file"
+                read -p "Press Enter to continue..."
+                ;;
+
+            6)
+                # Catalog settings
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Catalog Settings${COLOR_RESET}"
+                echo ""
+                echo -e "${COLOR_WHITE}Current Settings:${COLOR_RESET}"
+                echo -e "  Include Metadata: $([[ "$CATALOG_INCLUDE_METADATA" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
+                echo -e "  Include Hash: $([[ "$CATALOG_INCLUDE_HASH" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
+                echo -e "  Offline Retention: ${COLOR_CYAN}$CATALOG_OFFLINE_RETENTION${COLOR_RESET} days"
+                echo ""
+                echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle Include Metadata"
+                echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Toggle Include Hash"
+                echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Set Offline Retention Days"
+                echo ""
+                echo -n "Select option (or Enter to skip): "
+                read -r setting_choice
+
+                case "$setting_choice" in
+                    1)
+                        if [[ "$CATALOG_INCLUDE_METADATA" == true ]]; then
+                            CATALOG_INCLUDE_METADATA=false
+                        else
+                            CATALOG_INCLUDE_METADATA=true
+                        fi
+                        log_success "Metadata inclusion toggled"
+                        ;;
+                    2)
+                        if [[ "$CATALOG_INCLUDE_HASH" == true ]]; then
+                            CATALOG_INCLUDE_HASH=false
+                        else
+                            CATALOG_INCLUDE_HASH=true
+                        fi
+                        log_success "Hash inclusion toggled"
+                        ;;
+                    3)
+                        read -p "Enter offline retention days (0=forever): " days
+                        if [[ $days -ge 0 ]]; then
+                            CATALOG_OFFLINE_RETENTION=$days
+                            log_success "Offline retention set to: $days days"
+                        fi
+                        ;;
+                esac
+                read -p "Press Enter to continue..."
+                ;;
+
+            b|B)
+                break
+                ;;
+
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+
+        reset_statistics
+    done
+}
+
 # Handle utilities
 handle_utilities() {
     while true; do
@@ -3656,9 +4297,12 @@ interactive_menu() {
                 handle_duplicates
                 ;;
             4)
-                handle_utilities
+                handle_catalog
                 ;;
             5)
+                handle_utilities
+                ;;
+            6)
                 handle_settings
                 ;;
             q|Q)
