@@ -426,6 +426,38 @@ get_audio_metadata() {
     echo "$duration|$bitrate|$artist|$title"
 }
 
+# Get image EXIF metadata (requires exiftool or identify)
+get_image_exif() {
+    local file="$1"
+    local camera=""
+    local date_taken=""
+    local gps_lat=""
+    local gps_lon=""
+    local iso=""
+    local focal_length=""
+    local aperture=""
+    local shutter_speed=""
+
+    # Try exiftool first (most comprehensive)
+    if command -v exiftool >/dev/null 2>&1; then
+        camera=$(exiftool -s -s -s -Model "$file" 2>/dev/null)
+        date_taken=$(exiftool -s -s -s -DateTimeOriginal "$file" 2>/dev/null)
+        gps_lat=$(exiftool -s -s -s -GPSLatitude "$file" 2>/dev/null)
+        gps_lon=$(exiftool -s -s -s -GPSLongitude "$file" 2>/dev/null)
+        iso=$(exiftool -s -s -s -ISO "$file" 2>/dev/null)
+        focal_length=$(exiftool -s -s -s -FocalLength "$file" 2>/dev/null)
+        aperture=$(exiftool -s -s -s -Aperture "$file" 2>/dev/null)
+        shutter_speed=$(exiftool -s -s -s -ShutterSpeed "$file" 2>/dev/null)
+    # Fallback to identify from ImageMagick
+    elif command -v identify >/dev/null 2>&1; then
+        camera=$(identify -format "%[EXIF:Model]" "$file" 2>/dev/null)
+        date_taken=$(identify -format "%[EXIF:DateTimeOriginal]" "$file" 2>/dev/null)
+        iso=$(identify -format "%[EXIF:ISOSpeedRatings]" "$file" 2>/dev/null)
+    fi
+
+    echo "$camera|$date_taken|$gps_lat|$gps_lon|$iso|$focal_length|$aperture|$shutter_speed"
+}
+
 # Get file size in bytes
 get_file_size() {
     local file="$1"
@@ -2983,6 +3015,14 @@ catalog_drive() {
         local bitrate=""
         local artist=""
         local title=""
+        local camera=""
+        local date_taken=""
+        local gps_lat=""
+        local gps_lon=""
+        local iso=""
+        local focal_length=""
+        local aperture=""
+        local shutter_speed=""
 
         if [[ "$CATALOG_INCLUDE_METADATA" == true ]]; then
             case "$media_type" in
@@ -2994,6 +3034,9 @@ catalog_drive() {
                     ;;
                 image)
                     dimensions=$(get_image_dimensions "$file")
+                    # Get EXIF data
+                    local exif_meta=$(get_image_exif "$file")
+                    IFS='|' read -r camera date_taken gps_lat gps_lon iso focal_length aperture shutter_speed <<< "$exif_meta"
                     ;;
                 audio)
                     local audio_meta=$(get_audio_metadata "$file")
@@ -3017,6 +3060,14 @@ catalog_drive() {
                 --arg br "$bitrate" \
                 --arg art "$artist" \
                 --arg ttl "$title" \
+                --arg cam "$camera" \
+                --arg dtk "$date_taken" \
+                --arg glat "$gps_lat" \
+                --arg glon "$gps_lon" \
+                --arg iso "$iso" \
+                --arg fl "$focal_length" \
+                --arg ap "$aperture" \
+                --arg ss "$shutter_speed" \
                 --arg type "$media_type" \
                 --arg ts "$timestamp" \
                 '(.videos[] | select(.video_id == ($vid|tonumber))) |= {
@@ -3033,6 +3084,14 @@ catalog_drive() {
                     bitrate: (if $br != "" then ($br|tonumber) else null end),
                     artist: $art,
                     title: $ttl,
+                    camera: $cam,
+                    date_taken: $dtk,
+                    gps_latitude: $glat,
+                    gps_longitude: $glon,
+                    iso: $iso,
+                    focal_length: $fl,
+                    aperture: $ap,
+                    shutter_speed: $ss,
                     studio: .studio,
                     last_scanned: $ts,
                     status: "exists"
@@ -3055,6 +3114,14 @@ catalog_drive() {
                 --arg br "$bitrate" \
                 --arg art "$artist" \
                 --arg ttl "$title" \
+                --arg cam "$camera" \
+                --arg dtk "$date_taken" \
+                --arg glat "$gps_lat" \
+                --arg glon "$gps_lon" \
+                --arg iso "$iso" \
+                --arg fl "$focal_length" \
+                --arg ap "$aperture" \
+                --arg ss "$shutter_speed" \
                 --arg studio "$studio" \
                 --arg ts "$timestamp" \
                 '.videos += [{
@@ -3071,6 +3138,14 @@ catalog_drive() {
                     bitrate: (if $br != "" then ($br|tonumber) else null end),
                     artist: $art,
                     title: $ttl,
+                    camera: $cam,
+                    date_taken: $dtk,
+                    gps_latitude: $glat,
+                    gps_longitude: $glon,
+                    iso: $iso,
+                    focal_length: $fl,
+                    aperture: $ap,
+                    shutter_speed: $ss,
                     studio: $studio,
                     last_scanned: $ts,
                     status: "exists"
@@ -3507,6 +3582,144 @@ show_subtitle_menu() {
     echo -n "Select option: "
 }
 
+# Find duplicate files by hash
+# Returns JSON array of duplicate groups
+find_duplicates() {
+    init_catalog_db
+
+    local catalog_json=$(cat "$CATALOG_DB")
+
+    # Group by hash and filter only groups with more than 1 file
+    local duplicates=$(echo "$catalog_json" | jq -r '
+        [.videos[] | select(.hash != null and .hash != "")] |
+        group_by(.hash) |
+        map(select(length > 1)) |
+        map({
+            hash: .[0].hash,
+            count: length,
+            total_size: (map(.file_size) | add),
+            files: map({
+                video_id: .video_id,
+                drive_id: .drive_id,
+                filename: .filename,
+                relative_path: .relative_path,
+                media_type: .media_type,
+                file_size: .file_size,
+                dimensions: .dimensions,
+                resolution: .resolution,
+                last_scanned: .last_scanned
+            })
+        })
+    ')
+
+    echo "$duplicates"
+}
+
+# Find similar images by dimensions (potential duplicates without hash match)
+find_similar_images() {
+    init_catalog_db
+
+    local catalog_json=$(cat "$CATALOG_DB")
+
+    # Group images by dimensions
+    local similar=$(echo "$catalog_json" | jq -r '
+        [.videos[] | select(.media_type == "image" and .dimensions != null and .dimensions != "")] |
+        group_by(.dimensions) |
+        map(select(length > 1)) |
+        map({
+            dimensions: .[0].dimensions,
+            count: length,
+            files: map({
+                video_id: .video_id,
+                drive_id: .drive_id,
+                filename: .filename,
+                relative_path: .relative_path,
+                file_size: .file_size,
+                camera: .camera,
+                date_taken: .date_taken
+            })
+        })
+    ')
+
+    echo "$similar"
+}
+
+# Display duplicate report
+show_duplicates_report() {
+    local media_filter="${1:-all}"
+
+    log_info "Scanning for duplicates..."
+
+    local duplicates=$(find_duplicates)
+    local dup_count=$(echo "$duplicates" | jq 'length')
+
+    if [[ "$dup_count" -eq 0 ]] || [[ "$dup_count" == "null" ]]; then
+        log_info "No duplicates found"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}  DUPLICATE FILES REPORT${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo ""
+
+    local group_num=0
+    echo "$duplicates" | jq -c '.[]' | while IFS= read -r group; do
+        ((group_num++))
+
+        local hash=$(echo "$group" | jq -r '.hash' | cut -c1-16)
+        local count=$(echo "$group" | jq -r '.count')
+        local total_size=$(echo "$group" | jq -r '.total_size')
+        local wasted_size=$((total_size - total_size / count))
+
+        echo -e "${COLOR_BOLD}${COLOR_YELLOW}Duplicate Group #$group_num${COLOR_RESET}"
+        echo -e "  Hash: ${COLOR_WHITE}$hash...${COLOR_RESET}"
+        echo -e "  Files: ${COLOR_RED}$count copies${COLOR_RESET}"
+        echo -e "  Wasted Space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $wasted_size 2>/dev/null || echo "$wasted_size bytes")${COLOR_RESET}"
+        echo ""
+
+        local file_num=0
+        echo "$group" | jq -c '.files[]' | while IFS= read -r file; do
+            ((file_num++))
+
+            local filename=$(echo "$file" | jq -r '.filename')
+            local media_type=$(echo "$file" | jq -r '.media_type')
+            local size=$(echo "$file" | jq -r '.file_size')
+            local drive_id=$(echo "$file" | jq -r '.drive_id')
+
+            # Get drive info
+            local drive_label=$(cat "$CATALOG_DRIVES_DB" | jq -r --arg id "$drive_id" \
+                '.drives[] | select(.drive_id == $id) | .drive_label' 2>/dev/null || echo "Unknown")
+
+            # Media type icon
+            local type_icon="📄"
+            case "$media_type" in
+                video) type_icon="🎬" ;;
+                image) type_icon="🖼️" ;;
+                audio) type_icon="🎵" ;;
+            esac
+
+            echo -e "    ${COLOR_CYAN}[$file_num]${COLOR_RESET} $type_icon $filename"
+            echo -e "        Drive: ${COLOR_WHITE}$drive_label${COLOR_RESET}"
+            echo -e "        Size: $(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")"
+        done
+
+        echo ""
+    done
+
+    # Calculate total wasted space
+    local total_wasted=$(echo "$duplicates" | jq '[.[] | (.total_size - (.total_size / .count))] | add')
+    local total_dupes=$(echo "$duplicates" | jq '[.[] | .count] | add')
+
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}Total duplicate groups: ${COLOR_RED}$dup_count${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}Total duplicate files: ${COLOR_RED}$total_dupes${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}Total wasted space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $total_wasted 2>/dev/null || echo "$total_wasted bytes")${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo ""
+}
+
 show_catalog_menu() {
     show_header
 
@@ -3532,9 +3745,10 @@ show_catalog_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Scan & Catalog a Drive"
     echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} List All Cataloged Drives"
     echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Search Catalog"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Catalog Multiple Drives (Batch)"
-    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Export Catalog Report"
-    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Catalog Settings"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Find Duplicate Files"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Catalog Multiple Drives (Batch)"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Export Catalog Report"
+    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} Catalog Settings"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
     echo ""
@@ -4242,6 +4456,15 @@ handle_catalog() {
                 ;;
 
             4)
+                # Find duplicate files
+                clear
+                start_operation "Find Duplicate Files"
+                show_duplicates_report
+                end_operation
+                read -p "Press Enter to continue..."
+                ;;
+
+            5)
                 # Catalog multiple drives (batch)
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Batch Catalog Multiple Drives${COLOR_RESET}"
@@ -4276,7 +4499,7 @@ handle_catalog() {
                 read -p "Press Enter to continue..."
                 ;;
 
-            5)
+            6)
                 # Export catalog report
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Export Catalog Report${COLOR_RESET}"
@@ -4303,7 +4526,7 @@ handle_catalog() {
                 read -p "Press Enter to continue..."
                 ;;
 
-            6)
+            7)
                 # Catalog settings
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Catalog Settings${COLOR_RESET}"
