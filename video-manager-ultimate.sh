@@ -5192,17 +5192,57 @@ parse_arguments() {
 # MAIN EXECUTION
 ################################################################################
 
+# Startup checks
+startup_check() {
+    local first_run=false
+
+    # Check if this is first run (no log directory exists)
+    if [[ ! -d "$LOG_DIR" ]]; then
+        first_run=true
+    fi
+
+    # Show welcome banner on first run
+    if [[ "$first_run" == true ]]; then
+        clear
+        echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╔═══════════════════════════════════════════════════════════════╗${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}           ${COLOR_BOLD}${COLOR_BRIGHT_YELLOW}WELCOME TO VIDEO MANAGER ULTIMATE${COLOR_RESET}            ${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════════╝${COLOR_RESET}"
+        echo ""
+        echo -e "${COLOR_WHITE}First-time setup detected!${COLOR_RESET}"
+        echo ""
+        echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} Platform detected: ${COLOR_BRIGHT_CYAN}$OS_TYPE${COLOR_RESET}"
+        echo ""
+    fi
+
+    # Check dependencies
+    check_dependencies
+
+    # Show tip on first run
+    if [[ "$first_run" == true ]]; then
+        echo ""
+        echo -e "${COLOR_YELLOW}${SYMBOL_STAR} Quick Tips:${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Try ${COLOR_WHITE}Dry Run${COLOR_RESET} mode first to preview changes"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Check ${COLOR_WHITE}System Information${COLOR_RESET} in Utilities menu"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} View ${COLOR_WHITE}CROSS-PLATFORM.md${COLOR_RESET} for setup help"
+        echo ""
+        read -p "Press Enter to continue..."
+    fi
+}
+
 main() {
+    # Run startup checks
+    startup_check
+
     # Initialize logging
     init_logging
-    
+
     # Parse arguments
     if [[ $# -eq 0 ]]; then
         INTERACTIVE=true
     else
         parse_arguments "$@"
     fi
-    
+
     # Launch interactive menu if needed
     if [[ "$INTERACTIVE" == true ]]; then
         interactive_menu

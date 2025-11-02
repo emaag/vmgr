@@ -1,6 +1,25 @@
 # 🎬 VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Complete Package - v1.1.0
 
+**Cross-Platform**: Linux • macOS • Windows (Git Bash) • WSL
+
+---
+
+## 🚀 Quick Install
+
+```bash
+# Clone the repository
+git clone https://github.com/emaag/vmgr.git
+cd vmgr
+
+# Run the installer (handles everything automatically)
+./install.sh
+
+# Or manual setup:
+chmod +x video-manager-ultimate.sh
+./video-manager-ultimate.sh
+```
+
 ---
 
 ## 📦 Package Contents
