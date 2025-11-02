@@ -167,6 +167,164 @@ START_TIME=""
 TARGET_FOLDER=""
 
 ################################################################################
+# PLATFORM DETECTION & COMPATIBILITY
+################################################################################
+
+# Detect operating system
+detect_os() {
+    case "$(uname -s)" in
+        Linux*)
+            if grep -qi microsoft /proc/version 2>/dev/null; then
+                OS_TYPE="WSL"
+            else
+                OS_TYPE="Linux"
+            fi
+            ;;
+        Darwin*)
+            OS_TYPE="macOS"
+            ;;
+        CYGWIN*|MINGW*|MSYS*|MINGW32*|MINGW64*)
+            OS_TYPE="Windows"
+            ;;
+        *)
+            OS_TYPE="Unknown"
+            ;;
+    esac
+    export OS_TYPE
+}
+
+# Platform-specific stat command for file size
+get_file_size_bytes() {
+    local file="$1"
+    if [[ ! -f "$file" ]]; then
+        echo "0"
+        return
+    fi
+
+    case "$OS_TYPE" in
+        macOS)
+            stat -f%z "$file" 2>/dev/null || echo "0"
+            ;;
+        *)
+            stat -c%s "$file" 2>/dev/null || echo "0"
+            ;;
+    esac
+}
+
+# Platform-specific hash calculation
+calculate_file_hash() {
+    local file="$1"
+
+    case "$OS_TYPE" in
+        macOS)
+            if command -v shasum &>/dev/null; then
+                shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+            elif command -v openssl &>/dev/null; then
+                openssl sha256 "$file" 2>/dev/null | awk '{print $NF}'
+            fi
+            ;;
+        *)
+            if command -v sha256sum &>/dev/null; then
+                sha256sum "$file" 2>/dev/null | awk '{print $1}'
+            elif command -v shasum &>/dev/null; then
+                shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+            fi
+            ;;
+    esac
+}
+
+# Platform-specific numfmt alternative
+format_bytes() {
+    local bytes="$1"
+
+    if command -v numfmt &>/dev/null; then
+        numfmt --to=iec-i --suffix=B "$bytes" 2>/dev/null
+    else
+        # Fallback manual formatting
+        if (( bytes < 1024 )); then
+            echo "${bytes}B"
+        elif (( bytes < 1048576 )); then
+            echo "$(( bytes / 1024 ))KiB"
+        elif (( bytes < 1073741824 )); then
+            echo "$(( bytes / 1048576 ))MiB"
+        else
+            echo "$(( bytes / 1073741824 ))GiB"
+        fi
+    fi
+}
+
+# Platform-specific file opening
+open_file_manager() {
+    local path="$1"
+
+    case "$OS_TYPE" in
+        macOS)
+            open "$path"
+            ;;
+        Windows|WSL)
+            if command -v explorer.exe &>/dev/null; then
+                explorer.exe "$path"
+            elif command -v xdg-open &>/dev/null; then
+                xdg-open "$path"
+            fi
+            ;;
+        Linux)
+            if command -v xdg-open &>/dev/null; then
+                xdg-open "$path"
+            elif command -v nautilus &>/dev/null; then
+                nautilus "$path"
+            elif command -v dolphin &>/dev/null; then
+                dolphin "$path"
+            fi
+            ;;
+    esac
+}
+
+# Check for required commands and suggest installation
+check_dependencies() {
+    local missing_deps=()
+
+    # Core dependencies
+    if ! command -v jq &>/dev/null; then
+        missing_deps+=("jq")
+    fi
+
+    # Optional but recommended
+    if ! command -v ffprobe &>/dev/null; then
+        log_warning "ffprobe not found - video metadata extraction will be limited"
+    fi
+
+    if ! command -v exiftool &>/dev/null && ! command -v identify &>/dev/null; then
+        log_warning "exiftool or ImageMagick not found - EXIF extraction will be limited"
+    fi
+
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        echo -e "${COLOR_YELLOW}${SYMBOL_WARN} Missing required dependencies: ${missing_deps[*]}${COLOR_RESET}"
+        echo ""
+        case "$OS_TYPE" in
+            macOS)
+                echo "Install with: brew install ${missing_deps[*]}"
+                ;;
+            Linux|WSL)
+                echo "Install with: sudo apt-get install ${missing_deps[*]}"
+                ;;
+            Windows)
+                echo "Install jq from: https://stedolan.github.io/jq/download/"
+                ;;
+        esac
+        echo ""
+        read -p "Continue anyway? (y/n): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+}
+
+# Initialize platform detection
+detect_os
+
+################################################################################
 # UTILITY FUNCTIONS
 ################################################################################
 
@@ -461,26 +619,20 @@ get_image_exif() {
 # Get file size in bytes
 get_file_size() {
     local file="$1"
-    if [[ -f "$file" ]]; then
-        stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null
-    else
-        echo "0"
-    fi
+    get_file_size_bytes "$file"
 }
 
 # Calculate SHA256 hash
 calculate_hash() {
     local file="$1"
     log_verbose "Calculating SHA256 hash for: $(basename "$file")"
-    
-    if command -v sha256sum &> /dev/null; then
-        sha256sum "$file" 2>/dev/null | awk '{print $1}'
-    elif command -v shasum &> /dev/null; then
-        shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
-    else
-        log_error "No hash utility found (sha256sum or shasum required)"
+
+    local hash=$(calculate_file_hash "$file")
+    if [[ -z "$hash" ]]; then
+        log_error "No hash utility found (sha256sum, shasum, or openssl required)"
         return 1
     fi
+    echo "$hash"
 }
 
 # Convert Windows path to WSL path
@@ -3282,7 +3434,7 @@ search_catalog() {
                 ;;
         esac
 
-        echo -e "    Size: $(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")"
+        echo -e "    Size: $(format_bytes $size)"
         echo ""
     done
 }
@@ -3690,7 +3842,7 @@ show_duplicates_report() {
         echo -e "${COLOR_BOLD}${COLOR_YELLOW}${SYMBOL_WARN} Duplicate Group #$group_num${COLOR_RESET}"
         echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hash: ${COLOR_WHITE}$hash...${COLOR_RESET}"
         echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Copies: ${COLOR_RED}$count files${COLOR_RESET}"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $wasted_size 2>/dev/null || echo "$wasted_size bytes")${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(format_bytes $wasted_size)${COLOR_RESET}"
         echo ""
 
         local file_num=0
@@ -3716,7 +3868,7 @@ show_duplicates_report() {
 
             echo -e "    ${COLOR_BRIGHT_GREEN}[$file_num]${COLOR_RESET} $type_icon ${COLOR_WHITE}$filename${COLOR_RESET}"
             echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Drive: ${COLOR_WHITE}$drive_label${COLOR_RESET}"
-            echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Size: ${COLOR_WHITE}$(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")${COLOR_RESET}"
+            echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Size: ${COLOR_WHITE}$(format_bytes $size)${COLOR_RESET}"
         done
 
         echo ""
@@ -3730,7 +3882,7 @@ show_duplicates_report() {
     echo -e "${COLOR_BOLD}${COLOR_WHITE}Summary:${COLOR_RESET}"
     echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Duplicate Groups: ${COLOR_RED}$dup_count${COLOR_RESET}"
     echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Total Duplicate Files: ${COLOR_RED}$total_dupes${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $total_wasted 2>/dev/null || echo "$total_wasted bytes")${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(format_bytes $total_wasted)${COLOR_RESET}"
     echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
     echo ""
 }
@@ -4672,19 +4824,27 @@ handle_utilities() {
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}System Information:${COLOR_RESET}"
                 echo ""
-                echo -e "${COLOR_WHITE}Script Version:${COLOR_RESET} $SCRIPT_VERSION"
-                echo -e "${COLOR_WHITE}Bash Version:${COLOR_RESET} $BASH_VERSION"
-                echo -e "${COLOR_WHITE}OS:${COLOR_RESET} $(uname -s)"
-                echo -e "${COLOR_WHITE}Kernel:${COLOR_RESET} $(uname -r)"
-                echo -e "${COLOR_WHITE}Hostname:${COLOR_RESET} $(hostname)"
-                echo -e "${COLOR_WHITE}User:${COLOR_RESET} $(whoami)"
-                echo -e "${COLOR_WHITE}Working Directory:${COLOR_RESET} $(pwd)"
-                echo -e "${COLOR_WHITE}Log Directory:${COLOR_RESET} $LOG_DIR"
+                echo -e "${COLOR_BOLD}${COLOR_WHITE}Environment:${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Script Version: ${COLOR_WHITE}$SCRIPT_VERSION${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Platform: ${COLOR_WHITE}$OS_TYPE${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Bash Version: ${COLOR_WHITE}$BASH_VERSION${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} OS: ${COLOR_WHITE}$(uname -s)${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Kernel: ${COLOR_WHITE}$(uname -r)${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hostname: ${COLOR_WHITE}$(hostname)${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} User: ${COLOR_WHITE}$(whoami)${COLOR_RESET}"
                 echo ""
-                echo -e "${COLOR_WHITE}Available Tools:${COLOR_RESET}"
-                command -v sha256sum &> /dev/null && echo "  ${SYMBOL_CHECK} sha256sum" || echo "  ${SYMBOL_CROSS} sha256sum"
-                command -v shasum &> /dev/null && echo "  ${SYMBOL_CHECK} shasum" || echo "  ${SYMBOL_CROSS} shasum"
-                command -v ffprobe &> /dev/null && echo "  ${SYMBOL_CHECK} ffprobe" || echo "  ${SYMBOL_CROSS} ffprobe"
+                echo -e "${COLOR_BOLD}${COLOR_WHITE}Directories:${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Working: ${COLOR_WHITE}$(pwd)${COLOR_RESET}"
+                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Logs: ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
+                echo ""
+                echo -e "${COLOR_BOLD}${COLOR_WHITE}Available Tools:${COLOR_RESET}"
+                command -v jq &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} jq" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} jq"
+                command -v sha256sum &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} sha256sum" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} sha256sum"
+                command -v shasum &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} shasum" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} shasum"
+                command -v ffprobe &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} ffprobe" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} ffprobe"
+                command -v exiftool &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} exiftool" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} exiftool"
+                command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
+                command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
                 echo ""
                 read -p "Press Enter to continue..."
                 ;;
