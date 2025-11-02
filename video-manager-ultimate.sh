@@ -134,9 +134,18 @@ CATALOG_ENABLED=true # Enable catalog system
 CATALOG_DB="$HOME/.video-manager-catalog.json" # Catalog database file
 CATALOG_DRIVES_DB="$HOME/.video-manager-drives.json" # Known drives database
 CATALOG_AUTO_SCAN=false # Auto-scan on drive connect
-CATALOG_INCLUDE_METADATA=true # Extract video metadata (duration, resolution)
+CATALOG_INCLUDE_METADATA=true # Extract metadata (duration, resolution, dimensions, etc.)
 CATALOG_INCLUDE_HASH=true # Calculate file hashes (slower but detects duplicates)
 CATALOG_OFFLINE_RETENTION=90 # Days to keep offline drive data (0=forever)
+
+# Media type configuration
+CATALOG_VIDEOS=true # Catalog video files
+CATALOG_IMAGES=true # Catalog image files
+CATALOG_AUDIO=true # Catalog audio files
+
+# Supported file extensions
+DEFAULT_IMAGE_EXTENSIONS=("jpg" "jpeg" "png" "gif" "bmp" "webp" "tiff" "tif" "svg" "ico" "heic" "heif")
+DEFAULT_AUDIO_EXTENSIONS=("mp3" "flac" "wav" "aac" "m4a" "ogg" "opus" "wma" "alac" "ape" "wv" "tta")
 
 # Statistics tracking
 declare -A STATS
@@ -325,13 +334,96 @@ is_video_file() {
     local file="$1"
     local ext="${file##*.}"
     ext="${ext,,}" # Convert to lowercase
-    
+
     for video_ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
         if [[ "$ext" == "$video_ext" ]]; then
             return 0
         fi
     done
     return 1
+}
+
+# Check if file is an image
+is_image_file() {
+    local file="$1"
+    local ext="${file##*.}"
+    ext="${ext,,}" # Convert to lowercase
+
+    for img_ext in "${DEFAULT_IMAGE_EXTENSIONS[@]}"; do
+        if [[ "$ext" == "$img_ext" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Check if file is an audio file
+is_audio_file() {
+    local file="$1"
+    local ext="${file##*.}"
+    ext="${ext,,}" # Convert to lowercase
+
+    for audio_ext in "${DEFAULT_AUDIO_EXTENSIONS[@]}"; do
+        if [[ "$ext" == "$audio_ext" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Detect media type (video, image, audio, or unknown)
+get_media_type() {
+    local file="$1"
+
+    if is_video_file "$file"; then
+        echo "video"
+    elif is_image_file "$file"; then
+        echo "image"
+    elif is_audio_file "$file"; then
+        echo "audio"
+    else
+        echo "unknown"
+    fi
+}
+
+# Get image dimensions (requires identify from ImageMagick or file command)
+get_image_dimensions() {
+    local file="$1"
+    local dimensions=""
+
+    # Try ImageMagick identify command
+    if command -v identify >/dev/null 2>&1; then
+        dimensions=$(identify -format "%wx%h" "$file" 2>/dev/null)
+    # Fallback: try file command with grep
+    elif command -v file >/dev/null 2>&1; then
+        local file_info=$(file "$file" 2>/dev/null)
+        dimensions=$(echo "$file_info" | grep -oP '\d+\s*x\s*\d+' | head -1 | tr -d ' ')
+    fi
+
+    echo "$dimensions"
+}
+
+# Get audio metadata (requires ffprobe or mediainfo)
+get_audio_metadata() {
+    local file="$1"
+    local duration=""
+    local bitrate=""
+    local artist=""
+    local title=""
+
+    if command -v ffprobe >/dev/null 2>&1; then
+        # Get duration in seconds
+        duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null | cut -d'.' -f1)
+
+        # Get bitrate
+        bitrate=$(ffprobe -v error -show_entries format=bit_rate -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
+
+        # Get artist and title from tags
+        artist=$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
+        title=$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$file" 2>/dev/null)
+    fi
+
+    echo "$duration|$bitrate|$artist|$title"
 }
 
 # Get file size in bytes
@@ -2800,37 +2892,66 @@ catalog_drive() {
     local drive_id=$(register_drive "$mount_point")
 
     # Initialize counters
-    local video_count=0
+    local file_count=0
     local new_count=0
     local updated_count=0
+    local video_count=0
+    local image_count=0
+    local audio_count=0
     local start_time=$(date +%s)
 
-    # Find all video files
-    local -a video_files
-    if [[ "$recursive" == true ]]; then
-        while IFS= read -r -d '' file; do
-            video_files+=("$file")
-        done < <(find "$mount_point" -type f -print0 2>/dev/null | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
-    else
-        while IFS= read -r -d '' file; do
-            video_files+=("$file")
-        done < <(find "$mount_point" -maxdepth 1 -type f -print0 2>/dev/null | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    # Build file extension pattern based on enabled media types
+    local -a extensions
+    [[ "$CATALOG_VIDEOS" == true ]] && extensions+=("${DEFAULT_VIDEO_EXTENSIONS[@]}")
+    [[ "$CATALOG_IMAGES" == true ]] && extensions+=("${DEFAULT_IMAGE_EXTENSIONS[@]}")
+    [[ "$CATALOG_AUDIO" == true ]] && extensions+=("${DEFAULT_AUDIO_EXTENSIONS[@]}")
+
+    if [[ ${#extensions[@]} -eq 0 ]]; then
+        log_error "No media types enabled for cataloging"
+        return 1
     fi
 
-    local total=${#video_files[@]}
-    log_info "Found $total video files to catalog"
+    # Create regex pattern from extensions
+    local ext_pattern=$(IFS='|'; echo "${extensions[*]}")
+
+    # Find all media files
+    local -a media_files
+    log_info "Scanning for media files..."
+
+    if [[ "$recursive" == true ]]; then
+        while IFS= read -r -d '' file; do
+            media_files+=("$file")
+        done < <(find "$mount_point" -type f -print0 2>/dev/null | grep -ziE "\.($ext_pattern)$")
+    else
+        while IFS= read -r -d '' file; do
+            media_files+=("$file")
+        done < <(find "$mount_point" -maxdepth 1 -type f -print0 2>/dev/null | grep -ziE "\.($ext_pattern)$")
+    fi
+
+    local total=${#media_files[@]}
+    log_info "Found $total media files to catalog"
 
     if [[ $total -eq 0 ]]; then
-        log_warning "No video files found on this drive"
+        log_warning "No media files found on this drive"
         return 0
     fi
 
     # Read existing catalog
     local catalog_json=$(cat "$CATALOG_DB")
 
-    # Process each video
-    for file in "${video_files[@]}"; do
-        ((video_count++))
+    # Process each media file
+    for file in "${media_files[@]}"; do
+        ((file_count++))
+
+        # Detect media type
+        local media_type=$(get_media_type "$file")
+
+        # Count by type
+        case "$media_type" in
+            video) ((video_count++)) ;;
+            image) ((image_count++)) ;;
+            audio) ((audio_count++)) ;;
+        esac
 
         # Calculate relative path from mount point
         local rel_path="${file#$mount_point/}"
@@ -2839,11 +2960,11 @@ catalog_drive() {
         local timestamp=$(date -Iseconds)
 
         # Progress indicator
-        if (( video_count % 10 == 0 )); then
-            echo -ne "\r${COLOR_CYAN}  Cataloging: [$video_count/$total]${COLOR_RESET}"
+        if (( file_count % 10 == 0 )); then
+            echo -ne "\r${COLOR_CYAN}  Cataloging: [$file_count/$total] (V:$video_count I:$image_count A:$audio_count)${COLOR_RESET}"
         fi
 
-        # Extract studio from bracket notation
+        # Extract studio from bracket notation (for videos)
         local studio=""
         if [[ "$filename" =~ ^\[([^\]]+)\] ]]; then
             studio="${BASH_REMATCH[1]}"
@@ -2855,18 +2976,33 @@ catalog_drive() {
             file_hash=$(calculate_hash "$file")
         fi
 
-        # Get metadata if enabled
+        # Get metadata based on media type
         local duration=""
         local resolution=""
+        local dimensions=""
+        local bitrate=""
+        local artist=""
+        local title=""
+
         if [[ "$CATALOG_INCLUDE_METADATA" == true ]]; then
-            duration=$(get_video_duration "$file")
-            # Get resolution (requires ffprobe)
-            if command -v ffprobe >/dev/null 2>&1; then
-                resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$file" 2>/dev/null)
-            fi
+            case "$media_type" in
+                video)
+                    duration=$(get_video_duration "$file")
+                    if command -v ffprobe >/dev/null 2>&1; then
+                        resolution=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "$file" 2>/dev/null)
+                    fi
+                    ;;
+                image)
+                    dimensions=$(get_image_dimensions "$file")
+                    ;;
+                audio)
+                    local audio_meta=$(get_audio_metadata "$file")
+                    IFS='|' read -r duration bitrate artist title <<< "$audio_meta"
+                    ;;
+            esac
         fi
 
-        # Check if video already in catalog
+        # Check if file already in catalog
         local existing=$(echo "$catalog_json" | jq -r ".videos[] | select(.drive_id == \"$drive_id\" and .relative_path == \"$rel_path\") | .video_id")
 
         if [[ -n "$existing" ]]; then
@@ -2877,16 +3013,26 @@ catalog_drive() {
                 --arg hash "$file_hash" \
                 --arg dur "$duration" \
                 --arg res "$resolution" \
+                --arg dims "$dimensions" \
+                --arg br "$bitrate" \
+                --arg art "$artist" \
+                --arg ttl "$title" \
+                --arg type "$media_type" \
                 --arg ts "$timestamp" \
                 '(.videos[] | select(.video_id == ($vid|tonumber))) |= {
                     video_id: .video_id,
                     drive_id: .drive_id,
                     relative_path: .relative_path,
                     filename: .filename,
+                    media_type: $type,
                     file_size: ($size|tonumber),
                     hash: $hash,
-                    duration: ($dur|tonumber),
+                    duration: (if $dur != "" then ($dur|tonumber) else null end),
                     resolution: $res,
+                    dimensions: $dims,
+                    bitrate: (if $br != "" then ($br|tonumber) else null end),
+                    artist: $art,
+                    title: $ttl,
                     studio: .studio,
                     last_scanned: $ts,
                     status: "exists"
@@ -2894,27 +3040,37 @@ catalog_drive() {
             ((updated_count++))
         else
             # Add new entry
-            local video_id=$(echo "$catalog_json" | jq '.videos | length')
+            local media_id=$(echo "$catalog_json" | jq '.videos | length')
             catalog_json=$(echo "$catalog_json" | jq \
-                --arg vid "$video_id" \
+                --arg mid "$media_id" \
                 --arg did "$drive_id" \
                 --arg rpath "$rel_path" \
                 --arg fname "$filename" \
+                --arg type "$media_type" \
                 --arg size "$file_size" \
                 --arg hash "$file_hash" \
                 --arg dur "$duration" \
                 --arg res "$resolution" \
+                --arg dims "$dimensions" \
+                --arg br "$bitrate" \
+                --arg art "$artist" \
+                --arg ttl "$title" \
                 --arg studio "$studio" \
                 --arg ts "$timestamp" \
                 '.videos += [{
-                    video_id: ($vid|tonumber),
+                    video_id: ($mid|tonumber),
                     drive_id: $did,
                     relative_path: $rpath,
                     filename: $fname,
+                    media_type: $type,
                     file_size: ($size|tonumber),
                     hash: $hash,
-                    duration: ($dur|tonumber),
+                    duration: (if $dur != "" then ($dur|tonumber) else null end),
                     resolution: $res,
+                    dimensions: $dims,
+                    bitrate: (if $br != "" then ($br|tonumber) else null end),
+                    artist: $art,
+                    title: $ttl,
                     studio: $studio,
                     last_scanned: $ts,
                     status: "exists"
@@ -2942,7 +3098,10 @@ catalog_drive() {
 
     echo ""
     log_success "Catalog scan complete!"
-    log_info "  Total videos: $total"
+    log_info "  Total media files: $total"
+    log_info "    Videos: $video_count"
+    log_info "    Images: $image_count"
+    log_info "    Audio: $audio_count"
     log_info "  New entries: $new_count"
     log_info "  Updated entries: $updated_count"
     log_info "  Duration: ${elapsed}s"
@@ -2981,29 +3140,38 @@ list_cataloged_drives() {
     echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
 }
 
-# Search catalog for videos
-# Args: $1=search_term
+# Search catalog for media files
+# Args: $1=search_term $2=media_type_filter (optional: video, image, audio, or all)
 search_catalog() {
     local search_term="$1"
+    local media_filter="${2:-all}"
 
     init_catalog_db
 
     local catalog_json=$(cat "$CATALOG_DB")
+
+    # Build jq filter based on media type
+    local type_filter=""
+    if [[ "$media_filter" != "all" ]]; then
+        type_filter="| select(.media_type == \"$media_filter\")"
+    fi
+
     local results=$(echo "$catalog_json" | jq -r --arg term "$search_term" \
-        '.videos[] | select(.filename | test($term; "i")) |
-        "\(.drive_id)|\(.filename)|\(.file_size)|\(.studio)|\(.status)"')
+        ".videos[] | select(.filename | test(\$term; \"i\")) $type_filter |
+        \"\(.drive_id)|\(.filename)|\(.file_size)|\(.media_type)|\(.studio)|\(.artist)|\(.dimensions)|\(.resolution)|\(.status)\"")
 
     if [[ -z "$results" ]]; then
-        log_warning "No videos found matching: $search_term"
+        log_warning "No media files found matching: $search_term"
         return 0
     fi
 
     echo ""
     echo -e "${COLOR_BOLD}${COLOR_CYAN}Search Results for: \"$search_term\"${COLOR_RESET}"
+    [[ "$media_filter" != "all" ]] && echo -e "${COLOR_WHITE}  Filter: ${COLOR_YELLOW}${media_filter}s${COLOR_RESET}"
     echo ""
 
     local count=0
-    echo "$results" | while IFS='|' read -r drive_id filename size studio status; do
+    echo "$results" | while IFS='|' read -r drive_id filename size media_type studio artist dimensions resolution status; do
         ((count++))
 
         # Get drive info
@@ -3013,9 +3181,32 @@ search_catalog() {
         local status_icon="$SYMBOL_CHECK"
         [[ "$status" != "exists" ]] && status_icon="$SYMBOL_WARN"
 
-        echo -e "${COLOR_CYAN}[$count]${COLOR_RESET} $status_icon $filename"
+        # Media type icon
+        local type_icon="📄"
+        case "$media_type" in
+            video) type_icon="🎬" ;;
+            image) type_icon="🖼️" ;;
+            audio) type_icon="🎵" ;;
+        esac
+
+        echo -e "${COLOR_CYAN}[$count]${COLOR_RESET} $status_icon $type_icon $filename"
+        echo -e "    Type: ${COLOR_WHITE}$media_type${COLOR_RESET}"
         echo -e "    Drive: ${COLOR_BRIGHT_CYAN}$drive_label${COLOR_RESET}"
-        [[ -n "$studio" ]] && echo -e "    Studio: ${COLOR_YELLOW}$studio${COLOR_RESET}"
+
+        # Type-specific metadata
+        case "$media_type" in
+            video)
+                [[ -n "$studio" ]] && echo -e "    Studio: ${COLOR_YELLOW}$studio${COLOR_RESET}"
+                [[ -n "$resolution" ]] && echo -e "    Resolution: ${COLOR_WHITE}$resolution${COLOR_RESET}"
+                ;;
+            image)
+                [[ -n "$dimensions" ]] && echo -e "    Dimensions: ${COLOR_WHITE}$dimensions${COLOR_RESET}"
+                ;;
+            audio)
+                [[ -n "$artist" ]] && echo -e "    Artist: ${COLOR_YELLOW}$artist${COLOR_RESET}"
+                ;;
+        esac
+
         echo -e "    Size: $(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")"
         echo ""
     done
@@ -4023,11 +4214,28 @@ handle_catalog() {
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Search Catalog${COLOR_RESET}"
                 echo ""
+                echo -e "${COLOR_WHITE}Filter by media type:${COLOR_RESET}"
+                echo "  [1] All media"
+                echo "  [2] Videos only"
+                echo "  [3] Images only"
+                echo "  [4] Audio only"
+                echo ""
+                read -p "Choose filter [1-4]: " filter_choice
+
+                local media_filter="all"
+                case "$filter_choice" in
+                    2) media_filter="video" ;;
+                    3) media_filter="image" ;;
+                    4) media_filter="audio" ;;
+                    *) media_filter="all" ;;
+                esac
+
+                echo ""
                 read -p "Enter search term: " search_term
 
                 if [[ -n "$search_term" ]]; then
                     start_operation "Search Catalog"
-                    search_catalog "$search_term"
+                    search_catalog "$search_term" "$media_filter"
                     end_operation
                 fi
                 read -p "Press Enter to continue..."
@@ -4100,20 +4308,40 @@ handle_catalog() {
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Catalog Settings${COLOR_RESET}"
                 echo ""
-                echo -e "${COLOR_WHITE}Current Settings:${COLOR_RESET}"
+                echo -e "${COLOR_WHITE}Media Types to Catalog:${COLOR_RESET}"
+                echo -e "  Videos: $([[ "$CATALOG_VIDEOS" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
+                echo -e "  Images: $([[ "$CATALOG_IMAGES" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
+                echo -e "  Audio:  $([[ "$CATALOG_AUDIO" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
+                echo ""
+                echo -e "${COLOR_WHITE}Other Settings:${COLOR_RESET}"
                 echo -e "  Include Metadata: $([[ "$CATALOG_INCLUDE_METADATA" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
                 echo -e "  Include Hash: $([[ "$CATALOG_INCLUDE_HASH" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
                 echo -e "  Offline Retention: ${COLOR_CYAN}$CATALOG_OFFLINE_RETENTION${COLOR_RESET} days"
                 echo ""
-                echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle Include Metadata"
-                echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Toggle Include Hash"
-                echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Set Offline Retention Days"
+                echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle Video Cataloging"
+                echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Toggle Image Cataloging"
+                echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Toggle Audio Cataloging"
+                echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Include Metadata"
+                echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Include Hash"
+                echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Set Offline Retention Days"
                 echo ""
                 echo -n "Select option (or Enter to skip): "
                 read -r setting_choice
 
                 case "$setting_choice" in
                     1)
+                        CATALOG_VIDEOS=$([[ "$CATALOG_VIDEOS" == true ]] && echo "false" || echo "true")
+                        log_success "Video cataloging: $CATALOG_VIDEOS"
+                        ;;
+                    2)
+                        CATALOG_IMAGES=$([[ "$CATALOG_IMAGES" == true ]] && echo "false" || echo "true")
+                        log_success "Image cataloging: $CATALOG_IMAGES"
+                        ;;
+                    3)
+                        CATALOG_AUDIO=$([[ "$CATALOG_AUDIO" == true ]] && echo "false" || echo "true")
+                        log_success "Audio cataloging: $CATALOG_AUDIO"
+                        ;;
+                    4)
                         if [[ "$CATALOG_INCLUDE_METADATA" == true ]]; then
                             CATALOG_INCLUDE_METADATA=false
                         else
@@ -4121,7 +4349,7 @@ handle_catalog() {
                         fi
                         log_success "Metadata inclusion toggled"
                         ;;
-                    2)
+                    5)
                         if [[ "$CATALOG_INCLUDE_HASH" == true ]]; then
                             CATALOG_INCLUDE_HASH=false
                         else
@@ -4129,7 +4357,7 @@ handle_catalog() {
                         fi
                         log_success "Hash inclusion toggled"
                         ;;
-                    3)
+                    6)
                         read -p "Enter offline retention days (0=forever): " days
                         if [[ $days -ge 0 ]]; then
                             CATALOG_OFFLINE_RETENTION=$days
