@@ -71,6 +71,28 @@ DRY_RUN=false
 VERBOSE=true
 INTERACTIVE=true
 
+# Granular Control Settings
+INTERACTIVE_CONFIRM=false # Ask for confirmation on each file
+SHOW_PREVIEW=true # Show before/after preview
+STEP_BY_STEP=false # Pause after each operation
+SELECTIVE_MODE=false # Allow selecting specific files
+AUTO_SKIP_ERRORS=false # Auto-skip files with errors
+CONFIRM_DESTRUCTIVE=true # Always confirm destructive operations
+
+# Granular Filters
+FILTER_BY_SIZE=false # Enable file size filtering
+FILTER_MIN_SIZE_MB=0 # Minimum file size in MB
+FILTER_MAX_SIZE_MB=0 # Maximum file size in MB
+FILTER_BY_DATE=false # Enable date filtering
+FILTER_DAYS_OLD=0 # Only process files older than N days
+FILTER_BY_PATTERN=false # Enable pattern filtering
+FILTER_PATTERN="" # Regex pattern to match
+
+# Processing Limits
+MAX_FILES_PER_OPERATION=0 # 0 = unlimited
+BATCH_SIZE=10 # Process files in batches
+PAUSE_BETWEEN_BATCHES=false # Pause between batches
+
 # Subtitle generation configuration
 WHISPER_MODEL="base"  # tiny, base, small, medium, large
 SUBTITLE_FORMAT="srt" # srt, vtt, txt, json
@@ -678,6 +700,246 @@ validate_directory() {
     fi
     
     echo "$dir"
+    return 0
+}
+
+################################################################################
+# GRANULAR CONTROL FUNCTIONS
+################################################################################
+
+# Check if file passes size filter
+passes_size_filter() {
+    local file="$1"
+
+    if [[ "$FILTER_BY_SIZE" != true ]]; then
+        return 0
+    fi
+
+    local size_bytes=$(get_file_size_bytes "$file")
+    local size_mb=$((size_bytes / 1048576))
+
+    if [[ $FILTER_MIN_SIZE_MB -gt 0 ]] && [[ $size_mb -lt $FILTER_MIN_SIZE_MB ]]; then
+        return 1
+    fi
+
+    if [[ $FILTER_MAX_SIZE_MB -gt 0 ]] && [[ $size_mb -gt $FILTER_MAX_SIZE_MB ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
+# Check if file passes date filter
+passes_date_filter() {
+    local file="$1"
+
+    if [[ "$FILTER_BY_DATE" != true ]]; then
+        return 0
+    fi
+
+    if [[ $FILTER_DAYS_OLD -le 0 ]]; then
+        return 0
+    fi
+
+    local file_mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null)
+    local current_time=$(date +%s)
+    local age_days=$(( (current_time - file_mtime) / 86400 ))
+
+    if [[ $age_days -ge $FILTER_DAYS_OLD ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Check if file passes pattern filter
+passes_pattern_filter() {
+    local file="$1"
+
+    if [[ "$FILTER_BY_PATTERN" != true ]]; then
+        return 0
+    fi
+
+    if [[ -z "$FILTER_PATTERN" ]]; then
+        return 0
+    fi
+
+    local filename=$(basename "$file")
+    if [[ "$filename" =~ $FILTER_PATTERN ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Check if file passes all filters
+passes_all_filters() {
+    local file="$1"
+
+    passes_size_filter "$file" || return 1
+    passes_date_filter "$file" || return 1
+    passes_pattern_filter "$file" || return 1
+
+    return 0
+}
+
+# Ask for confirmation on single file
+confirm_file_operation() {
+    local file="$1"
+    local operation="$2"
+    local preview="$3"
+
+    if [[ "$INTERACTIVE_CONFIRM" != true ]]; then
+        return 0
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}Confirm Operation${COLOR_RESET}"
+    echo -e "${COLOR_CYAN}File:${COLOR_RESET} $(basename "$file")"
+    echo -e "${COLOR_CYAN}Operation:${COLOR_RESET} $operation"
+
+    if [[ -n "$preview" ]]; then
+        echo -e "${COLOR_CYAN}Preview:${COLOR_RESET} $preview"
+    fi
+
+    echo ""
+    read -p "Proceed? (y/n/a=all/s=skip all): " -n 1 -r
+    echo ""
+
+    case "$REPLY" in
+        y|Y) return 0 ;;
+        a|A) INTERACTIVE_CONFIRM=false; return 0 ;;
+        s|S) return 2 ;; # Skip all remaining
+        *) return 1 ;;
+    esac
+}
+
+# Show operation preview
+show_operation_preview() {
+    local original="$1"
+    local transformed="$2"
+    local operation="$3"
+
+    if [[ "$SHOW_PREVIEW" != true ]]; then
+        return
+    fi
+
+    echo -e "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} ${COLOR_WHITE}$operation${COLOR_RESET}"
+    echo -e "  ${COLOR_YELLOW}Before:${COLOR_RESET} $original"
+    echo -e "  ${COLOR_GREEN}After: ${COLOR_RESET} $transformed"
+}
+
+# Pause for step-by-step mode
+step_pause() {
+    if [[ "$STEP_BY_STEP" == true ]]; then
+        echo ""
+        read -p "Press Enter to continue (q to disable step mode)..." -r
+        if [[ "$REPLY" == "q" ]]; then
+            STEP_BY_STEP=false
+            log_info "Step-by-step mode disabled"
+        fi
+    fi
+}
+
+# Initialize undo system
+init_undo_system() {
+    if [[ "$ENABLE_UNDO" != true ]]; then
+        return
+    fi
+
+    if [[ ! -f "$UNDO_HISTORY_FILE" ]]; then
+        echo '{"operations": []}' > "$UNDO_HISTORY_FILE"
+    fi
+}
+
+# Record operation for undo
+record_undo_operation() {
+    local operation_type="$1"
+    local original_path="$2"
+    local new_path="$3"
+
+    if [[ "$ENABLE_UNDO" != true ]]; then
+        return
+    fi
+
+    init_undo_system
+
+    local timestamp=$(date -Iseconds)
+    local operation_id=$(date +%s%N)
+
+    # Add operation to history
+    local temp_file=$(mktemp)
+    jq --arg id "$operation_id" \
+       --arg type "$operation_type" \
+       --arg orig "$original_path" \
+       --arg new "$new_path" \
+       --arg ts "$timestamp" \
+       '.operations += [{
+           id: $id,
+           type: $type,
+           original: $orig,
+           new: $new,
+           timestamp: $ts,
+           undone: false
+       }]' "$UNDO_HISTORY_FILE" > "$temp_file" 2>/dev/null
+
+    if [[ $? -eq 0 ]]; then
+        mv "$temp_file" "$UNDO_HISTORY_FILE"
+    else
+        rm -f "$temp_file"
+    fi
+}
+
+# Undo last operation
+undo_last_operation() {
+    if [[ "$ENABLE_UNDO" != true ]]; then
+        log_error "Undo system is disabled"
+        return 1
+    fi
+
+    init_undo_system
+
+    # Get last non-undone operation
+    local last_op=$(jq -r '.operations[] | select(.undone == false) | @json' "$UNDO_HISTORY_FILE" | tail -1)
+
+    if [[ -z "$last_op" ]]; then
+        log_warning "No operations to undo"
+        return 1
+    fi
+
+    local op_id=$(echo "$last_op" | jq -r '.id')
+    local op_type=$(echo "$last_op" | jq -r '.type')
+    local original=$(echo "$last_op" | jq -r '.original')
+    local new_path=$(echo "$last_op" | jq -r '.new')
+
+    echo -e "${COLOR_YELLOW}Undoing operation:${COLOR_RESET}"
+    echo -e "  Type: $op_type"
+    echo -e "  File: $(basename "$new_path")"
+    echo ""
+
+    case "$op_type" in
+        rename|move)
+            if [[ -f "$new_path" ]] || [[ -d "$new_path" ]]; then
+                mv "$new_path" "$original"
+                log_success "Undone: $new_path -> $original"
+            else
+                log_error "Cannot undo: $new_path does not exist"
+                return 1
+            fi
+            ;;
+        *)
+            log_warning "Cannot undo operation type: $op_type"
+            return 1
+            ;;
+    esac
+
+    # Mark as undone
+    local temp_file=$(mktemp)
+    jq --arg id "$op_id" \
+       '(.operations[] | select(.id == $id) | .undone) = true' \
+       "$UNDO_HISTORY_FILE" > "$temp_file"
+    mv "$temp_file" "$UNDO_HISTORY_FILE"
+
     return 0
 }
 
@@ -3950,8 +4212,43 @@ show_settings_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run Mode${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Verbose Output${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}View Supported Extensions${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Granular Controls${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+}
+
+show_granular_controls_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}GRANULAR CONTROLS${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Interactive Options:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Per-File Confirmation: $([[ "$INTERACTIVE_CONFIRM" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Show Preview: $([[ "$SHOW_PREVIEW" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Step-by-Step Mode: $([[ "$STEP_BY_STEP" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Filters:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Size Filter: $([[ "$FILTER_BY_SIZE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}(${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Date Filter: $([[ "$FILTER_BY_DATE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}(${FILTER_DAYS_OLD}+ days)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Pattern Filter: $([[ "$FILTER_BY_PATTERN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}($FILTER_PATTERN)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Processing:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Undo System: $([[ "$ENABLE_UNDO" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Batch Size: ${COLOR_WHITE}${BATCH_SIZE}${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Toggle Per-File Confirmation${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Preview Mode${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Toggle Step-by-Step Mode${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Configure Size Filter${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Configure Date Filter${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Configure Pattern Filter${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} ${COLOR_WHITE}Toggle Undo System${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[8]${COLOR_RESET} ${COLOR_WHITE}View Undo History${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[9]${COLOR_RESET} ${COLOR_WHITE}Undo Last Operation${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Settings${COLOR_RESET}"
     echo ""
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
@@ -4894,6 +5191,119 @@ handle_settings() {
                     echo "  ${SYMBOL_BULLET} .$ext"
                 done
                 echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                handle_granular_controls
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
+}
+
+# Handle granular controls menu
+handle_granular_controls() {
+    while true; do
+        show_granular_controls_menu
+        read -r choice
+
+        case "$choice" in
+            1)
+                INTERACTIVE_CONFIRM=$([[ "$INTERACTIVE_CONFIRM" == true ]] && echo "false" || echo "true")
+                log_success "Per-file confirmation: $INTERACTIVE_CONFIRM"
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                SHOW_PREVIEW=$([[ "$SHOW_PREVIEW" == true ]] && echo "false" || echo "true")
+                log_success "Preview mode: $SHOW_PREVIEW"
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                STEP_BY_STEP=$([[ "$STEP_BY_STEP" == true ]] && echo "false" || echo "true")
+                log_success "Step-by-step mode: $STEP_BY_STEP"
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Configure Size Filter${COLOR_RESET}"
+                echo ""
+                read -p "Enable size filter? (y/n): " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    FILTER_BY_SIZE=true
+                    read -p "Minimum size in MB (0 for no minimum): " FILTER_MIN_SIZE_MB
+                    read -p "Maximum size in MB (0 for no maximum): " FILTER_MAX_SIZE_MB
+                    log_success "Size filter enabled: ${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB"
+                else
+                    FILTER_BY_SIZE=false
+                    log_success "Size filter disabled"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Configure Date Filter${COLOR_RESET}"
+                echo ""
+                read -p "Enable date filter? (y/n): " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    FILTER_BY_DATE=true
+                    read -p "Process files older than N days: " FILTER_DAYS_OLD
+                    log_success "Date filter enabled: ${FILTER_DAYS_OLD}+ days old"
+                else
+                    FILTER_BY_DATE=false
+                    log_success "Date filter disabled"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Configure Pattern Filter${COLOR_RESET}"
+                echo ""
+                read -p "Enable pattern filter? (y/n): " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    FILTER_BY_PATTERN=true
+                    read -p "Enter regex pattern: " FILTER_PATTERN
+                    log_success "Pattern filter enabled: $FILTER_PATTERN"
+                else
+                    FILTER_BY_PATTERN=false
+                    FILTER_PATTERN=""
+                    log_success "Pattern filter disabled"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            7)
+                ENABLE_UNDO=$([[ "$ENABLE_UNDO" == true ]] && echo "false" || echo "true")
+                log_success "Undo system: $ENABLE_UNDO"
+                read -p "Press Enter to continue..."
+                ;;
+            8)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Undo History${COLOR_RESET}"
+                echo ""
+                if [[ -f "$UNDO_HISTORY_FILE" ]]; then
+                    local operations=$(jq -r '.operations[] | select(.undone == false) | "\(.timestamp) - \(.type): \(.original) -> \(.new)"' "$UNDO_HISTORY_FILE" 2>/dev/null)
+                    if [[ -n "$operations" ]]; then
+                        echo "$operations"
+                    else
+                        echo "No operations in history"
+                    fi
+                else
+                    echo "No undo history file found"
+                fi
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            9)
+                clear
+                undo_last_operation
                 read -p "Press Enter to continue..."
                 ;;
             b|B)
