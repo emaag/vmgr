@@ -1,0 +1,40 @@
+# Log files
+*.log
+logs/
+~/.video-manager-logs/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# User configuration files (these are personal)
+~/.video-manager-undo.json
+~/.video-manager-favorites.txt
+~/.video-manager-watch.txt
+~/.video-manager-presets.json
+~/.video-manager-subtitle-resume.txt
+
+# Backup files
+*.bak
+*~
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Test output
+test-output/
+test-results/
+
+# Large external projects (not part of this repo)
+llvm-project/

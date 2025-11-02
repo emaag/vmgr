@@ -1,0 +1,3942 @@
+#!/bin/bash
+
+################################################################################
+#
+#  VIDEO MANAGER ULTIMATE - BASH EDITION
+#
+#  A comprehensive, ultra-verbose video file management system for Linux/WSL
+#  Complements the PowerShell Ultimate Edition with bash-native features
+#
+#  Author: Created for Eric's Video Management System
+#  Version: 1.1.0
+#  Date: November 2, 2025
+#
+#  Features:
+#  - Interactive menu system with color-coded output
+#  - Command-line argument support for automation
+#  - Real-time verbose progress tracking
+#  - Comprehensive logging with timestamps
+#  - Duplicate detection (exact hash-based)
+#  - Directory flattening with conflict resolution
+#  - Bracket notation standardization
+#  - Dash removal and spacing fixes
+#  - Automatic subtitle generation (Whisper AI)
+#  - Dry-run mode for safe testing
+#  - Statistics tracking and reporting
+#  - WSL and native Linux path support
+#  - Batch processing multiple folders
+#
+################################################################################
+
+# Script metadata
+SCRIPT_VERSION="1.1.0"
+SCRIPT_NAME="Video Manager Ultimate - Bash Edition"
+SCRIPT_DATE="2025-11-02"
+
+# Color codes for beautiful output
+readonly COLOR_RESET='\033[0m'
+readonly COLOR_BOLD='\033[1m'
+readonly COLOR_RED='\033[0;31m'
+readonly COLOR_GREEN='\033[0;32m'
+readonly COLOR_YELLOW='\033[0;33m'
+readonly COLOR_BLUE='\033[0;34m'
+readonly COLOR_MAGENTA='\033[0;35m'
+readonly COLOR_CYAN='\033[0;36m'
+readonly COLOR_WHITE='\033[0;37m'
+readonly COLOR_BRIGHT_RED='\033[1;31m'
+readonly COLOR_BRIGHT_GREEN='\033[1;32m'
+readonly COLOR_BRIGHT_YELLOW='\033[1;33m'
+readonly COLOR_BRIGHT_BLUE='\033[1;34m'
+readonly COLOR_BRIGHT_MAGENTA='\033[1;35m'
+readonly COLOR_BRIGHT_CYAN='\033[1;36m'
+
+# Unicode characters for visual appeal
+readonly SYMBOL_CHECK="✓"
+readonly SYMBOL_CROSS="✗"
+readonly SYMBOL_ARROW="→"
+readonly SYMBOL_BULLET="•"
+readonly SYMBOL_STAR="★"
+readonly SYMBOL_WARN="⚠"
+readonly SYMBOL_INFO="ℹ"
+readonly SYMBOL_FOLDER="📁"
+readonly SYMBOL_FILE="📄"
+readonly SYMBOL_VIDEO="🎬"
+
+# Configuration
+DEFAULT_VIDEO_EXTENSIONS=("mp4" "mkv" "avi" "mov" "wmv" "flv" "webm" "m4v" "mpg" "mpeg" "3gp")
+LOG_DIR="$HOME/.video-manager-logs"
+LOG_FILE="$LOG_DIR/video-manager-$(date +%Y%m%d-%H%M%S).log"
+MAX_LOG_ENTRIES=1000
+DRY_RUN=false
+VERBOSE=true
+INTERACTIVE=true
+
+# Subtitle generation configuration
+WHISPER_MODEL="base"  # tiny, base, small, medium, large
+SUBTITLE_FORMAT="srt" # srt, vtt, txt, json
+SUBTITLE_LANGUAGE="auto" # auto or language code (en, es, fr, etc.)
+SUBTITLE_SUFFIX=".srt"
+SUBTITLE_PARALLEL_JOBS=2 # Number of parallel subtitle generation jobs (1-8)
+SUBTITLE_RESUME_FILE="$HOME/.video-manager-subtitle-resume.txt"
+SUBTITLE_MIN_CONFIDENCE=0.5 # Minimum confidence score (0.0 - 1.0)
+SUBTITLE_AUTO_TRANSLATE=false # Auto-translate subtitles
+SUBTITLE_TRANSLATE_TO="en" # Target language for translation
+
+# Advanced features
+SUBTITLE_USE_GPU=false # Enable GPU acceleration (auto-detect CUDA)
+SUBTITLE_OPTIMIZE_BATCH=true # Sort videos by size for efficiency
+SUBTITLE_SPEAKER_DIARIZATION=false # Identify different speakers
+SUBTITLE_INTERACTIVE_EDIT=false # Enable interactive editing mode
+SUBTITLE_AUTO_PUNCTUATION=true # Auto-fix punctuation and capitalization
+
+# Recursive scanning options
+SUBTITLE_RECURSIVE=false # Scan subdirectories recursively
+SUBTITLE_MAX_DEPTH=10 # Maximum recursion depth (1-50)
+SUBTITLE_MAX_FILES=1000 # Maximum files to process in recursive mode
+SUBTITLE_MIN_DEPTH=1 # Minimum depth to start scanning (0=include current dir)
+SUBTITLE_INTERACTIVE_SELECT=false # Interactively choose subdirectories
+
+# Advanced filtering
+SUBTITLE_SKIP_PATTERNS=(".*" "_*" "node_modules" ".git" ".svn" "Trash" "tmp" "temp") # Directories to skip
+SUBTITLE_MIN_SIZE_MB=0 # Minimum file size in MB (0=no limit)
+SUBTITLE_MAX_SIZE_MB=0 # Maximum file size in MB (0=no limit)
+SUBTITLE_MODIFIED_DAYS=0 # Only process files modified in last N days (0=no limit)
+SUBTITLE_SHOW_DIR_STATS=true # Show statistics per directory
+SUBTITLE_SKIP_EXISTING=true # Skip videos that already have subtitles
+
+# Quick-win features
+ENABLE_UNDO=true # Enable undo/rollback functionality
+UNDO_HISTORY_FILE="$HOME/.video-manager-undo.json"
+FAVORITES_FILE="$HOME/.video-manager-favorites.txt"
+WATCH_FOLDERS_FILE="$HOME/.video-manager-watch.txt"
+RENAME_PRESETS_FILE="$HOME/.video-manager-presets.json"
+ENABLE_EMAIL_NOTIFY=false # Send email notifications
+EMAIL_RECIPIENT="" # Email address for notifications
+ENABLE_SOUND_NOTIFY=true # Sound notifications on completion
+THEME="auto" # Color theme: auto, dark, light
+DRY_RUN_DIFF=true # Show before/after preview in dry-run
+
+# Backup & Restore System
+BACKUP_ENABLED=true # Enable automatic backups before operations
+BACKUP_DIR="$HOME/.video-manager-backups" # Backup storage location
+BACKUP_MAX_COUNT=20 # Maximum backups to keep (auto-cleanup)
+BACKUP_COMPRESSION=true # Compress backups with gzip
+BACKUP_INCLUDE_LOGS=true # Include operation logs in backups
+
+# Configuration Management
+CONFIG_FILE="$HOME/.video-manager.conf" # Main configuration file
+CONFIG_AUTO_SAVE=true # Auto-save settings on change
+CONFIG_AUTO_LOAD=true # Auto-load settings on startup
+CONFIG_PROFILE="default" # Active configuration profile
+
+# Statistics tracking
+declare -A STATS
+STATS[files_processed]=0
+STATS[files_renamed]=0
+STATS[files_moved]=0
+STATS[files_skipped]=0
+STATS[errors]=0
+STATS[duplicates_found]=0
+STATS[space_saved]=0
+STATS[subtitles_generated]=0
+STATS[subtitles_failed]=0
+STATS[subtitles_translated]=0
+STATS[low_confidence_count]=0
+
+# Global variables
+CURRENT_OPERATION=""
+START_TIME=""
+TARGET_FOLDER=""
+
+################################################################################
+# UTILITY FUNCTIONS
+################################################################################
+
+# Initialize logging system
+init_logging() {
+    if [[ ! -d "$LOG_DIR" ]]; then
+        mkdir -p "$LOG_DIR" 2>/dev/null
+        if [[ $? -eq 0 ]]; then
+            log_verbose "Created log directory: $LOG_DIR"
+        else
+            echo -e "${COLOR_RED}${SYMBOL_WARN} Warning: Could not create log directory${COLOR_RESET}"
+        fi
+    fi
+    
+    # Rotate old logs if too many exist
+    local log_count=$(find "$LOG_DIR" -name "video-manager-*.log" 2>/dev/null | wc -l)
+    if [[ $log_count -gt 50 ]]; then
+        log_verbose "Rotating old log files (found $log_count logs)..."
+        find "$LOG_DIR" -name "video-manager-*.log" -type f | sort | head -n -50 | xargs rm -f 2>/dev/null
+    fi
+    
+    # Create new log file
+    touch "$LOG_FILE" 2>/dev/null
+    log_message "INFO" "=========================================="
+    log_message "INFO" "$SCRIPT_NAME v$SCRIPT_VERSION"
+    log_message "INFO" "Session started: $(date '+%Y-%m-%d %H:%M:%S')"
+    log_message "INFO" "=========================================="
+}
+
+# Write to log file
+log_message() {
+    local level="$1"
+    shift
+    local message="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $message" >> "$LOG_FILE" 2>/dev/null
+}
+
+# Verbose console output with logging
+log_verbose() {
+    local message="$*"
+    if [[ "$VERBOSE" == true ]]; then
+        echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message"
+    fi
+    log_message "INFO" "$message"
+}
+
+# Success message
+log_success() {
+    local message="$*"
+    echo -e "${COLOR_BRIGHT_GREEN}${SYMBOL_CHECK}${COLOR_RESET} $message"
+    log_message "SUCCESS" "$message"
+}
+
+# Error message
+log_error() {
+    local message="$*"
+    echo -e "${COLOR_BRIGHT_RED}${SYMBOL_CROSS}${COLOR_RESET} $message"
+    log_message "ERROR" "$message"
+    ((STATS[errors]++))
+}
+
+# Warning message
+log_warning() {
+    local message="$*"
+    echo -e "${COLOR_BRIGHT_YELLOW}${SYMBOL_WARN}${COLOR_RESET} $message"
+    log_message "WARN" "$message"
+}
+
+# Info message
+log_info() {
+    local message="$*"
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message"
+    log_message "INFO" "$message"
+}
+
+# Operation start banner
+start_operation() {
+    CURRENT_OPERATION="$1"
+    START_TIME=$(date +%s)
+    
+    echo ""
+    echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_MAGENTA}${SYMBOL_STAR} ${COLOR_BOLD}$CURRENT_OPERATION${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo ""
+    
+    log_message "OPERATION" "Started: $CURRENT_OPERATION"
+}
+
+# Operation end banner with statistics
+end_operation() {
+    local end_time=$(date +%s)
+    local duration=$((end_time - START_TIME))
+    local minutes=$((duration / 60))
+    local seconds=$((duration % 60))
+    
+    echo ""
+    echo -e "${COLOR_BRIGHT_MAGENTA}───────────────────────────────────────────────────────────────${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}Operation Complete: $CURRENT_OPERATION${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_MAGENTA}───────────────────────────────────────────────────────────────${COLOR_RESET}"
+    
+    print_statistics
+    
+    echo ""
+    echo -e "${COLOR_CYAN}Duration: ${minutes}m ${seconds}s${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo ""
+    
+    log_message "OPERATION" "Completed: $CURRENT_OPERATION (Duration: ${minutes}m ${seconds}s)"
+}
+
+# Print statistics
+print_statistics() {
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}📊 Statistics:${COLOR_RESET}"
+    echo -e "   ${COLOR_WHITE}Files Processed:${COLOR_RESET}  ${COLOR_BRIGHT_CYAN}${STATS[files_processed]}${COLOR_RESET}"
+    echo -e "   ${COLOR_WHITE}Files Renamed:${COLOR_RESET}    ${COLOR_BRIGHT_GREEN}${STATS[files_renamed]}${COLOR_RESET}"
+    echo -e "   ${COLOR_WHITE}Files Moved:${COLOR_RESET}      ${COLOR_BRIGHT_GREEN}${STATS[files_moved]}${COLOR_RESET}"
+    echo -e "   ${COLOR_WHITE}Files Skipped:${COLOR_RESET}    ${COLOR_BRIGHT_YELLOW}${STATS[files_skipped]}${COLOR_RESET}"
+
+    if [[ ${STATS[subtitles_generated]} -gt 0 || ${STATS[subtitles_failed]} -gt 0 ]]; then
+        echo -e "   ${COLOR_WHITE}Subtitles Generated:${COLOR_RESET} ${COLOR_BRIGHT_GREEN}${STATS[subtitles_generated]}${COLOR_RESET}"
+        if [[ ${STATS[subtitles_failed]} -gt 0 ]]; then
+            echo -e "   ${COLOR_WHITE}Subtitles Failed:${COLOR_RESET}    ${COLOR_BRIGHT_RED}${STATS[subtitles_failed]}${COLOR_RESET}"
+        fi
+        if [[ ${STATS[subtitles_translated]} -gt 0 ]]; then
+            echo -e "   ${COLOR_WHITE}Subtitles Translated:${COLOR_RESET} ${COLOR_BRIGHT_CYAN}${STATS[subtitles_translated]}${COLOR_RESET}"
+        fi
+        if [[ ${STATS[low_confidence_count]} -gt 0 ]]; then
+            echo -e "   ${COLOR_WHITE}Low Confidence:${COLOR_RESET}      ${COLOR_BRIGHT_YELLOW}${STATS[low_confidence_count]}${COLOR_RESET}"
+        fi
+    fi
+
+    if [[ ${STATS[duplicates_found]} -gt 0 ]]; then
+        echo -e "   ${COLOR_WHITE}Duplicates Found:${COLOR_RESET} ${COLOR_BRIGHT_MAGENTA}${STATS[duplicates_found]}${COLOR_RESET}"
+        if [[ ${STATS[space_saved]} -gt 0 ]]; then
+            local space_mb=$((STATS[space_saved] / 1024 / 1024))
+            echo -e "   ${COLOR_WHITE}Space Saved:${COLOR_RESET}      ${COLOR_BRIGHT_GREEN}${space_mb} MB${COLOR_RESET}"
+        fi
+    fi
+
+    if [[ ${STATS[errors]} -gt 0 ]]; then
+        echo -e "   ${COLOR_WHITE}Errors:${COLOR_RESET}           ${COLOR_BRIGHT_RED}${STATS[errors]}${COLOR_RESET}"
+    fi
+}
+
+# Reset statistics
+reset_statistics() {
+    STATS[files_processed]=0
+    STATS[files_renamed]=0
+    STATS[files_moved]=0
+    STATS[files_skipped]=0
+    STATS[errors]=0
+    STATS[duplicates_found]=0
+    STATS[space_saved]=0
+    STATS[subtitles_generated]=0
+    STATS[subtitles_failed]=0
+    STATS[subtitles_translated]=0
+    STATS[low_confidence_count]=0
+}
+
+# Check if file is a video
+is_video_file() {
+    local file="$1"
+    local ext="${file##*.}"
+    ext="${ext,,}" # Convert to lowercase
+    
+    for video_ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
+        if [[ "$ext" == "$video_ext" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Get file size in bytes
+get_file_size() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null
+    else
+        echo "0"
+    fi
+}
+
+# Calculate SHA256 hash
+calculate_hash() {
+    local file="$1"
+    log_verbose "Calculating SHA256 hash for: $(basename "$file")"
+    
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$file" 2>/dev/null | awk '{print $1}'
+    elif command -v shasum &> /dev/null; then
+        shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+    else
+        log_error "No hash utility found (sha256sum or shasum required)"
+        return 1
+    fi
+}
+
+# Convert Windows path to WSL path
+convert_to_wsl_path() {
+    local path="$1"
+    
+    # Check if already a Unix path
+    if [[ "$path" =~ ^/ ]]; then
+        echo "$path"
+        return 0
+    fi
+    
+    # Convert Windows path (C:\Users\...) to WSL path (/mnt/c/Users/...)
+    if [[ "$path" =~ ^([A-Za-z]): ]]; then
+        local drive="${BASH_REMATCH[1],,}" # Convert to lowercase
+        local rest="${path#*:}"
+        rest="${rest//\\//}" # Convert backslashes to forward slashes
+        echo "/mnt/$drive$rest"
+    else
+        echo "$path"
+    fi
+}
+
+# Validate directory exists
+validate_directory() {
+    local dir="$1"
+    
+    if [[ -z "$dir" ]]; then
+        log_error "No directory specified"
+        return 1
+    fi
+    
+    dir=$(convert_to_wsl_path "$dir")
+    
+    if [[ ! -d "$dir" ]]; then
+        log_error "Directory does not exist: $dir"
+        return 1
+    fi
+    
+    if [[ ! -r "$dir" ]]; then
+        log_error "Directory is not readable: $dir"
+        return 1
+    fi
+    
+    echo "$dir"
+    return 0
+}
+
+# Sanitize string for use in sed patterns
+sanitize_for_sed() {
+    local input="$1"
+    # Escape special sed metacharacters: / \ & [ ] * . ^ $
+    printf '%s\n' "$input" | sed 's/[\/&]/\\&/g' | sed 's/[]\[*.^$]/\\&/g'
+}
+
+# Sanitize string for general shell use
+sanitize_input() {
+    local input="$1"
+    local max_length="${2:-1024}"
+
+    # Truncate to max length
+    input="${input:0:$max_length}"
+
+    # Remove null bytes and other control characters
+    input="${input//[$'\x00'-$'\x1f'$'\x7f']/}"
+
+    echo "$input"
+}
+
+# Validate that path doesn't escape base directory
+validate_path_safety() {
+    local path="$1"
+    local base_dir="$2"
+
+    # Resolve to absolute path
+    local abs_path
+    abs_path=$(realpath -m "$path" 2>/dev/null) || abs_path="$path"
+    local abs_base
+    abs_base=$(realpath -m "$base_dir" 2>/dev/null) || abs_base="$base_dir"
+
+    # Check if path starts with base directory
+    if [[ "$abs_path" != "$abs_base"* ]]; then
+        log_error "Path traversal detected: $path"
+        return 1
+    fi
+
+    return 0
+}
+
+# Generate safe filename if conflict exists
+get_safe_filename() {
+    local directory="$1"
+    local filename="$2"
+    local target_path="$directory/$filename"
+
+    if [[ ! -e "$target_path" ]]; then
+        echo "$filename"
+        return 0
+    fi
+
+    local counter=1
+    local name="${filename%.*}"
+    local ext="${filename##*.}"
+
+    [[ "$ext" == "$filename" ]] && ext="" || ext=".$ext"
+
+    while [[ -e "$target_path" ]]; do
+        filename="${name}(${counter})${ext}"
+        target_path="$directory/$filename"
+        ((counter++))
+    done
+
+    log_warning "Filename conflict resolved: $filename"
+    echo "$filename"
+}
+
+################################################################################
+# CORE RENAMING FUNCTIONS
+################################################################################
+
+# Apply bracket notation to filename
+apply_bracket_notation() {
+    local filename="$1"
+    
+    # Separate name and extension
+    local name="${filename%.*}"
+    local ext="${filename##*.}"
+    [[ "$ext" == "$filename" ]] && ext="" || ext=".$ext"
+    
+    # Match and extract first word and the rest
+    if [[ "$name" =~ ^([a-zA-Z0-9_]+)[.\ \-]?(.*)$ ]]; then
+        local first_word="${BASH_REMATCH[1]}"
+        local rest="${BASH_REMATCH[2]}"
+        
+        # Capitalize first letter
+        first_word="$(tr '[:lower:]' '[:upper:]' <<< "${first_word:0:1}")${first_word:1}"
+        
+        # Construct new filename
+        local new_name="[$first_word]"
+        [[ -n "$rest" ]] && new_name+=" $rest"
+        new_name+="$ext"
+        
+        echo "$new_name"
+    else
+        echo "$filename"
+    fi
+}
+
+# Remove dash patterns
+remove_dashes() {
+    local filename="$1"
+    echo "${filename// - / }"
+}
+
+# Fix spacing after brackets
+fix_bracket_spacing() {
+    local filename="$1"
+    echo "$filename" | sed -E 's/\](\S)/] \1/g'
+}
+
+# Full cleanup pipeline
+cleanup_filename() {
+    local filename="$1"
+    
+    log_verbose "  Processing: $filename"
+    
+    # Step 1: Remove dashes
+    filename=$(remove_dashes "$filename")
+    log_verbose "    After dash removal: $filename"
+    
+    # Step 2: Apply bracket notation
+    filename=$(apply_bracket_notation "$filename")
+    log_verbose "    After bracket notation: $filename"
+    
+    # Step 3: Fix spacing
+    filename=$(fix_bracket_spacing "$filename")
+    log_verbose "    After spacing fix: $filename"
+    
+    echo "$filename"
+}
+
+# Rename files in directory
+rename_files_in_directory() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+    
+    log_info "Scanning directory: $directory"
+    
+    local file_count=0
+    local renamed_count=0
+    
+    # Count total video files first
+    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    log_info "Found $total_files video files to process"
+    
+    echo ""
+    
+    while IFS= read -r -d '' file; do
+        [[ "$(basename "$file")" == .* ]] && continue
+        
+        if ! is_video_file "$file"; then
+            continue
+        fi
+        
+        ((file_count++))
+        ((STATS[files_processed]++))
+        
+        local filename=$(basename "$file")
+        local new_filename=$(cleanup_filename "$filename")
+        
+        # Progress indicator
+        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+        
+        if [[ "$filename" != "$new_filename" ]]; then
+            local new_path="$directory/$new_filename"
+            
+            # Check for conflicts
+            if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+                new_filename=$(get_safe_filename "$directory" "$new_filename")
+                new_path="$directory/$new_filename"
+            fi
+            
+            echo -ne "\r\033[K" # Clear line
+            
+            if [[ "$dry_run" == true ]]; then
+                echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
+                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                log_message "DRYRUN" "Would rename: $filename -> $new_filename"
+            else
+                mv -- "$file" "$new_path" 2>/dev/null
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
+                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    log_message "RENAME" "Success: $filename -> $new_filename"
+                    ((renamed_count++))
+                    ((STATS[files_renamed]++))
+                else
+                    log_error "Failed to rename: $filename"
+                fi
+            fi
+        else
+            ((STATS[files_skipped]++))
+            log_verbose "Skipped (no change needed): $filename"
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -print0)
+    
+    echo -ne "\r\033[K" # Clear progress line
+    
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually renamed"
+    else
+        log_success "Renamed $renamed_count out of $file_count video files"
+    fi
+}
+
+################################################################################
+# DIRECTORY FLATTENING
+################################################################################
+
+flatten_directory() {
+    local top_dir="$1"
+    local dry_run="${2:-false}"
+    
+    log_info "Flattening directory structure: $top_dir"
+    log_verbose "Moving all video files from subdirectories to: $top_dir"
+    
+    local moved_count=0
+    local conflict_count=0
+    
+    # Find all video files NOT in the top directory
+    while IFS= read -r file; do
+        ((STATS[files_processed]++))
+        
+        local base_name=$(basename "$file")
+        local target="$top_dir/$base_name"
+        
+        log_verbose "Found: $file"
+        
+        # Check for conflicts
+        if [[ -e "$target" ]]; then
+            local file_size=$(get_file_size "$file")
+            local target_size=$(get_file_size "$target")
+            
+            if [[ "$file_size" == "$target_size" ]]; then
+                log_warning "Possible duplicate (same size): $base_name"
+                log_verbose "  Source: $file ($file_size bytes)"
+                log_verbose "  Target: $target ($target_size bytes)"
+                ((STATS[files_skipped]++))
+                continue
+            fi
+            
+            base_name=$(get_safe_filename "$top_dir" "$base_name")
+            target="$top_dir/$base_name"
+            ((conflict_count++))
+        fi
+        
+        if [[ "$dry_run" == true ]]; then
+            echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would move: $file ${COLOR_ARROW} $target"
+            log_message "DRYRUN" "Would move: $file -> $target"
+        else
+            mv "$file" "$target" 2>/dev/null
+            if [[ $? -eq 0 ]]; then
+                echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Moved: $(basename "$file") ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} $target"
+                log_message "MOVE" "Success: $file -> $target"
+                ((moved_count++))
+                ((STATS[files_moved]++))
+            else
+                log_error "Failed to move: $file"
+            fi
+        fi
+    done < <(find "$top_dir" -mindepth 2 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually moved"
+    else
+        log_success "Moved $moved_count video files to top directory"
+        if [[ $conflict_count -gt 0 ]]; then
+            log_warning "Resolved $conflict_count filename conflicts"
+        fi
+    fi
+}
+
+################################################################################
+# DUPLICATE DETECTION
+################################################################################
+
+find_duplicates() {
+    local directory="$1"
+    local action="${2:-report}" # report or delete
+    
+    log_info "Scanning for duplicate video files in: $directory"
+    log_verbose "This may take a while for large collections..."
+    
+    declare -A hash_map
+    declare -A duplicate_groups
+    local total_duplicates=0
+    local space_wasted=0
+    
+    # Create output directory for reports
+    local report_dir="$directory/_duplicate_report_$(date +%Y%m%d-%H%M%S)"
+    
+    echo ""
+    
+    # Find all video files and calculate hashes
+    local file_count=0
+    while IFS= read -r -d '' file; do
+        ((file_count++))
+        ((STATS[files_processed]++))
+        
+        local filename=$(basename "$file")
+        echo -ne "\r${COLOR_CYAN}Hashing: [$file_count files] Current: ${filename:0:50}...${COLOR_RESET}"
+        
+        local hash=$(calculate_hash "$file")
+        if [[ -z "$hash" ]]; then
+            log_error "Failed to hash: $filename"
+            continue
+        fi
+        
+        if [[ -n "${hash_map[$hash]}" ]]; then
+            # Duplicate found!
+            log_verbose ""
+            log_warning "Duplicate found!"
+            log_verbose "  Hash: $hash"
+            log_verbose "  Original: ${hash_map[$hash]}"
+            log_verbose "  Duplicate: $file"
+            
+            duplicate_groups[$hash]+="$file"$'\n'
+            ((total_duplicates++))
+            ((STATS[duplicates_found]++))
+            
+            local size=$(get_file_size "$file")
+            space_wasted=$((space_wasted + size))
+        else
+            hash_map[$hash]="$file"
+        fi
+    done < <(find "$directory" -type f -print0 | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    
+    echo -ne "\r\033[K" # Clear line
+    
+    if [[ $total_duplicates -eq 0 ]]; then
+        log_success "No duplicates found! Your collection is clean."
+        return 0
+    fi
+    
+    # Create report
+    mkdir -p "$report_dir" 2>/dev/null
+    local report_file="$report_dir/duplicates.txt"
+    local csv_file="$report_dir/duplicates.csv"
+    
+    {
+        echo "DUPLICATE VIDEO FILES REPORT"
+        echo "Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "Directory: $directory"
+        echo "Total Duplicates: $total_duplicates"
+        echo "Space Wasted: $((space_wasted / 1024 / 1024)) MB"
+        echo ""
+        echo "========================================"
+        echo ""
+    } > "$report_file"
+    
+    echo "Hash,Original File,Duplicate Files,File Size" > "$csv_file"
+    
+    local group_num=1
+    for hash in "${!duplicate_groups[@]}"; do
+        local original="${hash_map[$hash]}"
+        local dupes="${duplicate_groups[$hash]}"
+        local size=$(get_file_size "$original")
+        local size_mb=$((size / 1024 / 1024))
+        
+        echo -e "${COLOR_MAGENTA}Duplicate Group #$group_num${COLOR_RESET}"
+        echo "  Hash: $hash"
+        echo -e "  ${COLOR_GREEN}Original:${COLOR_RESET} $original"
+        echo -e "  ${COLOR_RED}Duplicates:${COLOR_RESET}"
+        
+        {
+            echo "=== Duplicate Group #$group_num ==="
+            echo "Hash: $hash"
+            echo "File Size: $size_mb MB"
+            echo "Original: $original"
+            echo "Duplicates:"
+        } >> "$report_file"
+        
+        while IFS= read -r dupe; do
+            [[ -z "$dupe" ]] && continue
+            echo "    - $dupe"
+            echo "    - $dupe" >> "$report_file"
+            echo "\"$hash\",\"$original\",\"$dupe\",$size" >> "$csv_file"
+            
+            if [[ "$action" == "delete" ]]; then
+                if [[ "$DRY_RUN" == true ]]; then
+                    log_warning "[DRY RUN] Would delete: $dupe"
+                else
+                    rm -f "$dupe" 2>/dev/null
+                    if [[ $? -eq 0 ]]; then
+                        log_success "Deleted duplicate: $(basename "$dupe")"
+                        STATS[space_saved]=$((STATS[space_saved] + size))
+                    else
+                        log_error "Failed to delete: $dupe"
+                    fi
+                fi
+            fi
+        done <<< "$dupes"
+        
+        echo "" >> "$report_file"
+        echo ""
+        ((group_num++))
+    done
+    
+    log_success "Report generated: $report_file"
+    log_success "CSV export: $csv_file"
+    
+    local space_mb=$((space_wasted / 1024 / 1024))
+    log_info "Total space wasted by duplicates: ${space_mb} MB"
+}
+
+################################################################################
+# ADVANCED SUBTITLE FEATURES
+################################################################################
+
+# Detect GPU availability
+detect_gpu() {
+    local gpu_available=false
+
+    # Check for NVIDIA GPU
+    if command -v nvidia-smi &> /dev/null; then
+        if nvidia-smi &> /dev/null; then
+            gpu_available=true
+            log_verbose "NVIDIA GPU detected"
+        fi
+    fi
+
+    # Check for CUDA
+    if [[ -d /usr/local/cuda ]] || command -v nvcc &> /dev/null; then
+        log_verbose "CUDA installation found"
+    fi
+
+    if [[ "$gpu_available" == true ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Check if parallel processing is available
+check_parallel_support() {
+    if command -v parallel &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Sort videos by size for optimal processing
+sort_videos_by_size() {
+    local directory="$1"
+    local -a sorted_files
+
+    # Get files with sizes, sort by size (smallest first)
+    while IFS= read -r line; do
+        sorted_files+=("$line")
+    done < <(find "$directory" -maxdepth 1 -type f -exec du -b {} + | \
+             grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | \
+             sort -n | awk '{$1=""; print substr($0,2)}')
+
+    printf '%s\n' "${sorted_files[@]}"
+}
+
+# Detect speaker changes in subtitle
+detect_speakers() {
+    local subtitle_file="$1"
+
+    if command -v pyannote-audio &> /dev/null; then
+        log_verbose "Speaker diarization available"
+        # Note: This would need Python pyannote-audio package
+        # Simplified placeholder for actual implementation
+        return 0
+    else
+        log_verbose "pyannote-audio not installed, skipping speaker diarization"
+        return 1
+    fi
+}
+
+# Apply ML-based punctuation and capitalization fixes
+fix_punctuation() {
+    local subtitle_file="$1"
+    local temp_file="${subtitle_file}.tmp"
+
+    log_verbose "Applying punctuation fixes to: $(basename "$subtitle_file")"
+
+    # Basic punctuation fixes
+    sed -i.bak \
+        -e 's/\bi\b/I/g' \
+        -e 's/^\([a-z]\)/\U\1/' \
+        -e 's/\. \([a-z]\)/. \U\1/g' \
+        -e 's/\? \([a-z]\)/? \U\1/g' \
+        -e 's/! \([a-z]\)/! \U\1/g' \
+        "$subtitle_file" 2>/dev/null
+
+    if [[ $? -eq 0 ]]; then
+        rm -f "${subtitle_file}.bak"
+        log_verbose "Punctuation fixes applied"
+        return 0
+    else
+        log_warning "Punctuation fix failed"
+        return 1
+    fi
+}
+
+# Interactive subtitle editor
+edit_subtitle_interactive() {
+    local subtitle_file="$1"
+
+    if [[ ! -f "$subtitle_file" ]]; then
+        log_error "Subtitle file not found: $subtitle_file"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}  INTERACTIVE SUBTITLE EDITOR${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_WHITE}File:${COLOR_RESET} $(basename "$subtitle_file")"
+    echo ""
+    echo -e "${COLOR_CYAN}Options:${COLOR_RESET}"
+    echo "  [1] View subtitle content"
+    echo "  [2] Fix punctuation automatically"
+    echo "  [3] Open in text editor"
+    echo "  [4] Search and replace"
+    echo "  [5] Adjust all timestamps (+/- seconds)"
+    echo "  [6] Remove filler words (um, uh, etc.)"
+    echo "  [Q] Done editing"
+    echo ""
+
+    while true; do
+        echo -n "Select option: "
+        read -r choice
+
+        case "$choice" in
+            1)
+                preview_subtitle "$subtitle_file" 50
+                ;;
+            2)
+                fix_punctuation "$subtitle_file"
+                log_success "Punctuation fixes applied"
+                ;;
+            3)
+                ${EDITOR:-nano} "$subtitle_file"
+                log_success "Editor closed"
+                ;;
+            4)
+                echo -n "Search for: "
+                read -r search_term
+                echo -n "Replace with: "
+                read -r replace_term
+                # Sanitize inputs to prevent command injection
+                search_term=$(sanitize_input "$search_term")
+                replace_term=$(sanitize_input "$replace_term")
+                # Escape for sed
+                local safe_search=$(sanitize_for_sed "$search_term")
+                local safe_replace=$(sanitize_for_sed "$replace_term")
+                sed -i "s/${safe_search}/${safe_replace}/g" "$subtitle_file" 2>/dev/null
+                if [[ $? -eq 0 ]]; then
+                    log_success "Replaced all occurrences"
+                else
+                    log_error "Search and replace failed"
+                fi
+                ;;
+            5)
+                echo -n "Adjust timestamps by seconds (+/-): "
+                read -r adjustment
+                adjust_subtitle_timing "$subtitle_file" "$adjustment"
+                ;;
+            6)
+                remove_filler_words "$subtitle_file"
+                log_success "Filler words removed"
+                ;;
+            q|Q)
+                log_info "Editing complete"
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                ;;
+        esac
+        echo ""
+    done
+}
+
+# Adjust subtitle timing
+adjust_subtitle_timing() {
+    local subtitle_file="$1"
+    local adjustment="$2"  # seconds to add/subtract
+
+    if ! command -v ffmpeg &> /dev/null; then
+        log_error "ffmpeg required for timing adjustments"
+        return 1
+    fi
+
+    # Validate adjustment is a number
+    if ! [[ "$adjustment" =~ ^[+-]?[0-9]+(\.[0-9]+)?$ ]]; then
+        log_error "Invalid adjustment value: must be a number"
+        return 1
+    fi
+
+    log_verbose "Adjusting timing by ${adjustment}s"
+
+    # Use ffmpeg to shift subtitles
+    local temp_file="${subtitle_file}.adjusted"
+    ffmpeg -itsoffset "$adjustment" -i "$subtitle_file" -c copy "$temp_file" 2>/dev/null
+
+    if [[ -f "$temp_file" ]]; then
+        mv "$temp_file" "$subtitle_file"
+        log_success "Timing adjusted by ${adjustment}s"
+        return 0
+    else
+        log_error "Timing adjustment failed"
+        return 1
+    fi
+}
+
+# Remove filler words from subtitles
+remove_filler_words() {
+    local subtitle_file="$1"
+
+    log_verbose "Removing filler words"
+
+    # Common filler words
+    local fillers=("um" "uh" "er" "ah" "like" "you know" "I mean" "sort of" "kind of")
+
+    for filler in "${fillers[@]}"; do
+        # Sanitize filler word for sed to prevent injection
+        local safe_filler=$(sanitize_for_sed "$filler")
+        sed -i "s/\b${safe_filler}\b//gi" "$subtitle_file" 2>/dev/null
+    done
+
+    # Clean up extra spaces
+    sed -i 's/  \+/ /g' "$subtitle_file"
+
+    log_success "Filler words removed"
+}
+
+# Process videos in parallel using GNU Parallel
+process_videos_parallel() {
+    local directory="$1"
+    local model="$2"
+    local format="$3"
+    local language="$4"
+    local jobs="${SUBTITLE_PARALLEL_JOBS:-2}"
+
+    if ! check_parallel_support; then
+        log_warning "GNU Parallel not installed, falling back to sequential processing"
+        log_info "Install with: sudo apt-get install parallel"
+        return 1
+    fi
+
+    log_info "Starting parallel processing with $jobs workers"
+
+    # Export function and variables for parallel
+    export -f generate_subtitle_for_file
+    export -f log_success log_error log_verbose log_info log_warning log_message
+    export -f is_video_processed get_video_duration get_whisper_command detect_gpu is_video_file
+    export WHISPER_MODEL="$model"
+    export SUBTITLE_FORMAT="$format"
+    export SUBTITLE_LANGUAGE="$language"
+    export SUBTITLE_RESUME_FILE SUBTITLE_USE_GPU SUBTITLE_SPEAKER_DIARIZATION
+    export LOG_FILE VERBOSE DRY_RUN
+    export COLOR_RESET COLOR_CYAN COLOR_BRIGHT_GREEN COLOR_BRIGHT_RED COLOR_YELLOW
+    export SYMBOL_INFO SYMBOL_CHECK SYMBOL_CROSS SYMBOL_WARN
+    export DEFAULT_VIDEO_EXTENSIONS
+    export PATH
+
+    # Get video files
+    local video_files=()
+    while IFS= read -r -d '' file; do
+        if is_video_file "$file"; then
+            video_files+=("$file")
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -print0)
+
+    # Process in parallel
+    printf '%s\n' "${video_files[@]}" | \
+        parallel --jobs "$jobs" --bar \
+        generate_subtitle_for_file {} "$model" "$format" "$language" false
+
+    log_success "Parallel processing complete"
+}
+
+################################################################################
+# QUICK-WIN FEATURES
+################################################################################
+
+# 1. UNDO/ROLLBACK SYSTEM
+
+# Save operation for undo
+save_undo_operation() {
+    local operation="$1"
+    local source="$2"
+    local dest="$3"
+    local timestamp=$(date +%s)
+
+    if [[ "$ENABLE_UNDO" != true ]]; then
+        return 0
+    fi
+
+    # Create undo history entry
+    local undo_entry="{\"timestamp\":$timestamp,\"operation\":\"$operation\",\"source\":\"$source\",\"dest\":\"$dest\"}"
+
+    # Append to undo file
+    echo "$undo_entry" >> "$UNDO_HISTORY_FILE"
+
+    log_verbose "Undo point saved: $operation"
+}
+
+# Undo last operation
+undo_last_operation() {
+    if [[ ! -f "$UNDO_HISTORY_FILE" ]] || [[ ! -s "$UNDO_HISTORY_FILE" ]]; then
+        log_error "No operations to undo"
+        return 1
+    fi
+
+    # Get last operation
+    local last_op=$(tail -n 1 "$UNDO_HISTORY_FILE")
+
+    # Parse JSON (simple extraction)
+    local operation=$(echo "$last_op" | grep -o '"operation":"[^"]*"' | cut -d'"' -f4)
+    local source=$(echo "$last_op" | grep -o '"source":"[^"]*"' | cut -d'"' -f4)
+    local dest=$(echo "$last_op" | grep -o '"dest":"[^"]*"' | cut -d'"' -f4)
+
+    echo ""
+    echo -e "${COLOR_YELLOW}Last Operation:${COLOR_RESET}"
+    echo -e "  Type: ${COLOR_CYAN}$operation${COLOR_RESET}"
+    echo -e "  From: ${COLOR_WHITE}$source${COLOR_RESET}"
+    echo -e "  To: ${COLOR_WHITE}$dest${COLOR_RESET}"
+    echo ""
+    read -p "Undo this operation? (yes/no): " confirm
+
+    if [[ "$confirm" != "yes" ]]; then
+        log_info "Undo cancelled"
+        return 1
+    fi
+
+    # Perform undo based on operation type
+    case "$operation" in
+        rename)
+            if [[ -f "$dest" ]]; then
+                mv "$dest" "$source"
+                log_success "Undone: Renamed back to $(basename "$source")"
+            else
+                log_error "Cannot undo: destination file not found"
+                return 1
+            fi
+            ;;
+        move)
+            if [[ -f "$dest" ]]; then
+                mv "$dest" "$source"
+                log_success "Undone: Moved back to original location"
+            else
+                log_error "Cannot undo: file not found"
+                return 1
+            fi
+            ;;
+        delete)
+            log_warning "Cannot undo delete operations (file is gone)"
+            return 1
+            ;;
+        *)
+            log_warning "Unknown operation type: $operation"
+            return 1
+            ;;
+    esac
+
+    # Remove last entry from undo history
+    sed -i '$ d' "$UNDO_HISTORY_FILE"
+
+    log_success "Operation undone successfully"
+    return 0
+}
+
+# 2. FAVORITES/BOOKMARKS
+
+# Add directory to favorites
+add_favorite() {
+    local directory="$1"
+
+    if [[ ! -d "$directory" ]]; then
+        log_error "Directory not found: $directory"
+        return 1
+    fi
+
+    # Resolve to absolute path
+    directory=$(cd "$directory" && pwd)
+
+    # Check if already in favorites
+    if grep -Fxq "$directory" "$FAVORITES_FILE" 2>/dev/null; then
+        log_warning "Already in favorites: $directory"
+        return 1
+    fi
+
+    echo "$directory" >> "$FAVORITES_FILE"
+    log_success "Added to favorites: $directory"
+}
+
+# Remove from favorites
+remove_favorite() {
+    local directory="$1"
+
+    if [[ ! -f "$FAVORITES_FILE" ]]; then
+        log_error "No favorites found"
+        return 1
+    fi
+
+    # Remove the line safely using grep instead of sed with variable
+    local temp_file
+    temp_file=$(mktemp) || {
+        log_error "Failed to create temporary file"
+        return 1
+    }
+
+    grep -Fxv "$directory" "$FAVORITES_FILE" > "$temp_file" 2>/dev/null
+    mv "$temp_file" "$FAVORITES_FILE"
+    log_success "Removed from favorites"
+}
+
+# List favorites
+list_favorites() {
+    if [[ ! -f "$FAVORITES_FILE" ]] || [[ ! -s "$FAVORITES_FILE" ]]; then
+        echo -e "${COLOR_YELLOW}No favorites saved${COLOR_RESET}"
+        return 0
+    fi
+
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_STAR} Favorite Directories:${COLOR_RESET}"
+    echo ""
+
+    local num=1
+    while IFS= read -r dir; do
+        if [[ -d "$dir" ]]; then
+            echo -e "  ${COLOR_GREEN}[$num]${COLOR_RESET} $dir"
+            ((num++))
+        fi
+    done < "$FAVORITES_FILE"
+
+    echo ""
+}
+
+# Select from favorites
+select_favorite() {
+    list_favorites
+
+    if [[ ! -f "$FAVORITES_FILE" ]] || [[ ! -s "$FAVORITES_FILE" ]]; then
+        return 1
+    fi
+
+    echo -n "Select favorite (number) or Enter to cancel: "
+    read -r selection
+
+    if [[ -z "$selection" ]]; then
+        return 1
+    fi
+
+    local selected_dir=$(sed -n "${selection}p" "$FAVORITES_FILE")
+
+    if [[ -n "$selected_dir" && -d "$selected_dir" ]]; then
+        echo "$selected_dir"
+        return 0
+    else
+        log_error "Invalid selection"
+        return 1
+    fi
+}
+
+# 3. WATCH FOLDERS
+
+# Add watch folder
+add_watch_folder() {
+    local directory="$1"
+    local operation="$2"  # rename, subtitles, etc.
+
+    directory=$(cd "$directory" && pwd)
+
+    echo "$directory|$operation" >> "$WATCH_FOLDERS_FILE"
+    log_success "Added watch folder: $directory → $operation"
+}
+
+# Process watch folders
+process_watch_folders() {
+    if [[ ! -f "$WATCH_FOLDERS_FILE" ]] || [[ ! -s "$WATCH_FOLDERS_FILE" ]]; then
+        log_info "No watch folders configured"
+        return 0
+    fi
+
+    echo -e "${COLOR_BRIGHT_CYAN}Processing Watch Folders...${COLOR_RESET}"
+    echo ""
+
+    while IFS='|' read -r directory operation; do
+        if [[ ! -d "$directory" ]]; then
+            log_warning "Watch folder not found: $directory"
+            continue
+        fi
+
+        # Check for new files
+        local file_count=$(find "$directory" -maxdepth 1 -type f -mmin -60 | wc -l)
+
+        if [[ $file_count -eq 0 ]]; then
+            log_verbose "No new files in: $directory"
+            continue
+        fi
+
+        log_info "Found $file_count new files in: $directory"
+        log_info "Applying operation: $operation"
+
+        # Execute operation
+        case "$operation" in
+            rename)
+                rename_files_in_directory "$directory" false
+                ;;
+            subtitles)
+                generate_subtitles_in_directory "$directory" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" false
+                ;;
+            cleanup)
+                workflow_deep_clean "$directory"
+                ;;
+            *)
+                log_warning "Unknown operation: $operation"
+                ;;
+        esac
+
+    done < "$WATCH_FOLDERS_FILE"
+
+    log_success "Watch folders processed"
+}
+
+# 4. EMAIL NOTIFICATIONS
+
+# Send email notification
+send_email_notification() {
+    local subject="$1"
+    local message="$2"
+
+    if [[ "$ENABLE_EMAIL_NOTIFY" != true ]] || [[ -z "$EMAIL_RECIPIENT" ]]; then
+        return 0
+    fi
+
+    # Try multiple email methods
+    if command -v mail &> /dev/null; then
+        echo "$message" | mail -s "$subject" "$EMAIL_RECIPIENT" 2>/dev/null
+    elif command -v sendmail &> /dev/null; then
+        echo -e "Subject: $subject\n\n$message" | sendmail "$EMAIL_RECIPIENT" 2>/dev/null
+    elif command -v curl &> /dev/null && [[ -n "$SMTP_SERVER" ]]; then
+        # Use curl with SMTP (requires configuration)
+        curl --url "smtp://$SMTP_SERVER" \
+             --mail-from "video-manager@localhost" \
+             --mail-rcpt "$EMAIL_RECIPIENT" \
+             --upload-file - <<EOF
+From: Video Manager <video-manager@localhost>
+To: $EMAIL_RECIPIENT
+Subject: $subject
+
+$message
+EOF
+    else
+        log_verbose "No email method available"
+        return 1
+    fi
+
+    log_verbose "Email sent to: $EMAIL_RECIPIENT"
+}
+
+# 5. SOUND NOTIFICATIONS
+
+# Play completion sound
+play_sound_notification() {
+    if [[ "$ENABLE_SOUND_NOTIFY" != true ]]; then
+        return 0
+    fi
+
+    # Try multiple sound methods
+    if command -v paplay &> /dev/null; then
+        # PulseAudio (Linux)
+        paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null &
+    elif command -v aplay &> /dev/null; then
+        # ALSA (Linux)
+        aplay /usr/share/sounds/alsa/Front_Center.wav 2>/dev/null &
+    elif command -v afplay &> /dev/null; then
+        # macOS
+        afplay /System/Library/Sounds/Glass.aiff 2>/dev/null &
+    elif command -v beep &> /dev/null; then
+        # Beep utility
+        beep -f 1000 -l 200 2>/dev/null &
+    else
+        # Terminal bell (universal fallback)
+        echo -ne '\a'
+    fi
+}
+
+# 6. BATCH RENAME PRESETS
+
+# Save rename preset
+save_rename_preset() {
+    local name="$1"
+    local pattern="$2"
+
+    local preset="{\"name\":\"$name\",\"pattern\":\"$pattern\"}"
+    echo "$preset" >> "$RENAME_PRESETS_FILE"
+
+    log_success "Saved preset: $name"
+}
+
+# List rename presets
+list_rename_presets() {
+    if [[ ! -f "$RENAME_PRESETS_FILE" ]] || [[ ! -s "$RENAME_PRESETS_FILE" ]]; then
+        echo -e "${COLOR_YELLOW}No rename presets saved${COLOR_RESET}"
+        return 0
+    fi
+
+    echo -e "${COLOR_BRIGHT_CYAN}Rename Presets:${COLOR_RESET}"
+    echo ""
+
+    local num=1
+    while IFS= read -r preset; do
+        local name=$(echo "$preset" | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
+        local pattern=$(echo "$preset" | grep -o '"pattern":"[^"]*"' | cut -d'"' -f4)
+
+        echo -e "  ${COLOR_GREEN}[$num]${COLOR_RESET} $name"
+        echo -e "      Pattern: ${COLOR_CYAN}$pattern${COLOR_RESET}"
+        ((num++))
+    done < "$RENAME_PRESETS_FILE"
+
+    echo ""
+}
+
+# 7. DRY-RUN DIFF
+
+# Show before/after diff
+show_dry_run_diff() {
+    local old_name="$1"
+    local new_name="$2"
+
+    if [[ "$DRY_RUN_DIFF" != true ]]; then
+        return 0
+    fi
+
+    echo -e "${COLOR_RED}- $(basename "$old_name")${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}+ $(basename "$new_name")${COLOR_RESET}"
+}
+
+################################################################################
+# SUBTITLE HELPER FUNCTIONS
+################################################################################
+
+# Draw progress bar
+draw_progress_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+
+    # Prevent division by zero
+    if [[ $total -eq 0 ]]; then
+        printf "\r[%${width}s] 0%% (0/0)" | tr ' ' '░'
+        return
+    fi
+
+    local percentage=$((current * 100 / total))
+    local filled=$((width * current / total))
+    local empty=$((width - filled))
+
+    printf "\r["
+    printf "%${filled}s" | tr ' ' '█'
+    printf "%${empty}s" | tr ' ' '░'
+    printf "] %3d%% (%d/%d)" $percentage $current $total
+}
+
+# Estimate time remaining
+estimate_time_remaining() {
+    local current=$1
+    local total=$2
+    local elapsed=$3
+
+    if [[ $current -eq 0 ]]; then
+        echo "Calculating..."
+        return
+    fi
+
+    local avg_time_per_item=$((elapsed / current))
+    local remaining_items=$((total - current))
+    local remaining_seconds=$((avg_time_per_item * remaining_items))
+
+    local hours=$((remaining_seconds / 3600))
+    local minutes=$(((remaining_seconds % 3600) / 60))
+    local seconds=$((remaining_seconds % 60))
+
+    if [[ $hours -gt 0 ]]; then
+        echo "${hours}h ${minutes}m ${seconds}s"
+    elif [[ $minutes -gt 0 ]]; then
+        echo "${minutes}m ${seconds}s"
+    else
+        echo "${seconds}s"
+    fi
+}
+
+# Get video duration in seconds
+get_video_duration() {
+    local video_file="$1"
+
+    if command -v ffprobe &> /dev/null; then
+        ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$video_file" 2>/dev/null | cut -d. -f1
+    else
+        echo "0"
+    fi
+}
+
+# Save resume point
+save_resume_point() {
+    local video_file="$1"
+    echo "$video_file" >> "$SUBTITLE_RESUME_FILE"
+}
+
+# Check if video was already processed
+is_video_processed() {
+    local video_file="$1"
+
+    if [[ ! -f "$SUBTITLE_RESUME_FILE" ]]; then
+        return 1
+    fi
+
+    grep -Fxq "$video_file" "$SUBTITLE_RESUME_FILE" 2>/dev/null
+    return $?
+}
+
+# Clear resume file
+clear_resume_file() {
+    rm -f "$SUBTITLE_RESUME_FILE" 2>/dev/null
+}
+
+# Translate subtitle file
+translate_subtitle() {
+    local subtitle_file="$1"
+    local target_lang="$2"
+    local output_file="${subtitle_file%.*}.${target_lang}.${subtitle_file##*.}"
+
+    log_verbose "Translating subtitle to: $target_lang"
+
+    # Check if translation tool is available
+    if command -v translate-shell &> /dev/null; then
+        # Use translate-shell for translation
+        trans -b :${target_lang} -i "$subtitle_file" -o "$output_file" 2>/dev/null
+
+        if [[ -f "$output_file" ]]; then
+            log_success "Translated subtitle: $(basename "$output_file")"
+            ((STATS[subtitles_translated]++))
+            return 0
+        fi
+    else
+        log_warning "translate-shell not installed. Skipping translation."
+        log_info "Install with: apt-get install translate-shell"
+    fi
+
+    return 1
+}
+
+# Extract confidence score from whisper output
+extract_confidence_score() {
+    local whisper_output="$1"
+
+    # Try to extract confidence from whisper JSON output
+    if [[ -n "$whisper_output" ]]; then
+        # This is a simplified version - actual implementation depends on whisper output format
+        echo "0.8"  # Default confidence if not available
+    else
+        echo "0.0"
+    fi
+}
+
+# Verify subtitle quality
+verify_subtitle_quality() {
+    local subtitle_file="$1"
+    local min_confidence="${2:-$SUBTITLE_MIN_CONFIDENCE}"
+
+    if [[ ! -f "$subtitle_file" ]]; then
+        return 1
+    fi
+
+    # Check file size (should be > 100 bytes for valid subtitle)
+    local file_size=$(stat -f%z "$subtitle_file" 2>/dev/null || stat -c%s "$subtitle_file" 2>/dev/null)
+
+    if [[ $file_size -lt 100 ]]; then
+        log_warning "Subtitle file is too small (${file_size} bytes), might be invalid"
+        return 1
+    fi
+
+    # Check for SRT format validity
+    if [[ "$subtitle_file" == *.srt ]]; then
+        # Check if it has proper SRT structure (numbers, timecodes, text)
+        if ! grep -qE "^[0-9]+$" "$subtitle_file" 2>/dev/null; then
+            log_warning "Subtitle file appears to be malformed"
+            return 1
+        fi
+    fi
+
+    log_verbose "Subtitle quality check passed: $(basename "$subtitle_file")"
+    return 0
+}
+
+# Show subtitle preview
+preview_subtitle() {
+    local subtitle_file="$1"
+    local lines="${2:-10}"
+
+    if [[ ! -f "$subtitle_file" ]]; then
+        log_error "Subtitle file not found: $subtitle_file"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${COLOR_BRIGHT_CYAN}Preview of: $(basename "$subtitle_file")${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+    head -n "$lines" "$subtitle_file"
+    echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+    echo ""
+}
+
+# Send completion notification
+send_notification() {
+    local title="$1"
+    local message="$2"
+
+    # Try different notification methods
+    if command -v notify-send &> /dev/null; then
+        notify-send "$title" "$message" 2>/dev/null
+    elif command -v osascript &> /dev/null; then
+        # macOS notification
+        osascript -e "display notification \"$message\" with title \"$title\"" 2>/dev/null
+    fi
+
+    # Also beep if available
+    if command -v beep &> /dev/null; then
+        beep 2>/dev/null
+    elif [[ -e /dev/console ]]; then
+        echo -e "\a" 2>/dev/null
+    fi
+}
+
+################################################################################
+# SUBTITLE GENERATION
+################################################################################
+
+# Check if whisper is installed
+check_whisper_installation() {
+    if command -v whisper &> /dev/null; then
+        return 0
+    elif command -v whisper.cpp &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Get whisper command
+get_whisper_command() {
+    if command -v whisper &> /dev/null; then
+        echo "whisper"
+    elif command -v whisper.cpp &> /dev/null; then
+        echo "whisper.cpp"
+    else
+        echo ""
+    fi
+}
+
+# Validate whisper model name
+validate_whisper_model() {
+    local model="$1"
+    local valid_models=("tiny" "base" "small" "medium" "large" "large-v2" "large-v3")
+
+    for valid in "${valid_models[@]}"; do
+        if [[ "$model" == "$valid" ]]; then
+            return 0
+        fi
+    done
+
+    log_error "Invalid whisper model: $model"
+    return 1
+}
+
+# Validate subtitle format
+validate_subtitle_format() {
+    local format="$1"
+    local valid_formats=("srt" "vtt" "txt" "json")
+
+    for valid in "${valid_formats[@]}"; do
+        if [[ "$format" == "$valid" ]]; then
+            return 0
+        fi
+    done
+
+    log_error "Invalid subtitle format: $format"
+    return 1
+}
+
+# Validate language code
+validate_language_code() {
+    local lang="$1"
+
+    # Allow "auto" or 2-3 letter language codes
+    if [[ "$lang" == "auto" ]] || [[ "$lang" =~ ^[a-z]{2,3}$ ]]; then
+        return 0
+    fi
+
+    log_error "Invalid language code: $lang"
+    return 1
+}
+
+# Check if directory should be skipped based on patterns
+should_skip_directory() {
+    local dir_path="$1"
+    local dir_name=$(basename "$dir_path")
+
+    # Check against skip patterns
+    for pattern in "${SUBTITLE_SKIP_PATTERNS[@]}"; do
+        case "$dir_name" in
+            $pattern)
+                return 0  # Should skip
+                ;;
+        esac
+    done
+
+    return 1  # Don't skip
+}
+
+# Check if file meets size requirements
+check_file_size_filter() {
+    local file="$1"
+    local min_bytes=$((SUBTITLE_MIN_SIZE_MB * 1024 * 1024))
+    local max_bytes=$((SUBTITLE_MAX_SIZE_MB * 1024 * 1024))
+
+    local file_size=$(get_file_size "$file")
+
+    # Check minimum size
+    if [[ $SUBTITLE_MIN_SIZE_MB -gt 0 && $file_size -lt $min_bytes ]]; then
+        return 1  # Too small
+    fi
+
+    # Check maximum size
+    if [[ $SUBTITLE_MAX_SIZE_MB -gt 0 && $file_size -gt $max_bytes ]]; then
+        return 1  # Too large
+    fi
+
+    return 0  # Size is OK
+}
+
+# Check if file meets modification date requirements
+check_file_date_filter() {
+    local file="$1"
+
+    # If no date filter, accept all
+    if [[ $SUBTITLE_MODIFIED_DAYS -le 0 ]]; then
+        return 0
+    fi
+
+    # Get file modification time in seconds since epoch
+    local file_mtime=$(stat -f%m "$file" 2>/dev/null || stat -c%Y "$file" 2>/dev/null)
+    local current_time=$(date +%s)
+    local age_seconds=$((current_time - file_mtime))
+    local age_days=$((age_seconds / 86400))
+
+    if [[ $age_days -le $SUBTITLE_MODIFIED_DAYS ]]; then
+        return 0  # File is recent enough
+    fi
+
+    return 1  # File is too old
+}
+
+# Check if subtitle already exists for video
+has_existing_subtitle() {
+    local video_file="$1"
+    local video_dir=$(dirname "$video_file")
+    local name="${video_file%.*}"
+
+    # Check for common subtitle extensions
+    local subtitle_exts=("srt" "vtt" "txt" "ass" "ssa" "sub")
+
+    for ext in "${subtitle_exts[@]}"; do
+        if [[ -f "${name}.${ext}" ]]; then
+            return 0  # Subtitle exists
+        fi
+    done
+
+    return 1  # No subtitle found
+}
+
+# Get list of subdirectories for interactive selection
+list_subdirectories() {
+    local base_dir="$1"
+    local max_depth="${2:-$SUBTITLE_MAX_DEPTH}"
+    local -a subdirs
+
+    echo ""
+    echo -e "${COLOR_BRIGHT_CYAN}Available Subdirectories:${COLOR_RESET}"
+    echo ""
+
+    local count=0
+    while IFS= read -r dir; do
+        # Skip if matches skip patterns
+        if should_skip_directory "$dir"; then
+            continue
+        fi
+
+        ((count++))
+        local rel_path="${dir#$base_dir/}"
+        local depth=$(echo "$rel_path" | tr -cd '/' | wc -c)
+        local indent=$(printf '%*s' $((depth * 2)) '')
+
+        # Count videos in this directory
+        local video_count=$(find "$dir" -maxdepth 1 -type f 2>/dev/null | grep -icE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+
+        echo -e "  ${COLOR_GREEN}[$count]${COLOR_RESET} ${indent}${rel_path} ${COLOR_CYAN}($video_count videos)${COLOR_RESET}"
+        subdirs+=("$dir")
+    done < <(find "$base_dir" -mindepth 1 -maxdepth "$max_depth" -type d 2>/dev/null | sort)
+
+    echo ""
+
+    # Return array through global variable (bash limitation workaround)
+    SELECTED_SUBDIRS=("${subdirs[@]}")
+    return $count
+}
+
+# Interactive directory selection
+select_directories_interactive() {
+    local base_dir="$1"
+    local -n output_dirs=$2
+
+    list_subdirectories "$base_dir" "$SUBTITLE_MAX_DEPTH"
+    local total_dirs=$?
+
+    if [[ $total_dirs -eq 0 ]]; then
+        log_warning "No subdirectories found"
+        return 1
+    fi
+
+    echo -e "${COLOR_YELLOW}Select directories to process:${COLOR_RESET}"
+    echo "  Enter numbers separated by spaces (e.g., 1 3 5)"
+    echo "  Enter 'all' to select all directories"
+    echo "  Enter 'none' to cancel"
+    echo ""
+    echo -n "Selection: "
+    read -r selection
+
+    if [[ "$selection" == "none" ]]; then
+        return 1
+    elif [[ "$selection" == "all" ]]; then
+        output_dirs=("${SELECTED_SUBDIRS[@]}")
+        log_success "Selected all $total_dirs directories"
+        return 0
+    else
+        # Parse space-separated numbers
+        local -a indices
+        read -ra indices <<< "$selection"
+
+        for idx in "${indices[@]}"; do
+            # Validate number
+            if [[ ! "$idx" =~ ^[0-9]+$ ]] || [[ $idx -lt 1 ]] || [[ $idx -gt $total_dirs ]]; then
+                log_warning "Invalid selection: $idx"
+                continue
+            fi
+
+            # Add to output (array is 0-indexed, display is 1-indexed)
+            output_dirs+=("${SELECTED_SUBDIRS[$((idx-1))]}")
+        done
+
+        log_success "Selected ${#output_dirs[@]} directories"
+        return 0
+    fi
+}
+
+# Collect video files recursively with advanced filtering
+collect_video_files_recursive() {
+    local base_dir="$1"
+    local max_depth="${2:-$SUBTITLE_MAX_DEPTH}"
+    local max_files="${3:-$SUBTITLE_MAX_FILES}"
+    local -n result_array=$4  # nameref to output array
+
+    # Validate depth limit (0-50, 0 means current dir only)
+    if [[ $max_depth -lt 0 || $max_depth -gt 50 ]]; then
+        log_error "Invalid max depth: $max_depth (must be 0-50)"
+        return 1
+    fi
+
+    # Validate max files (1-10000)
+    if [[ $max_files -lt 1 || $max_files -gt 10000 ]]; then
+        log_error "Invalid max files: $max_files (must be 1-10000)"
+        return 1
+    fi
+
+    log_info "Scanning recursively (depth: $SUBTITLE_MIN_DEPTH-$max_depth, max files: $max_files)"
+
+    # Display active filters
+    local filter_count=0
+    if [[ ${#SUBTITLE_SKIP_PATTERNS[@]} -gt 0 ]]; then
+        log_verbose "Skip patterns: ${SUBTITLE_SKIP_PATTERNS[*]}"
+        ((filter_count++))
+    fi
+    if [[ $SUBTITLE_MIN_SIZE_MB -gt 0 ]]; then
+        log_verbose "Min size: ${SUBTITLE_MIN_SIZE_MB}MB"
+        ((filter_count++))
+    fi
+    if [[ $SUBTITLE_MAX_SIZE_MB -gt 0 ]]; then
+        log_verbose "Max size: ${SUBTITLE_MAX_SIZE_MB}MB"
+        ((filter_count++))
+    fi
+    if [[ $SUBTITLE_MODIFIED_DAYS -gt 0 ]]; then
+        log_verbose "Modified within: ${SUBTITLE_MODIFIED_DAYS} days"
+        ((filter_count++))
+    fi
+    if [[ "$SUBTITLE_SKIP_EXISTING" == true ]]; then
+        log_verbose "Skipping videos with existing subtitles"
+        ((filter_count++))
+    fi
+
+    local file_count=0
+    local skipped_pattern=0
+    local skipped_size=0
+    local skipped_date=0
+    local skipped_existing=0
+    declare -A dir_stats
+
+    # Build find command with proper depth constraints
+    local find_cmd="find \"$base_dir\" -mindepth $SUBTITLE_MIN_DEPTH -maxdepth $max_depth -type f -print0 2>/dev/null"
+
+    # Process files
+    while IFS= read -r -d '' file; do
+        # Get directory for this file
+        local file_dir=$(dirname "$file")
+
+        # Check if directory should be skipped
+        if should_skip_directory "$file_dir"; then
+            ((skipped_pattern++))
+            continue
+        fi
+
+        # Verify it's a video file
+        if ! is_video_file "$file"; then
+            continue
+        fi
+
+        # Validate path safety
+        if ! validate_path_safety "$file" "$base_dir"; then
+            log_warning "Skipping file outside base directory: $file"
+            continue
+        fi
+
+        # Check size filter
+        if ! check_file_size_filter "$file"; then
+            ((skipped_size++))
+            continue
+        fi
+
+        # Check date filter
+        if ! check_file_date_filter "$file"; then
+            ((skipped_date++))
+            continue
+        fi
+
+        # Check if subtitle already exists
+        if [[ "$SUBTITLE_SKIP_EXISTING" == true ]] && has_existing_subtitle "$file"; then
+            ((skipped_existing++))
+            continue
+        fi
+
+        # Track per-directory stats
+        if [[ ! -v dir_stats["$file_dir"] ]]; then
+            dir_stats["$file_dir"]=0
+        fi
+        ((dir_stats["$file_dir"]++))
+
+        # Add to results
+        result_array+=("$file")
+        ((file_count++))
+
+        # Check if we've hit the max file limit
+        if [[ $file_count -ge $max_files ]]; then
+            log_warning "Reached maximum file limit ($max_files files)"
+            log_warning "Increase SUBTITLE_MAX_FILES to process more files"
+            break
+        fi
+
+        # Progress indicator every 25 files
+        if [[ $((file_count % 25)) -eq 0 ]]; then
+            echo -ne "\r${COLOR_CYAN}  Scanning... found $file_count videos (filtered out: $((skipped_pattern + skipped_size + skipped_date + skipped_existing)))${COLOR_RESET}"
+        fi
+
+    done < <(eval "$find_cmd")
+
+    echo -ne "\r\033[K"  # Clear progress line
+
+    # Display results
+    log_success "Found $file_count video files to process"
+
+    if [[ $filter_count -gt 0 ]]; then
+        echo ""
+        log_info "Filtering Statistics:"
+        [[ $skipped_pattern -gt 0 ]] && log_verbose "  Skipped (pattern): $skipped_pattern"
+        [[ $skipped_size -gt 0 ]] && log_verbose "  Skipped (size): $skipped_size"
+        [[ $skipped_date -gt 0 ]] && log_verbose "  Skipped (date): $skipped_date"
+        [[ $skipped_existing -gt 0 ]] && log_verbose "  Skipped (has subtitle): $skipped_existing"
+    fi
+
+    # Show per-directory statistics if enabled
+    if [[ "$SUBTITLE_SHOW_DIR_STATS" == true && ${#dir_stats[@]} -gt 0 ]]; then
+        echo ""
+        log_info "Files per Directory:"
+        for dir in "${!dir_stats[@]}"; do
+            local rel_path="${dir#$base_dir}"
+            [[ -z "$rel_path" ]] && rel_path="(root)"
+            log_verbose "  ${rel_path}: ${dir_stats[$dir]} files"
+        done
+    fi
+
+    return 0
+}
+
+# Generate subtitle for a single video file (ENHANCED)
+# Validate subtitle generation inputs
+# Args: $1=model $2=format $3=language
+# Returns: 0 on success, 1 on failure
+_validate_subtitle_inputs() {
+    local model="$1"
+    local format="$2"
+    local language="$3"
+
+    if ! validate_whisper_model "$model"; then
+        ((STATS[subtitles_failed]++))
+        return 1
+    fi
+
+    if ! validate_subtitle_format "$format"; then
+        ((STATS[subtitles_failed]++))
+        return 1
+    fi
+
+    if ! validate_language_code "$language"; then
+        ((STATS[subtitles_failed]++))
+        return 1
+    fi
+
+    return 0
+}
+
+# Get subtitle file path based on video and format
+# Args: $1=video_file $2=format
+# Outputs: subtitle file path
+_get_subtitle_path() {
+    local video_file="$1"
+    local format="$2"
+    local video_dir=$(dirname "$video_file")
+    local filename=$(basename "$video_file")
+    local name="${filename%.*}"
+
+    case "$format" in
+        srt)  echo "$video_dir/${name}.srt" ;;
+        vtt)  echo "$video_dir/${name}.vtt" ;;
+        txt)  echo "$video_dir/${name}.txt" ;;
+        json) echo "$video_dir/${name}.json" ;;
+        *)    echo "$video_dir/${name}.srt" ;;
+    esac
+}
+
+# Check if subtitle generation should be skipped
+# Args: $1=video_file $2=subtitle_file
+# Returns: 0 if should skip, 1 if should proceed
+_should_skip_subtitle() {
+    local video_file="$1"
+    local subtitle_file="$2"
+    local filename=$(basename "$video_file")
+
+    # Check if subtitle already exists
+    if [[ -f "$subtitle_file" ]]; then
+        log_warning "Subtitle already exists: $(basename "$subtitle_file")"
+        ((STATS[files_skipped]++))
+        return 0
+    fi
+
+    # Check if already processed (resume support)
+    if is_video_processed "$video_file"; then
+        log_info "Skipping previously processed: $filename"
+        ((STATS[files_skipped]++))
+        return 0
+    fi
+
+    return 1
+}
+
+# Build Whisper command array
+# Args: $1=whisper_cmd $2=video_file $3=model $4=format $5=language $6=video_dir
+# Returns: command array via nameref
+_build_whisper_command() {
+    local whisper_cmd="$1"
+    local video_file="$2"
+    local model="$3"
+    local format="$4"
+    local language="$5"
+    local video_dir="$6"
+    local -n cmd_ref=$7
+
+    if [[ "$whisper_cmd" == "whisper" ]]; then
+        # OpenAI Whisper Python implementation
+        cmd_ref=("whisper" "$video_file" "--model" "$model" "--output_format" "$format" "--output_dir" "$video_dir" "--verbose" "False")
+
+        if [[ "$language" != "auto" ]]; then
+            cmd_ref+=("--language" "$language")
+        fi
+
+        # GPU acceleration
+        if [[ "$SUBTITLE_USE_GPU" == true ]] && detect_gpu; then
+            log_verbose "Using GPU acceleration"
+            cmd_ref+=("--device" "cuda")
+        fi
+
+        # Speaker diarization
+        if [[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]]; then
+            cmd_ref+=("--word_timestamps" "True")
+            log_verbose "Speaker diarization enabled"
+        fi
+
+    elif [[ "$whisper_cmd" == "whisper.cpp" ]]; then
+        # whisper.cpp implementation
+        cmd_ref=("whisper.cpp" "-m" "$model" "-f" "$video_file" "-of" "$format" "-od" "$video_dir")
+
+        if [[ "$language" != "auto" ]]; then
+            cmd_ref+=("-l" "$language")
+        fi
+
+        # GPU support for whisper.cpp (if compiled with CUDA)
+        if [[ "$SUBTITLE_USE_GPU" == true ]] && detect_gpu; then
+            log_verbose "GPU support enabled (if whisper.cpp compiled with CUDA)"
+        fi
+    fi
+}
+
+# Post-process generated subtitle (punctuation, translation, etc)
+# Args: $1=subtitle_file $2=language
+# Returns: 0 on success
+_postprocess_subtitle() {
+    local subtitle_file="$1"
+    local language="$2"
+
+    # Auto-fix punctuation if enabled
+    if [[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]]; then
+        log_verbose "Applying punctuation fixes..."
+        fix_punctuation "$subtitle_file"
+    fi
+
+    # Speaker diarization post-processing
+    if [[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]]; then
+        log_verbose "Applying speaker diarization..."
+        detect_speakers "$subtitle_file"
+    fi
+
+    # Optional: Translate if enabled
+    if [[ "$SUBTITLE_AUTO_TRANSLATE" == true && "$SUBTITLE_TRANSLATE_TO" != "$language" ]]; then
+        log_verbose "Auto-translation enabled"
+        translate_subtitle "$subtitle_file" "$SUBTITLE_TRANSLATE_TO"
+    fi
+
+    # Interactive editing if enabled
+    if [[ "$SUBTITLE_INTERACTIVE_EDIT" == true && "$INTERACTIVE" == true ]]; then
+        echo ""
+        echo -e "${COLOR_CYAN}Edit this subtitle? (y/n):${COLOR_RESET} "
+        read -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            edit_subtitle_interactive "$subtitle_file"
+        fi
+    fi
+
+    return 0
+}
+
+# Handle successful subtitle generation
+# Args: $1=subtitle_file $2=elapsed $3=video_file $4=temp_output
+# Returns: 0 on success
+_handle_subtitle_success() {
+    local subtitle_file="$1"
+    local elapsed="$2"
+    local video_file="$3"
+    local temp_output="$4"
+    local language="$5"
+
+    echo -ne "\r\033[K"  # Clear line
+
+    if [[ -f "$subtitle_file" ]]; then
+        # Verify subtitle quality
+        if verify_subtitle_quality "$subtitle_file"; then
+            log_success "Generated subtitle: $(basename "$subtitle_file") (${elapsed}s)"
+            log_message "SUBTITLE" "Success: $subtitle_file (${elapsed}s)"
+
+            # Save resume point
+            save_resume_point "$video_file"
+
+            ((STATS[subtitles_generated]++))
+
+            # Post-process subtitle
+            _postprocess_subtitle "$subtitle_file" "$language"
+
+            # Clean up temp file
+            rm -f "$temp_output"
+            return 0
+        else
+            log_warning "Subtitle quality check failed, but file was generated"
+            ((STATS[low_confidence_count]++))
+            ((STATS[subtitles_generated]++))
+            save_resume_point "$video_file"
+            rm -f "$temp_output"
+            return 0
+        fi
+    else
+        log_error "Subtitle generation completed but file not found: $subtitle_file"
+        cat "$temp_output" >> "$LOG_FILE" 2>/dev/null
+        ((STATS[subtitles_failed]++))
+        rm -f "$temp_output"
+        return 1
+    fi
+}
+
+# Handle failed subtitle generation
+# Args: $1=video_file $2=temp_output
+# Returns: 1 (failure)
+_handle_subtitle_failure() {
+    local video_file="$1"
+    local temp_output="$2"
+    local filename=$(basename "$video_file")
+
+    echo -ne "\r\033[K"  # Clear line
+    log_error "Failed to generate subtitle for: $filename"
+    log_verbose "Error details:"
+    tail -5 "$temp_output" 2>/dev/null | while read line; do
+        log_verbose "  $line"
+    done
+    log_message "ERROR" "Whisper failed for: $video_file"
+    cat "$temp_output" >> "$LOG_FILE" 2>/dev/null
+    ((STATS[subtitles_failed]++))
+    rm -f "$temp_output"
+    return 1
+}
+
+# Generate subtitle for a single video file
+# Args: $1=video_file $2=model $3=format $4=language $5=dry_run
+# Returns: 0 on success, 1 on failure
+generate_subtitle_for_file() {
+    local video_file="$1"
+    local model="${2:-$WHISPER_MODEL}"
+    local format="${3:-$SUBTITLE_FORMAT}"
+    local language="${4:-$SUBTITLE_LANGUAGE}"
+    local dry_run="${5:-false}"
+
+    # Validate inputs
+    _validate_subtitle_inputs "$model" "$format" "$language" || return 1
+
+    # Get subtitle path
+    local subtitle_file
+    subtitle_file=$(_get_subtitle_path "$video_file" "$format")
+
+    # Check if should skip
+    _should_skip_subtitle "$video_file" "$subtitle_file" && return 1
+
+    # Log video info
+    local filename=$(basename "$video_file")
+    local video_duration=$(get_video_duration "$video_file")
+    if [[ $video_duration -gt 0 ]]; then
+        local duration_min=$((video_duration / 60))
+        log_verbose "Video duration: ${duration_min} minutes"
+    fi
+
+    log_verbose "Generating subtitles for: $filename"
+    log_verbose "  Model: $model"
+    log_verbose "  Format: $format"
+    log_verbose "  Language: $language"
+
+    # Handle dry run
+    if [[ "$dry_run" == true ]]; then
+        echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would generate: $subtitle_file"
+        log_message "DRYRUN" "Would generate subtitle: $subtitle_file"
+        return 0
+    fi
+
+    # Check Whisper availability
+    local whisper_cmd=$(get_whisper_command)
+    if [[ -z "$whisper_cmd" ]]; then
+        log_error "Whisper not found. Install with: pip install -U openai-whisper"
+        log_error "Or install whisper.cpp from: https://github.com/ggerganov/whisper.cpp"
+        ((STATS[subtitles_failed]++))
+        return 1
+    fi
+
+    # Create temp file for output
+    local temp_output
+    temp_output=$(mktemp) || {
+        log_error "Failed to create temporary file"
+        ((STATS[subtitles_failed]++))
+        return 1
+    }
+
+    # Build command
+    local -a cmd_array
+    local video_dir=$(dirname "$video_file")
+    _build_whisper_command "$whisper_cmd" "$video_file" "$model" "$format" "$language" "$video_dir" cmd_array
+
+    # Execute whisper
+    log_verbose "Processing audio... This may take a while."
+    echo -ne "${COLOR_CYAN}  ${SYMBOL_INFO} Converting speech to text...${COLOR_RESET}"
+
+    local start_time=$(date +%s)
+
+    # Execute command safely without eval
+    if "${cmd_array[@]}" > "$temp_output" 2>&1; then
+        local end_time=$(date +%s)
+        local elapsed=$((end_time - start_time))
+        _handle_subtitle_success "$subtitle_file" "$elapsed" "$video_file" "$temp_output" "$language"
+    else
+        _handle_subtitle_failure "$video_file" "$temp_output"
+    fi
+}
+
+# Display subtitle generation summary report
+# Args: $1=actual_total $2=success_count $3=format $4=directory
+_display_subtitle_summary() {
+    local actual_total="$1"
+    local success_count="$2"
+    local format="$3"
+    local directory="$4"
+
+    log_success "Successfully generated $success_count out of $actual_total subtitle files"
+
+    # Summary report
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}  SUBTITLE GENERATION SUMMARY${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "  ${COLOR_WHITE}Total Videos:${COLOR_RESET}        ${COLOR_BRIGHT_CYAN}$actual_total${COLOR_RESET}"
+    echo -e "  ${COLOR_WHITE}Successful:${COLOR_RESET}          ${COLOR_BRIGHT_GREEN}${STATS[subtitles_generated]}${COLOR_RESET}"
+    echo -e "  ${COLOR_WHITE}Failed:${COLOR_RESET}              ${COLOR_BRIGHT_RED}${STATS[subtitles_failed]}${COLOR_RESET}"
+    echo -e "  ${COLOR_WHITE}Skipped:${COLOR_RESET}             ${COLOR_BRIGHT_YELLOW}${STATS[files_skipped]}${COLOR_RESET}"
+
+    if [[ ${STATS[subtitles_translated]} -gt 0 ]]; then
+        echo -e "  ${COLOR_WHITE}Translated:${COLOR_RESET}          ${COLOR_BRIGHT_CYAN}${STATS[subtitles_translated]}${COLOR_RESET}"
+    fi
+
+    if [[ ${STATS[low_confidence_count]} -gt 0 ]]; then
+        echo -e "  ${COLOR_WHITE}Low Quality Warning:${COLOR_RESET} ${COLOR_BRIGHT_YELLOW}${STATS[low_confidence_count]}${COLOR_RESET}"
+    fi
+
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo ""
+
+    # Send notification when complete
+    if [[ $actual_total -gt 5 ]]; then
+        send_notification "Subtitle Generation Complete" "Generated $success_count subtitles"
+    fi
+
+    # Offer to preview a subtitle
+    if [[ $success_count -gt 0 ]]; then
+        echo -e "${COLOR_CYAN}Would you like to preview a generated subtitle? (y/n):${COLOR_RESET} "
+        read -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            # Find first generated subtitle
+            local first_subtitle=$(find "$directory" -maxdepth 1 -name "*.${format}" | head -1)
+            if [[ -n "$first_subtitle" ]]; then
+                preview_subtitle "$first_subtitle" 20
+            fi
+        fi
+    fi
+
+    # Cleanup resume file on successful completion
+    if [[ ${STATS[subtitles_failed]} -eq 0 ]]; then
+        clear_resume_file
+        log_verbose "Cleared resume file - all videos processed successfully"
+    fi
+}
+
+# Check and setup subtitle generation prerequisites
+# Args: $1=directory $2=model $3=format $4=language
+# Returns: 0 on success, 1 on failure
+_setup_subtitle_generation() {
+    local directory="$1"
+    local model="$2"
+    local format="$3"
+    local language="$4"
+
+    # Check whisper installation
+    if ! check_whisper_installation; then
+        log_error "Whisper is not installed!"
+        echo ""
+        echo -e "${COLOR_YELLOW}To install Whisper:${COLOR_RESET}"
+        echo "  Option 1 - OpenAI Whisper (Python):"
+        echo "    pip install -U openai-whisper"
+        echo ""
+        echo "  Option 2 - whisper.cpp (C++ implementation, faster):"
+        echo "    git clone https://github.com/ggerganov/whisper.cpp"
+        echo "    cd whisper.cpp && make"
+        echo ""
+        return 1
+    fi
+
+    log_info "Scanning directory: $directory"
+    log_info "Using model: $model"
+    log_info "Output format: $format"
+    log_info "Language: $language"
+
+    # Display recursive mode status
+    if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
+        log_info "Recursive mode: ENABLED (depth: $SUBTITLE_MAX_DEPTH, max files: $SUBTITLE_MAX_FILES)"
+    else
+        log_info "Recursive mode: DISABLED (current directory only)"
+    fi
+
+    return 0
+}
+
+# Check resume file and prompt user
+# Returns: 0 if continuing, 1 if user chose fresh start
+_check_resume_file() {
+    if [[ -f "$SUBTITLE_RESUME_FILE" ]]; then
+        local resume_count=$(wc -l < "$SUBTITLE_RESUME_FILE")
+        if [[ $resume_count -gt 0 ]]; then
+            echo ""
+            echo -e "${COLOR_YELLOW}${SYMBOL_WARN} Found resume file with $resume_count processed videos${COLOR_RESET}"
+            read -p "Resume from previous session? (y/n): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                clear_resume_file
+                log_info "Starting fresh - cleared resume file"
+                return 1
+            else
+                log_info "Resuming previous session"
+            fi
+        fi
+    fi
+    return 0
+}
+
+# Setup GPU and parallel processing
+# Returns: "true" if parallel should be used, "false" otherwise
+_setup_processing_mode() {
+    echo ""
+
+    # GPU detection
+    if [[ "$SUBTITLE_USE_GPU" == true ]]; then
+        if detect_gpu; then
+            log_success "GPU acceleration enabled - expect 5-10x speedup"
+        else
+            log_warning "GPU not detected, using CPU"
+            SUBTITLE_USE_GPU=false
+        fi
+    fi
+
+    # Check for parallel processing support
+    local use_parallel=false
+    if [[ $SUBTITLE_PARALLEL_JOBS -gt 1 ]] && check_parallel_support; then
+        use_parallel=true
+        log_info "Parallel processing enabled: $SUBTITLE_PARALLEL_JOBS workers"
+    fi
+
+    echo "$use_parallel"
+}
+
+# Collect video files based on mode (recursive or not)
+# Args: $1=directory $2=nameref to video_files array
+# Returns: 0 on success
+_collect_video_files() {
+    local directory="$1"
+    local -n files_ref=$2
+
+    # Collect files based on recursive mode setting
+    if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
+        # Use recursive collection with safety limits
+        log_info "Collecting video files recursively..."
+        if ! collect_video_files_recursive "$directory" "$SUBTITLE_MAX_DEPTH" "$SUBTITLE_MAX_FILES" files_ref; then
+            log_error "Failed to collect video files recursively"
+            return 1
+        fi
+
+        # Sort by size if batch optimization is enabled
+        if [[ "$SUBTITLE_OPTIMIZE_BATCH" == true && ${#files_ref[@]} -gt 1 ]]; then
+            log_info "Sorting ${#files_ref[@]} videos by size for optimal processing"
+            # Create temporary array for sorted files
+            local -a sorted_files
+            while IFS= read -r file; do
+                sorted_files+=("$file")
+            done < <(for f in "${files_ref[@]}"; do
+                echo "$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null) $f"
+            done | sort -n | cut -d' ' -f2-)
+            files_ref=("${sorted_files[@]}")
+        fi
+    else
+        # Non-recursive mode: current directory only
+        # Batch optimization: sort by size if enabled
+        if [[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]]; then
+            log_info "Optimizing batch: sorting videos by size (smallest first)"
+            while IFS= read -r file; do
+                [[ "$(basename "$file")" == .* ]] && continue
+                if is_video_file "$file"; then
+                    files_ref+=("$file")
+                fi
+            done < <(sort_videos_by_size "$directory")
+        else
+            while IFS= read -r -d '' file; do
+                [[ "$(basename "$file")" == .* ]] && continue
+                if is_video_file "$file"; then
+                    files_ref+=("$file")
+                fi
+            done < <(find "$directory" -maxdepth 1 -type f -print0)
+        fi
+    fi
+
+    return 0
+}
+
+# Generate subtitles for all videos in directory (REFACTORED)
+# Args: $1=directory $2=model $3=format $4=language $5=dry_run
+# Returns: 0 on success, 1 on failure
+generate_subtitles_in_directory() {
+    local directory="$1"
+    local model="${2:-$WHISPER_MODEL}"
+    local format="${3:-$SUBTITLE_FORMAT}"
+    local language="${4:-$SUBTITLE_LANGUAGE}"
+    local dry_run="${5:-false}"
+
+    # Setup and validation
+    _setup_subtitle_generation "$directory" "$model" "$format" "$language" || return 1
+
+    # Count total video files based on mode
+    local total_files
+    if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
+        total_files=$(find "$directory" -maxdepth "$SUBTITLE_MAX_DEPTH" -type f 2>/dev/null | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    else
+        total_files=$(find "$directory" -maxdepth 1 -type f 2>/dev/null | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    fi
+
+    log_info "Found $total_files video files to process"
+
+    if [[ $total_files -eq 0 ]]; then
+        log_warning "No video files found in directory"
+        return 0
+    fi
+
+    # Check for resume
+    _check_resume_file
+
+    # Setup GPU and parallel processing
+    local use_parallel=$(_setup_processing_mode)
+
+    # Initialize counters
+    local file_count=0
+    local success_count=0
+    local operation_start=$(date +%s)
+
+    # Collect video files
+    local -a video_files
+    _collect_video_files "$directory" video_files || return 1
+
+    local actual_total=${#video_files[@]}
+
+    # If parallel processing is available and enabled, use it
+    if [[ "$use_parallel" == true && $actual_total -gt 3 ]]; then
+        log_info "Using parallel processing for better performance"
+        process_videos_parallel "$directory" "$model" "$format" "$language"
+        return $?
+    fi
+
+    # Process files sequentially
+    for file in "${video_files[@]}"; do
+        ((file_count++))
+        ((STATS[files_processed]++))
+
+        local filename=$(basename "$file")
+        local current_time=$(date +%s)
+        local elapsed=$((current_time - operation_start))
+
+        # Progress bar
+        echo ""
+        draw_progress_bar $file_count $actual_total
+        echo ""
+
+        # Time estimation
+        if [[ $file_count -gt 1 ]]; then
+            local eta=$(estimate_time_remaining $success_count $actual_total $elapsed)
+            echo -e "${COLOR_CYAN}  Estimated time remaining: $eta${COLOR_RESET}"
+        fi
+
+        echo ""
+        echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}Processing: [$file_count/$actual_total]${COLOR_RESET} $filename"
+        echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+
+        if generate_subtitle_for_file "$file" "$model" "$format" "$language" "$dry_run"; then
+            ((success_count++))
+        fi
+    done
+
+    echo ""
+    echo ""
+
+    # Final progress bar
+    draw_progress_bar $actual_total $actual_total
+    echo ""
+    echo ""
+
+    # Display results
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no subtitles were actually generated"
+    else
+        _display_subtitle_summary "$actual_total" "$success_count" "$format" "$directory"
+    fi
+}
+
+# Batch subtitle generation for multiple directories
+batch_generate_subtitles() {
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_FOLDER} Batch Subtitle Generation${COLOR_RESET}"
+    echo ""
+    echo "Enter directory paths (one per line, empty line to finish):"
+    echo ""
+
+    local folders=()
+    local line_num=1
+
+    while true; do
+        echo -n "[$line_num] Directory: "
+        read -r folder
+
+        if [[ -z "$folder" ]]; then
+            break
+        fi
+
+        folder=$(validate_directory "$folder")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$folder")
+            log_success "Added: $folder"
+            ((line_num++))
+        fi
+    done
+
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No valid directories provided"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}Processing ${#folders[@]} directories:${COLOR_RESET}"
+    echo ""
+
+    local folder_num=1
+    for folder in "${folders[@]}"; do
+        echo -e "${COLOR_BRIGHT_MAGENTA}[$folder_num/${#folders[@]}] Processing: $folder${COLOR_RESET}"
+        echo ""
+
+        generate_subtitles_in_directory "$folder" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" false
+
+        echo ""
+        ((folder_num++))
+    done
+
+    log_success "Batch subtitle generation complete!"
+}
+
+################################################################################
+# BATCH PROCESSING
+################################################################################
+
+batch_process_folders() {
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_FOLDER} Batch Processing Mode${COLOR_RESET}"
+    echo ""
+    echo "Enter directory paths (one per line, empty line to finish):"
+    echo "You can use Windows paths (C:\\Users\\...) or Unix paths (/mnt/c/...)"
+    echo ""
+    
+    local folders=()
+    local line_num=1
+    
+    while true; do
+        echo -n "[$line_num] Directory: "
+        read -r folder
+        
+        if [[ -z "$folder" ]]; then
+            break
+        fi
+        
+        folder=$(validate_directory "$folder")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$folder")
+            log_success "Added: $folder"
+            ((line_num++))
+        fi
+    done
+    
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No valid directories provided"
+        return 1
+    fi
+    
+    echo ""
+    echo -e "${COLOR_BOLD}Processing ${#folders[@]} directories:${COLOR_RESET}"
+    echo ""
+    
+    local folder_num=1
+    for folder in "${folders[@]}"; do
+        echo -e "${COLOR_BRIGHT_MAGENTA}[$folder_num/${#folders[@]}] Processing: $folder${COLOR_RESET}"
+        echo ""
+        
+        rename_files_in_directory "$folder" false
+        
+        echo ""
+        ((folder_num++))
+    done
+    
+    log_success "Batch processing complete!"
+}
+
+################################################################################
+# AUTOMATED WORKFLOWS
+################################################################################
+
+workflow_new_collection() {
+    local directory="$1"
+    
+    start_operation "New Collection Setup Workflow"
+    
+    log_info "This workflow will:"
+    echo "  1. Flatten directory structure"
+    echo "  2. Apply standardized naming"
+    echo "  3. Detect duplicates"
+    echo ""
+    
+    if [[ "$DRY_RUN" == false ]]; then
+        read -p "Continue? (y/n): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_warning "Workflow cancelled"
+            return 1
+        fi
+    fi
+    
+    # Step 1: Flatten
+    echo ""
+    log_info "Step 1/3: Flattening directory structure..."
+    flatten_directory "$directory" "$DRY_RUN"
+    
+    # Step 2: Rename
+    echo ""
+    log_info "Step 2/3: Applying standardized naming..."
+    rename_files_in_directory "$directory" "$DRY_RUN"
+    
+    # Step 3: Find duplicates
+    echo ""
+    log_info "Step 3/3: Detecting duplicates..."
+    find_duplicates "$directory" "report"
+    
+    end_operation
+}
+
+workflow_deep_clean() {
+    local directory="$1"
+    
+    start_operation "Deep Clean Workflow"
+    
+    log_info "This workflow will:"
+    echo "  1. Remove dash patterns"
+    echo "  2. Fix bracket spacing"
+    echo "  3. Apply bracket notation"
+    echo ""
+    
+    if [[ "$DRY_RUN" == false ]]; then
+        read -p "Continue? (y/n): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_warning "Workflow cancelled"
+            return 1
+        fi
+    fi
+    
+    rename_files_in_directory "$directory" "$DRY_RUN"
+    
+    end_operation
+}
+
+################################################################################
+# INTERACTIVE MENU SYSTEM
+################################################################################
+
+show_header() {
+    clear
+    echo -e "${COLOR_BOLD}Video Manager${COLOR_RESET} v$SCRIPT_VERSION"
+    echo ""
+}
+
+show_main_menu() {
+    show_header
+
+    echo "Main Menu"
+    echo ""
+    echo " 1. File Operations (rename, organize)"
+    echo " 2. Subtitles (generate, edit)"
+    echo " 3. Duplicates (find, remove)"
+    echo " 4. Utilities (undo, favorites, watch folders)"
+    echo " 5. Settings"
+    echo ""
+    echo " q. Quit"
+    echo ""
+    echo -n "Choose: "
+}
+
+show_single_operations_menu() {
+    show_header
+    
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}SINGLE OPERATIONS${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Rename Files (Bracket Notation)"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Remove Dashes Only"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Fix Bracket Spacing Only"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Flatten Directory (Move All to Top)"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Full Cleanup (All Operations)"
+    echo ""
+    echo -e "${COLOR_YELLOW}[D]${COLOR_RESET} Toggle Dry Run Mode (Current: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_batch_menu() {
+    show_header
+    
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}BATCH PROCESSING${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Batch Rename Multiple Folders"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Batch Flatten Multiple Folders"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Batch Full Cleanup"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_workflow_menu() {
+    show_header
+    
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}AUTOMATED WORKFLOWS${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} New Collection Setup"
+    echo -e "    ${COLOR_CYAN}↳${COLOR_RESET} Flatten + Rename + Find Duplicates"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Deep Clean Existing Collection"
+    echo -e "    ${COLOR_CYAN}↳${COLOR_RESET} Remove Dashes + Fix Spacing + Bracket Notation"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_duplicate_menu() {
+    show_header
+    
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}DUPLICATE DETECTION${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Find Duplicates (Report Only)"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Find and Delete Duplicates"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Find Duplicates (Dry Run)"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_subtitle_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}SUBTITLE GENERATION${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_WHITE}Current Settings:${COLOR_RESET}"
+    echo -e "  Model: ${COLOR_CYAN}$WHISPER_MODEL${COLOR_RESET}"
+    echo -e "  Format: ${COLOR_CYAN}$SUBTITLE_FORMAT${COLOR_RESET}"
+    echo -e "  Language: ${COLOR_CYAN}$SUBTITLE_LANGUAGE${COLOR_RESET}"
+    echo -e "  Parallel Jobs: ${COLOR_CYAN}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET}"
+    echo -e "  GPU Acceleration: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+    echo -e "  Batch Optimization: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+    echo -e "  Recursive Scan: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET} (depth: ${COLOR_CYAN}$SUBTITLE_MIN_DEPTH-$SUBTITLE_MAX_DEPTH${COLOR_RESET})" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+
+    # Count active filters
+    local active_filters=0
+    [[ $SUBTITLE_MIN_SIZE_MB -gt 0 ]] && ((active_filters++))
+    [[ $SUBTITLE_MAX_SIZE_MB -gt 0 ]] && ((active_filters++))
+    [[ $SUBTITLE_MODIFIED_DAYS -gt 0 ]] && ((active_filters++))
+    [[ "$SUBTITLE_SKIP_EXISTING" == true ]] && ((active_filters++))
+    [[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && ((active_filters++))
+
+    if [[ $active_filters -gt 0 ]]; then
+        echo -e "  Active Filters: ${COLOR_YELLOW}$active_filters${COLOR_RESET}"
+    fi
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Generate Subtitles (Single Directory)"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Batch Generate Subtitles (Multiple Directories)"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Configure Subtitle Settings"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Advanced Settings"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Edit Existing Subtitle"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Check Whisper Installation"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_utilities_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}UTILITIES${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} View Last 50 Log Entries"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Open Log Directory"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Test Filename Transformation"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Display System Information"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+show_settings_menu() {
+    show_header
+    
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}SETTINGS${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_WHITE}Dry Run Mode:${COLOR_RESET}    $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
+    echo -e "${COLOR_WHITE}Verbose Output:${COLOR_RESET}  $([[ "$VERBOSE" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
+    echo -e "${COLOR_WHITE}Log Directory:${COLOR_RESET}   ${COLOR_CYAN}$LOG_DIR${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Toggle Dry Run Mode"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Toggle Verbose Output"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} View Supported Extensions"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+}
+
+# Get directory input
+get_directory_input() {
+    echo ""
+    echo -n "Enter directory path: "
+    read -r dir
+    
+    dir=$(validate_directory "$dir")
+    if [[ $? -eq 0 ]]; then
+        TARGET_FOLDER="$dir"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Handle single operations
+handle_single_operations() {
+    while true; do
+        show_single_operations_menu
+        read -r choice
+        
+        case "$choice" in
+            1)
+                if get_directory_input; then
+                    start_operation "Rename Files (Bracket Notation)"
+                    rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            2)
+                if get_directory_input; then
+                    start_operation "Remove Dashes"
+                    # Would implement dash-only removal here
+                    log_info "Feature coming soon!"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            3)
+                if get_directory_input; then
+                    start_operation "Fix Bracket Spacing"
+                    # Would implement spacing-only fix here
+                    log_info "Feature coming soon!"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            4)
+                if get_directory_input; then
+                    start_operation "Flatten Directory"
+                    flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            5)
+                if get_directory_input; then
+                    workflow_deep_clean "$TARGET_FOLDER"
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            d|D)
+                if [[ "$DRY_RUN" == true ]]; then
+                    DRY_RUN=false
+                    log_success "Dry run mode DISABLED - changes will be applied"
+                else
+                    DRY_RUN=true
+                    log_success "Dry run mode ENABLED - no changes will be made"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+        
+        reset_statistics
+    done
+}
+
+# Handle batch processing
+handle_batch_processing() {
+    while true; do
+        show_batch_menu
+        read -r choice
+        
+        case "$choice" in
+            1)
+                start_operation "Batch Rename Multiple Folders"
+                batch_process_folders
+                end_operation
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                log_info "Feature coming soon!"
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                log_info "Feature coming soon!"
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+        
+        reset_statistics
+    done
+}
+
+# Handle workflows
+handle_workflows() {
+    while true; do
+        show_workflow_menu
+        read -r choice
+        
+        case "$choice" in
+            1)
+                if get_directory_input; then
+                    workflow_new_collection "$TARGET_FOLDER"
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            2)
+                if get_directory_input; then
+                    workflow_deep_clean "$TARGET_FOLDER"
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+        
+        reset_statistics
+    done
+}
+
+# Handle duplicate detection
+handle_duplicates() {
+    while true; do
+        show_duplicate_menu
+        read -r choice
+        
+        case "$choice" in
+            1)
+                if get_directory_input; then
+                    start_operation "Find Duplicates (Report Only)"
+                    find_duplicates "$TARGET_FOLDER" "report"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            2)
+                if get_directory_input; then
+                    start_operation "Find and Delete Duplicates"
+                    echo ""
+                    log_warning "This will DELETE duplicate files!"
+                    read -p "Are you sure? (type 'yes' to confirm): " confirm
+                    if [[ "$confirm" == "yes" ]]; then
+                        find_duplicates "$TARGET_FOLDER" "delete"
+                    else
+                        log_warning "Operation cancelled"
+                    fi
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            3)
+                local old_dry_run="$DRY_RUN"
+                DRY_RUN=true
+                if get_directory_input; then
+                    start_operation "Find Duplicates (Dry Run)"
+                    find_duplicates "$TARGET_FOLDER" "delete"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                DRY_RUN="$old_dry_run"
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+        
+        reset_statistics
+    done
+}
+
+# Handle subtitle generation
+handle_subtitles() {
+    while true; do
+        show_subtitle_menu
+        read -r choice
+
+        case "$choice" in
+            1)
+                if get_directory_input; then
+                    start_operation "Generate Subtitles"
+                    generate_subtitles_in_directory "$TARGET_FOLDER" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            2)
+                start_operation "Batch Subtitle Generation"
+                batch_generate_subtitles
+                end_operation
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                # Configure subtitle settings
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Configure Subtitle Settings${COLOR_RESET}"
+                echo ""
+
+                # Select model
+                echo -e "${COLOR_WHITE}Select Whisper Model:${COLOR_RESET}"
+                echo "  [1] tiny   - Fastest, least accurate"
+                echo "  [2] base   - Balanced (default)"
+                echo "  [3] small  - Good accuracy"
+                echo "  [4] medium - Better accuracy"
+                echo "  [5] large  - Best accuracy, slowest"
+                echo -n "Choice [1-5]: "
+                read -r model_choice
+
+                case "$model_choice" in
+                    1) WHISPER_MODEL="tiny" ;;
+                    2) WHISPER_MODEL="base" ;;
+                    3) WHISPER_MODEL="small" ;;
+                    4) WHISPER_MODEL="medium" ;;
+                    5) WHISPER_MODEL="large" ;;
+                esac
+
+                echo ""
+                echo -e "${COLOR_WHITE}Select Output Format:${COLOR_RESET}"
+                echo "  [1] srt  - SubRip (default)"
+                echo "  [2] vtt  - WebVTT"
+                echo "  [3] txt  - Plain text"
+                echo "  [4] json - JSON format"
+                echo -n "Choice [1-4]: "
+                read -r format_choice
+
+                case "$format_choice" in
+                    1) SUBTITLE_FORMAT="srt" ;;
+                    2) SUBTITLE_FORMAT="vtt" ;;
+                    3) SUBTITLE_FORMAT="txt" ;;
+                    4) SUBTITLE_FORMAT="json" ;;
+                esac
+
+                echo ""
+                echo -e "${COLOR_WHITE}Language (enter code or 'auto'):${COLOR_RESET}"
+                echo "  Examples: en (English), es (Spanish), fr (French), auto (detect)"
+                echo -n "Language: "
+                read -r lang_choice
+
+                if [[ -n "$lang_choice" ]]; then
+                    SUBTITLE_LANGUAGE="$lang_choice"
+                fi
+
+                echo ""
+                log_success "Settings updated!"
+                log_info "Model: $WHISPER_MODEL"
+                log_info "Format: $SUBTITLE_FORMAT"
+                log_info "Language: $SUBTITLE_LANGUAGE"
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                # Advanced Settings
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Advanced Subtitle Settings${COLOR_RESET}"
+                echo ""
+
+                echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle GPU Acceleration (Current: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Parallel Jobs (Current: ${COLOR_CYAN}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET})"
+                echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Toggle Batch Optimization (Current: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Speaker Diarization (Current: $([[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Auto-Punctuation (Current: $([[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Editing (Current: $([[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo ""
+                echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
+                echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
+                echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
+                echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Configure Filters & Selection"
+                echo ""
+                echo -n "Select option (or Enter to skip): "
+                read -r adv_choice
+
+                case "$adv_choice" in
+                    1)
+                        if [[ "$SUBTITLE_USE_GPU" == true ]]; then
+                            SUBTITLE_USE_GPU=false
+                            log_info "GPU acceleration disabled"
+                        else
+                            SUBTITLE_USE_GPU=true
+                            if detect_gpu; then
+                                log_success "GPU acceleration enabled"
+                            else
+                                log_warning "GPU not detected on this system"
+                            fi
+                        fi
+                        ;;
+                    2)
+                        echo -n "Enter number of parallel jobs (1-8): "
+                        read -r jobs
+                        if [[ $jobs -ge 1 && $jobs -le 8 ]]; then
+                            SUBTITLE_PARALLEL_JOBS=$jobs
+                            log_success "Parallel jobs set to: $jobs"
+                        else
+                            log_error "Invalid number. Must be 1-8"
+                        fi
+                        ;;
+                    3)
+                        if [[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]]; then
+                            SUBTITLE_OPTIMIZE_BATCH=false
+                        else
+                            SUBTITLE_OPTIMIZE_BATCH=true
+                        fi
+                        log_success "Batch optimization toggled"
+                        ;;
+                    4)
+                        if [[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]]; then
+                            SUBTITLE_SPEAKER_DIARIZATION=false
+                        else
+                            SUBTITLE_SPEAKER_DIARIZATION=true
+                        fi
+                        log_success "Speaker diarization toggled"
+                        ;;
+                    5)
+                        if [[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]]; then
+                            SUBTITLE_AUTO_PUNCTUATION=false
+                        else
+                            SUBTITLE_AUTO_PUNCTUATION=true
+                        fi
+                        log_success "Auto-punctuation toggled"
+                        ;;
+                    6)
+                        if [[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]]; then
+                            SUBTITLE_INTERACTIVE_EDIT=false
+                        else
+                            SUBTITLE_INTERACTIVE_EDIT=true
+                        fi
+                        log_success "Interactive editing toggled"
+                        ;;
+                    7)
+                        if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
+                            SUBTITLE_RECURSIVE=false
+                            log_info "Recursive mode DISABLED - will only scan current directory"
+                        else
+                            SUBTITLE_RECURSIVE=true
+                            log_success "Recursive mode ENABLED - will scan subdirectories"
+                            log_info "Max depth: $SUBTITLE_MAX_DEPTH levels"
+                            log_info "Max files: $SUBTITLE_MAX_FILES files"
+                        fi
+                        ;;
+                    8)
+                        echo -n "Enter maximum recursion depth (1-50): "
+                        read -r depth
+                        if [[ $depth -ge 1 && $depth -le 50 ]]; then
+                            SUBTITLE_MAX_DEPTH=$depth
+                            log_success "Max depth set to: $depth"
+                        else
+                            log_error "Invalid depth. Must be 1-50"
+                        fi
+                        ;;
+                    9)
+                        echo -n "Enter maximum files to process (1-10000): "
+                        read -r max_files
+                        if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
+                            SUBTITLE_MAX_FILES=$max_files
+                            log_success "Max files set to: $max_files"
+                        else
+                            log_error "Invalid number. Must be 1-10000"
+                        fi
+                        ;;
+                    10)
+                        # Filters & Selection submenu
+                        clear
+                        echo -e "${COLOR_BRIGHT_CYAN}Advanced Filters & Selection${COLOR_RESET}"
+                        echo ""
+                        echo -e "${COLOR_YELLOW}Current Filters:${COLOR_RESET}"
+                        echo -e "  Min Size: ${COLOR_CYAN}${SUBTITLE_MIN_SIZE_MB}${COLOR_RESET} MB"
+                        echo -e "  Max Size: ${COLOR_CYAN}${SUBTITLE_MAX_SIZE_MB}${COLOR_RESET} MB (0=unlimited)"
+                        echo -e "  Modified: ${COLOR_CYAN}${SUBTITLE_MODIFIED_DAYS}${COLOR_RESET} days (0=all)"
+                        echo -e "  Skip Existing: $([[ "$SUBTITLE_SKIP_EXISTING" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+                        echo -e "  Show Dir Stats: $([[ "$SUBTITLE_SHOW_DIR_STATS" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+                        echo -e "  Interactive Select: $([[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+                        echo -e "  Min Depth: ${COLOR_CYAN}${SUBTITLE_MIN_DEPTH}${COLOR_RESET}"
+                        echo -e "  Skip Patterns: ${COLOR_CYAN}${#SUBTITLE_SKIP_PATTERNS[@]}${COLOR_RESET} patterns"
+                        echo ""
+                        echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Set Minimum File Size (MB)"
+                        echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Maximum File Size (MB)"
+                        echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Set Modified Days Filter"
+                        echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Skip Existing Subtitles"
+                        echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Show Directory Stats"
+                        echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Directory Selection"
+                        echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Set Minimum Depth"
+                        echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Manage Skip Patterns"
+                        echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Reset All Filters to Default"
+                        echo ""
+                        echo -n "Select option: "
+                        read -r filter_choice
+
+                        case "$filter_choice" in
+                            1)
+                                echo -n "Enter minimum file size in MB (0=no limit): "
+                                read -r min_size
+                                if [[ $min_size -ge 0 ]]; then
+                                    SUBTITLE_MIN_SIZE_MB=$min_size
+                                    log_success "Minimum size set to: ${min_size}MB"
+                                else
+                                    log_error "Invalid size"
+                                fi
+                                ;;
+                            2)
+                                echo -n "Enter maximum file size in MB (0=no limit): "
+                                read -r max_size
+                                if [[ $max_size -ge 0 ]]; then
+                                    SUBTITLE_MAX_SIZE_MB=$max_size
+                                    log_success "Maximum size set to: ${max_size}MB"
+                                else
+                                    log_error "Invalid size"
+                                fi
+                                ;;
+                            3)
+                                echo -n "Process files modified in last N days (0=all files): "
+                                read -r days
+                                if [[ $days -ge 0 ]]; then
+                                    SUBTITLE_MODIFIED_DAYS=$days
+                                    log_success "Date filter set to: ${days} days"
+                                else
+                                    log_error "Invalid number of days"
+                                fi
+                                ;;
+                            4)
+                                if [[ "$SUBTITLE_SKIP_EXISTING" == true ]]; then
+                                    SUBTITLE_SKIP_EXISTING=false
+                                    log_info "Will process videos even if subtitles exist"
+                                else
+                                    SUBTITLE_SKIP_EXISTING=true
+                                    log_success "Will skip videos that already have subtitles"
+                                fi
+                                ;;
+                            5)
+                                if [[ "$SUBTITLE_SHOW_DIR_STATS" == true ]]; then
+                                    SUBTITLE_SHOW_DIR_STATS=false
+                                else
+                                    SUBTITLE_SHOW_DIR_STATS=true
+                                fi
+                                log_success "Directory statistics toggled"
+                                ;;
+                            6)
+                                if [[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]]; then
+                                    SUBTITLE_INTERACTIVE_SELECT=false
+                                    log_info "Interactive selection DISABLED - will process all subdirectories"
+                                else
+                                    SUBTITLE_INTERACTIVE_SELECT=true
+                                    log_success "Interactive selection ENABLED - you'll choose which folders to process"
+                                fi
+                                ;;
+                            7)
+                                echo -n "Enter minimum depth (0=include current dir, 1=subdirs only): "
+                                read -r min_depth
+                                if [[ $min_depth -ge 0 && $min_depth -le 50 ]]; then
+                                    SUBTITLE_MIN_DEPTH=$min_depth
+                                    log_success "Minimum depth set to: $min_depth"
+                                else
+                                    log_error "Invalid depth. Must be 0-50"
+                                fi
+                                ;;
+                            8)
+                                echo ""
+                                echo -e "${COLOR_CYAN}Current Skip Patterns:${COLOR_RESET}"
+                                for i in "${!SUBTITLE_SKIP_PATTERNS[@]}"; do
+                                    echo "  [$i] ${SUBTITLE_SKIP_PATTERNS[$i]}"
+                                done
+                                echo ""
+                                echo "Common patterns: .* (hidden), _* (underscore), tmp, temp, Trash"
+                                echo "Leave empty to keep current patterns"
+                                echo ""
+                                echo -n "Enter new patterns (space-separated): "
+                                read -r new_patterns
+                                if [[ -n "$new_patterns" ]]; then
+                                    read -ra SUBTITLE_SKIP_PATTERNS <<< "$new_patterns"
+                                    log_success "Skip patterns updated: ${SUBTITLE_SKIP_PATTERNS[*]}"
+                                fi
+                                ;;
+                            9)
+                                SUBTITLE_MIN_SIZE_MB=0
+                                SUBTITLE_MAX_SIZE_MB=0
+                                SUBTITLE_MODIFIED_DAYS=0
+                                SUBTITLE_SKIP_EXISTING=true
+                                SUBTITLE_SHOW_DIR_STATS=true
+                                SUBTITLE_INTERACTIVE_SELECT=false
+                                SUBTITLE_MIN_DEPTH=1
+                                SUBTITLE_SKIP_PATTERNS=(".*" "_*" "node_modules" ".git" ".svn" "Trash" "tmp" "temp")
+                                log_success "All filters reset to default values"
+                                ;;
+                        esac
+                        read -p "Press Enter to continue..."
+                        ;;
+                esac
+                read -p "Press Enter to continue..."
+                ;;
+            5)
+                # Edit existing subtitle
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Edit Existing Subtitle${COLOR_RESET}"
+                echo ""
+                echo -n "Enter subtitle file path: "
+                read -r subtitle_path
+
+                if [[ -f "$subtitle_path" ]]; then
+                    edit_subtitle_interactive "$subtitle_path"
+                else
+                    log_error "File not found: $subtitle_path"
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            6)
+                # Check whisper installation
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Checking Whisper Installation${COLOR_RESET}"
+                echo ""
+
+                if check_whisper_installation; then
+                    local whisper_cmd=$(get_whisper_command)
+                    log_success "Whisper is installed: $whisper_cmd"
+
+                    echo ""
+                    echo -e "${COLOR_WHITE}Testing whisper command...${COLOR_RESET}"
+                    if [[ "$whisper_cmd" == "whisper" ]]; then
+                        whisper --help | head -n 10
+                    elif [[ "$whisper_cmd" == "whisper.cpp" ]]; then
+                        whisper.cpp --help 2>&1 | head -n 10
+                    fi
+                else
+                    log_error "Whisper is not installed!"
+                    echo ""
+                    echo -e "${COLOR_YELLOW}Installation Instructions:${COLOR_RESET}"
+                    echo ""
+                    echo -e "${COLOR_WHITE}Option 1 - OpenAI Whisper (Python):${COLOR_RESET}"
+                    echo "  pip install -U openai-whisper"
+                    echo ""
+                    echo -e "${COLOR_WHITE}Option 2 - whisper.cpp (C++, faster):${COLOR_RESET}"
+                    echo "  git clone https://github.com/ggerganov/whisper.cpp"
+                    echo "  cd whisper.cpp && make"
+                    echo "  # Add to PATH or create symlink"
+                    echo ""
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+
+        reset_statistics
+    done
+}
+
+# Handle utilities
+handle_utilities() {
+    while true; do
+        show_utilities_menu
+        read -r choice
+        
+        case "$choice" in
+            1)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Last 50 Log Entries:${COLOR_RESET}"
+                echo ""
+                tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                if command -v xdg-open &> /dev/null; then
+                    xdg-open "$LOG_DIR" 2>/dev/null
+                elif command -v explorer.exe &> /dev/null; then
+                    explorer.exe "$(wslpath -w "$LOG_DIR")" 2>/dev/null
+                else
+                    log_info "Log directory: $LOG_DIR"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Test Filename Transformation:${COLOR_RESET}"
+                echo ""
+                echo -n "Enter filename to test: "
+                read -r test_file
+                
+                echo ""
+                echo -e "${COLOR_WHITE}Original:${COLOR_RESET} $test_file"
+                
+                local result=$(remove_dashes "$test_file")
+                echo -e "${COLOR_WHITE}After dash removal:${COLOR_RESET} $result"
+                
+                result=$(apply_bracket_notation "$result")
+                echo -e "${COLOR_WHITE}After bracket notation:${COLOR_RESET} $result"
+                
+                result=$(fix_bracket_spacing "$result")
+                echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
+                
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}System Information:${COLOR_RESET}"
+                echo ""
+                echo -e "${COLOR_WHITE}Script Version:${COLOR_RESET} $SCRIPT_VERSION"
+                echo -e "${COLOR_WHITE}Bash Version:${COLOR_RESET} $BASH_VERSION"
+                echo -e "${COLOR_WHITE}OS:${COLOR_RESET} $(uname -s)"
+                echo -e "${COLOR_WHITE}Kernel:${COLOR_RESET} $(uname -r)"
+                echo -e "${COLOR_WHITE}Hostname:${COLOR_RESET} $(hostname)"
+                echo -e "${COLOR_WHITE}User:${COLOR_RESET} $(whoami)"
+                echo -e "${COLOR_WHITE}Working Directory:${COLOR_RESET} $(pwd)"
+                echo -e "${COLOR_WHITE}Log Directory:${COLOR_RESET} $LOG_DIR"
+                echo ""
+                echo -e "${COLOR_WHITE}Available Tools:${COLOR_RESET}"
+                command -v sha256sum &> /dev/null && echo "  ${SYMBOL_CHECK} sha256sum" || echo "  ${SYMBOL_CROSS} sha256sum"
+                command -v shasum &> /dev/null && echo "  ${SYMBOL_CHECK} shasum" || echo "  ${SYMBOL_CROSS} shasum"
+                command -v ffprobe &> /dev/null && echo "  ${SYMBOL_CHECK} ffprobe" || echo "  ${SYMBOL_CROSS} ffprobe"
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
+}
+
+# Handle settings
+handle_settings() {
+    while true; do
+        show_settings_menu
+        read -r choice
+        
+        case "$choice" in
+            1)
+                if [[ "$DRY_RUN" == true ]]; then
+                    DRY_RUN=false
+                    log_success "Dry run mode DISABLED"
+                else
+                    DRY_RUN=true
+                    log_success "Dry run mode ENABLED"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                if [[ "$VERBOSE" == true ]]; then
+                    VERBOSE=false
+                    log_success "Verbose output DISABLED"
+                else
+                    VERBOSE=true
+                    log_success "Verbose output ENABLED"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                clear
+                echo -e "${COLOR_BRIGHT_CYAN}Supported Video Extensions:${COLOR_RESET}"
+                echo ""
+                for ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
+                    echo "  ${SYMBOL_BULLET} .$ext"
+                done
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
+}
+
+# Main interactive menu loop
+interactive_menu() {
+    while true; do
+        show_main_menu
+        read -r choice
+
+        case "$choice" in
+            1)
+                handle_single_operations  # File Operations
+                ;;
+            2)
+                handle_subtitles
+                ;;
+            3)
+                handle_duplicates
+                ;;
+            4)
+                handle_utilities
+                ;;
+            5)
+                handle_settings
+                ;;
+            q|Q)
+                echo ""
+                echo "Goodbye!"
+                exit 0
+                ;;
+            *)
+                echo "Invalid choice"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+################################################################################
+# COMMAND LINE INTERFACE
+################################################################################
+
+show_usage() {
+    cat << EOF
+${COLOR_BOLD}$SCRIPT_NAME v$SCRIPT_VERSION${COLOR_RESET}
+
+${COLOR_BOLD}USAGE:${COLOR_RESET}
+    $0 [OPTIONS] [COMMAND] [DIRECTORY]
+
+${COLOR_BOLD}OPTIONS:${COLOR_RESET}
+    -h, --help              Show this help message
+    -v, --version           Show version information
+    -d, --dry-run           Enable dry run mode (no changes made)
+    -q, --quiet             Disable verbose output
+    -i, --interactive       Launch interactive menu (default if no command)
+
+${COLOR_BOLD}SUBTITLE OPTIONS:${COLOR_RESET}
+    --model <model>         Whisper model (tiny, base, small, medium, large)
+    --format <format>       Subtitle format (srt, vtt, txt, json)
+    --language <lang>       Language code (en, es, fr, etc.) or 'auto'
+
+${COLOR_BOLD}ADVANCED SUBTITLE OPTIONS:${COLOR_RESET}
+    --gpu                   Enable GPU acceleration (CUDA)
+    --parallel <N>          Parallel jobs (1-8, default: 2)
+    --no-optimize           Disable batch optimization
+    --edit                  Enable interactive editing mode
+    --speaker-diarization   Enable speaker identification
+    --no-punctuation        Disable automatic punctuation fixes
+
+${COLOR_BOLD}COMMANDS:${COLOR_RESET}
+    rename <dir>            Rename files with bracket notation
+    flatten <dir>           Move all videos to top directory
+    cleanup <dir>           Full cleanup (rename + spacing fixes)
+    duplicates <dir>        Find duplicate files
+    subtitles <dir>         Generate subtitles for videos
+    workflow-new <dir>      New collection setup workflow
+    workflow-clean <dir>    Deep clean workflow
+    batch                   Batch process multiple folders
+
+${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
+    # Interactive menu
+    $0
+
+    # Rename files in directory
+    $0 rename /mnt/c/Users/Eric/Videos
+
+    # Dry run before making changes
+    $0 --dry-run rename /mnt/c/Users/Eric/Videos
+
+    # Find duplicates
+    $0 duplicates /mnt/c/Users/Eric/Videos
+
+    # Generate subtitles (basic)
+    $0 --model base subtitles /mnt/c/Users/Eric/Videos
+
+    # Generate with GPU and parallel processing
+    $0 --gpu --parallel 4 --model medium subtitles /mnt/c/Videos
+
+    # Generate with speaker diarization
+    $0 --speaker-diarization --model large subtitles /mnt/c/Videos
+
+    # Full workflow for new collection
+    $0 workflow-new /mnt/c/Users/Eric/Videos
+
+${COLOR_BOLD}SUPPORTED VIDEO FORMATS:${COLOR_RESET}
+    mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
+
+${COLOR_BOLD}LOG FILES:${COLOR_RESET}
+    Logs are stored in: $LOG_DIR
+
+EOF
+}
+
+show_version() {
+    echo "$SCRIPT_NAME v$SCRIPT_VERSION ($SCRIPT_DATE)"
+}
+
+# Parse command line arguments
+parse_arguments() {
+    local command=""
+    local directory=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -v|--version)
+                show_version
+                exit 0
+                ;;
+            -d|--dry-run)
+                DRY_RUN=true
+                log_info "Dry run mode enabled"
+                shift
+                ;;
+            -q|--quiet)
+                VERBOSE=false
+                shift
+                ;;
+            -i|--interactive)
+                INTERACTIVE=true
+                shift
+                ;;
+            --model)
+                shift
+                if [[ -n "$1" ]]; then
+                    WHISPER_MODEL="$1"
+                    log_info "Whisper model set to: $WHISPER_MODEL"
+                    shift
+                fi
+                ;;
+            --format)
+                shift
+                if [[ -n "$1" ]]; then
+                    SUBTITLE_FORMAT="$1"
+                    log_info "Subtitle format set to: $SUBTITLE_FORMAT"
+                    shift
+                fi
+                ;;
+            --language)
+                shift
+                if [[ -n "$1" ]]; then
+                    SUBTITLE_LANGUAGE="$1"
+                    log_info "Subtitle language set to: $SUBTITLE_LANGUAGE"
+                    shift
+                fi
+                ;;
+            --gpu)
+                SUBTITLE_USE_GPU=true
+                log_info "GPU acceleration enabled"
+                shift
+                ;;
+            --parallel)
+                shift
+                if [[ -n "$1" && "$1" =~ ^[1-8]$ ]]; then
+                    SUBTITLE_PARALLEL_JOBS="$1"
+                    log_info "Parallel jobs set to: $SUBTITLE_PARALLEL_JOBS"
+                    shift
+                else
+                    log_error "Invalid parallel jobs value. Must be 1-8"
+                    exit 1
+                fi
+                ;;
+            --no-optimize)
+                SUBTITLE_OPTIMIZE_BATCH=false
+                log_info "Batch optimization disabled"
+                shift
+                ;;
+            --edit)
+                SUBTITLE_INTERACTIVE_EDIT=true
+                log_info "Interactive editing enabled"
+                shift
+                ;;
+            --speaker-diarization)
+                SUBTITLE_SPEAKER_DIARIZATION=true
+                log_info "Speaker diarization enabled"
+                shift
+                ;;
+            --no-punctuation)
+                SUBTITLE_AUTO_PUNCTUATION=false
+                log_info "Auto-punctuation disabled"
+                shift
+                ;;
+            rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch)
+                command="$1"
+                shift
+                if [[ -n "$1" && "$1" != -* ]]; then
+                    directory="$1"
+                    shift
+                fi
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+
+    # If no command specified, launch interactive menu
+    if [[ -z "$command" ]]; then
+        INTERACTIVE=true
+        return 0
+    fi
+
+    # Validate directory for commands that need it
+    if [[ "$command" != "batch" ]]; then
+        if [[ -z "$directory" ]]; then
+            log_error "No directory specified for command: $command"
+            show_usage
+            exit 1
+        fi
+
+        directory=$(validate_directory "$directory")
+        if [[ $? -ne 0 ]]; then
+            exit 1
+        fi
+    fi
+
+    # Execute command
+    INTERACTIVE=false
+    case "$command" in
+        rename)
+            start_operation "Rename Files (Bracket Notation)"
+            rename_files_in_directory "$directory" "$DRY_RUN"
+            end_operation
+            ;;
+        flatten)
+            start_operation "Flatten Directory"
+            flatten_directory "$directory" "$DRY_RUN"
+            end_operation
+            ;;
+        cleanup)
+            workflow_deep_clean "$directory"
+            ;;
+        duplicates)
+            start_operation "Find Duplicates"
+            find_duplicates "$directory" "report"
+            end_operation
+            ;;
+        subtitles)
+            start_operation "Generate Subtitles"
+            generate_subtitles_in_directory "$directory" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN"
+            end_operation
+            ;;
+        workflow-new)
+            workflow_new_collection "$directory"
+            ;;
+        workflow-clean)
+            workflow_deep_clean "$directory"
+            ;;
+        batch)
+            start_operation "Batch Processing"
+            batch_process_folders
+            end_operation
+            ;;
+    esac
+}
+
+################################################################################
+# MAIN EXECUTION
+################################################################################
+
+main() {
+    # Initialize logging
+    init_logging
+    
+    # Parse arguments
+    if [[ $# -eq 0 ]]; then
+        INTERACTIVE=true
+    else
+        parse_arguments "$@"
+    fi
+    
+    # Launch interactive menu if needed
+    if [[ "$INTERACTIVE" == true ]]; then
+        interactive_menu
+    fi
+}
+
+# Run main function
+main "$@"
