@@ -3462,86 +3462,100 @@ workflow_deep_clean() {
 
 show_header() {
     clear
-    echo -e "${COLOR_BOLD}Video Manager${COLOR_RESET} v$SCRIPT_VERSION"
+    echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╔═══════════════════════════════════════════════════════════════╗${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}  ${COLOR_BOLD}${COLOR_BRIGHT_YELLOW}VIDEO MANAGER ULTIMATE${COLOR_RESET}  ${COLOR_WHITE}v$SCRIPT_VERSION${COLOR_RESET}                    ${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════════╝${COLOR_RESET}"
     echo ""
 }
 
 show_main_menu() {
     show_header
 
-    echo "Main Menu"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}MAIN MENU${COLOR_RESET}"
     echo ""
-    echo " 1. File Operations (rename, organize)"
-    echo " 2. Subtitles (generate, edit)"
-    echo " 3. Duplicates (find, remove)"
-    echo " 4. Catalog (scan drives, search)"
-    echo " 5. Utilities (undo, favorites, watch folders)"
-    echo " 6. Settings"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}File Operations${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Rename, organize, flatten directories"
     echo ""
-    echo " q. Quit"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Subtitle Generation${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Generate, edit, translate subtitles"
     echo ""
-    echo -n "Choose: "
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Duplicate Detection${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Find and remove duplicate files"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Multi-Drive Catalog${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Scan drives, search media, find duplicates"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Utilities${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Logs, system info, testing"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Settings${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Configure options and preferences"
+    echo ""
+    echo -e "${COLOR_RED}[Q]${COLOR_RESET} ${COLOR_WHITE}Quit${COLOR_RESET}"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choose option: "
 }
 
 show_single_operations_menu() {
     show_header
-    
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}SINGLE OPERATIONS${COLOR_RESET}"
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}FILE OPERATIONS${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Rename Files (Bracket Notation)"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Remove Dashes Only"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Fix Bracket Spacing Only"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Flatten Directory (Move All to Top)"
-    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Full Cleanup (All Operations)"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Rename Files${COLOR_RESET} ${COLOR_CYAN}(Bracket Notation)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Remove Dashes${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Fix Bracket Spacing${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Flatten Directory${COLOR_RESET} ${COLOR_CYAN}(Move All to Top)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Full Cleanup${COLOR_RESET} ${COLOR_CYAN}(All Operations)${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_YELLOW}[D]${COLOR_RESET} Toggle Dry Run Mode (Current: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_YELLOW}[D]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run${COLOR_RESET} ${COLOR_CYAN}(Current: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"))${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_batch_menu() {
     show_header
-    
+
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}BATCH PROCESSING${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Batch Rename Multiple Folders"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Batch Flatten Multiple Folders"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Batch Full Cleanup"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Batch Rename${COLOR_RESET} ${COLOR_CYAN}(Multiple Folders)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Batch Flatten${COLOR_RESET} ${COLOR_CYAN}(Multiple Folders)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Batch Full Cleanup${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_workflow_menu() {
     show_header
-    
+
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}AUTOMATED WORKFLOWS${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} New Collection Setup"
-    echo -e "    ${COLOR_CYAN}↳${COLOR_RESET} Flatten + Rename + Find Duplicates"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}New Collection Setup${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Flatten + Rename + Find Duplicates"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Deep Clean Existing Collection"
-    echo -e "    ${COLOR_CYAN}↳${COLOR_RESET} Remove Dashes + Fix Spacing + Bracket Notation"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Deep Clean Existing Collection${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Remove Dashes + Fix Spacing + Bracket Notation"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_duplicate_menu() {
     show_header
-    
+
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}DUPLICATE DETECTION${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Find Duplicates (Report Only)"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Find and Delete Duplicates"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Find Duplicates (Dry Run)"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Find Duplicates${COLOR_RESET} ${COLOR_CYAN}(Report Only)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Find and Delete Duplicates${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Find Duplicates${COLOR_RESET} ${COLOR_CYAN}(Dry Run)${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_subtitle_menu() {
@@ -3549,14 +3563,14 @@ show_subtitle_menu() {
 
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}SUBTITLE GENERATION${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_WHITE}Current Settings:${COLOR_RESET}"
-    echo -e "  Model: ${COLOR_CYAN}$WHISPER_MODEL${COLOR_RESET}"
-    echo -e "  Format: ${COLOR_CYAN}$SUBTITLE_FORMAT${COLOR_RESET}"
-    echo -e "  Language: ${COLOR_CYAN}$SUBTITLE_LANGUAGE${COLOR_RESET}"
-    echo -e "  Parallel Jobs: ${COLOR_CYAN}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET}"
-    echo -e "  GPU Acceleration: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-    echo -e "  Batch Optimization: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-    echo -e "  Recursive Scan: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET} (depth: ${COLOR_CYAN}$SUBTITLE_MIN_DEPTH-$SUBTITLE_MAX_DEPTH${COLOR_RESET})" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Current Settings:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Model: ${COLOR_WHITE}$WHISPER_MODEL${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Format: ${COLOR_WHITE}$SUBTITLE_FORMAT${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Language: ${COLOR_WHITE}$SUBTITLE_LANGUAGE${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Parallel Jobs: ${COLOR_WHITE}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} GPU Acceleration: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Batch Optimization: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Recursive Scan: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}(depth: $SUBTITLE_MIN_DEPTH-$SUBTITLE_MAX_DEPTH)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
 
     # Count active filters
     local active_filters=0
@@ -3567,19 +3581,19 @@ show_subtitle_menu() {
     [[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && ((active_filters++))
 
     if [[ $active_filters -gt 0 ]]; then
-        echo -e "  Active Filters: ${COLOR_YELLOW}$active_filters${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Active Filters: ${COLOR_YELLOW}$active_filters${COLOR_RESET}"
     fi
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Generate Subtitles (Single Directory)"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Batch Generate Subtitles (Multiple Directories)"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Configure Subtitle Settings"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Advanced Settings"
-    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Edit Existing Subtitle"
-    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Check Whisper Installation"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Generate Subtitles${COLOR_RESET} ${COLOR_CYAN}(Single Directory)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Batch Generate Subtitles${COLOR_RESET} ${COLOR_CYAN}(Multiple Directories)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Configure Subtitle Settings${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Advanced Settings${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Edit Existing Subtitle${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Check Whisper Installation${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 # Find duplicate files by hash
@@ -3673,10 +3687,10 @@ show_duplicates_report() {
         local total_size=$(echo "$group" | jq -r '.total_size')
         local wasted_size=$((total_size - total_size / count))
 
-        echo -e "${COLOR_BOLD}${COLOR_YELLOW}Duplicate Group #$group_num${COLOR_RESET}"
-        echo -e "  Hash: ${COLOR_WHITE}$hash...${COLOR_RESET}"
-        echo -e "  Files: ${COLOR_RED}$count copies${COLOR_RESET}"
-        echo -e "  Wasted Space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $wasted_size 2>/dev/null || echo "$wasted_size bytes")${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}${COLOR_YELLOW}${SYMBOL_WARN} Duplicate Group #$group_num${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hash: ${COLOR_WHITE}$hash...${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Copies: ${COLOR_RED}$count files${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $wasted_size 2>/dev/null || echo "$wasted_size bytes")${COLOR_RESET}"
         echo ""
 
         local file_num=0
@@ -3700,9 +3714,9 @@ show_duplicates_report() {
                 audio) type_icon="🎵" ;;
             esac
 
-            echo -e "    ${COLOR_CYAN}[$file_num]${COLOR_RESET} $type_icon $filename"
-            echo -e "        Drive: ${COLOR_WHITE}$drive_label${COLOR_RESET}"
-            echo -e "        Size: $(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")"
+            echo -e "    ${COLOR_BRIGHT_GREEN}[$file_num]${COLOR_RESET} $type_icon ${COLOR_WHITE}$filename${COLOR_RESET}"
+            echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Drive: ${COLOR_WHITE}$drive_label${COLOR_RESET}"
+            echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Size: ${COLOR_WHITE}$(numfmt --to=iec-i --suffix=B $size 2>/dev/null || echo "$size bytes")${COLOR_RESET}"
         done
 
         echo ""
@@ -3713,9 +3727,10 @@ show_duplicates_report() {
     local total_dupes=$(echo "$duplicates" | jq '[.[] | .count] | add')
 
     echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}Total duplicate groups: ${COLOR_RED}$dup_count${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}Total duplicate files: ${COLOR_RED}$total_dupes${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}Total wasted space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $total_wasted 2>/dev/null || echo "$total_wasted bytes")${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Summary:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Duplicate Groups: ${COLOR_RED}$dup_count${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Total Duplicate Files: ${COLOR_RED}$total_dupes${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(numfmt --to=iec-i --suffix=B $total_wasted 2>/dev/null || echo "$total_wasted bytes")${COLOR_RESET}"
     echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
     echo ""
 }
@@ -3723,12 +3738,12 @@ show_duplicates_report() {
 show_catalog_menu() {
     show_header
 
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}CATALOG SYSTEM${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}MULTI-DRIVE CATALOG${COLOR_RESET}"
     echo ""
 
     # Check if jq is available
     if ! command -v jq >/dev/null 2>&1; then
-        echo -e "${COLOR_YELLOW}⚠ jq is not installed. Install it with: sudo apt-get install jq${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${SYMBOL_WARN} jq is not installed. Install with: ${COLOR_WHITE}sudo apt-get install jq${COLOR_RESET}"
         echo ""
     fi
 
@@ -3736,23 +3751,23 @@ show_catalog_menu() {
     if [[ -f "$CATALOG_DRIVES_DB" ]]; then
         local drive_count=$(cat "$CATALOG_DRIVES_DB" 2>/dev/null | jq '.drives | length' 2>/dev/null || echo "0")
         local video_count=$(cat "$CATALOG_DB" 2>/dev/null | jq '.videos | length' 2>/dev/null || echo "0")
-        echo -e "${COLOR_WHITE}Status:${COLOR_RESET}"
-        echo -e "  Cataloged Drives: ${COLOR_CYAN}$drive_count${COLOR_RESET}"
-        echo -e "  Cataloged Videos: ${COLOR_CYAN}$video_count${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}${COLOR_WHITE}Catalog Status:${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Cataloged Drives: ${COLOR_WHITE}$drive_count${COLOR_RESET}"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Total Media Files: ${COLOR_WHITE}$video_count${COLOR_RESET}"
         echo ""
     fi
 
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Scan & Catalog a Drive"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} List All Cataloged Drives"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Search Catalog"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Find Duplicate Files"
-    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} Catalog Multiple Drives (Batch)"
-    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} Export Catalog Report"
-    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} Catalog Settings"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Scan & Catalog Drive${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}List All Cataloged Drives${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Search Catalog${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Find Duplicate Files${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Batch Catalog Multiple Drives${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Export Catalog Report${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} ${COLOR_WHITE}Catalog Settings${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_utilities_menu() {
@@ -3760,40 +3775,41 @@ show_utilities_menu() {
 
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}UTILITIES${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} View Last 50 Log Entries"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Open Log Directory"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} Test Filename Transformation"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} Display System Information"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}View Last 50 Log Entries${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Open Log Directory${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Test Filename Transformation${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Display System Information${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_settings_menu() {
     show_header
-    
+
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}SETTINGS${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_WHITE}Dry Run Mode:${COLOR_RESET}    $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
-    echo -e "${COLOR_WHITE}Verbose Output:${COLOR_RESET}  $([[ "$VERBOSE" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
-    echo -e "${COLOR_WHITE}Log Directory:${COLOR_RESET}   ${COLOR_CYAN}$LOG_DIR${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Current Configuration:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Dry Run Mode: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Verbose Output: $([[ "$VERBOSE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Log Directory: ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} Toggle Dry Run Mode"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} Toggle Verbose Output"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} View Supported Extensions"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run Mode${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Verbose Output${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}View Supported Extensions${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} Back to Main Menu"
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "Select option: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 # Get directory input
 get_directory_input() {
     echo ""
-    echo -n "Enter directory path: "
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
     read -r dir
-    
+
     dir=$(validate_directory "$dir")
     if [[ $? -eq 0 ]]; then
         TARGET_FOLDER="$dir"
