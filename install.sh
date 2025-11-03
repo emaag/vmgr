@@ -120,6 +120,76 @@ install_dependencies() {
     esac
 }
 
+# Setup bash completion
+setup_completion() {
+    echo ""
+    echo -e "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Setting up bash completion..."
+
+    case "$OS_TYPE" in
+        Linux|WSL)
+            # Try user completion directory first
+            local completion_dir="$HOME/.bash_completion.d"
+            if [[ ! -d "$completion_dir" ]]; then
+                mkdir -p "$completion_dir"
+            fi
+
+            # Copy completion file
+            cp vmgr-completion.bash "$completion_dir/vmgr"
+            echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion file installed to ~/.bash_completion.d/"
+
+            # Add sourcing to bashrc if not already there
+            local shell_rc="$HOME/.bashrc"
+            if ! grep -q "bash_completion.d/vmgr" "$shell_rc" 2>/dev/null; then
+                echo "" >> "$shell_rc"
+                echo "# Video Manager Ultimate completion" >> "$shell_rc"
+                echo "[[ -f ~/.bash_completion.d/vmgr ]] && source ~/.bash_completion.d/vmgr" >> "$shell_rc"
+                echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion added to ~/.bashrc"
+            fi
+            ;;
+
+        macOS)
+            # macOS uses different completion path
+            local completion_dir="/usr/local/etc/bash_completion.d"
+            if [[ -d "$completion_dir" ]] && [[ -w "$completion_dir" ]]; then
+                cp vmgr-completion.bash "$completion_dir/vmgr"
+                echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion file installed to $completion_dir"
+            else
+                # Fallback to user directory
+                completion_dir="$HOME/.bash_completion.d"
+                mkdir -p "$completion_dir"
+                cp vmgr-completion.bash "$completion_dir/vmgr"
+
+                local shell_rc="$HOME/.zshrc"
+                [[ -f "$HOME/.bash_profile" ]] && shell_rc="$HOME/.bash_profile"
+
+                if ! grep -q "bash_completion.d/vmgr" "$shell_rc" 2>/dev/null; then
+                    echo "" >> "$shell_rc"
+                    echo "# Video Manager Ultimate completion" >> "$shell_rc"
+                    echo "[[ -f ~/.bash_completion.d/vmgr ]] && source ~/.bash_completion.d/vmgr" >> "$shell_rc"
+                fi
+                echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion added to $shell_rc"
+            fi
+            ;;
+
+        Windows)
+            # Git Bash completion
+            local completion_dir="$HOME/.bash_completion.d"
+            mkdir -p "$completion_dir"
+            cp vmgr-completion.bash "$completion_dir/vmgr"
+
+            local shell_rc="$HOME/.bashrc"
+            if ! grep -q "bash_completion.d/vmgr" "$shell_rc" 2>/dev/null; then
+                echo "" >> "$shell_rc"
+                echo "# Video Manager Ultimate completion" >> "$shell_rc"
+                echo "[[ -f ~/.bash_completion.d/vmgr ]] && source ~/.bash_completion.d/vmgr" >> "$shell_rc"
+            fi
+            echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion setup complete"
+            ;;
+    esac
+
+    echo -e "${COLOR_YELLOW}Note:${COLOR_RESET} Restart your shell or run 'source ~/.bashrc' to enable completion"
+}
+
 # Setup script
 setup_script() {
     echo ""
@@ -141,6 +211,9 @@ setup_script() {
 
     ln -s "$(pwd)/video-manager-ultimate.sh" "$target"
     echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Created symlink: ~/bin/vmgr"
+
+    # Setup bash completion
+    setup_completion
 
     # Check if ~/bin is in PATH
     if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
