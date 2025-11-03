@@ -794,22 +794,29 @@ confirm_file_operation() {
     fi
 
     echo ""
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}Confirm Operation${COLOR_RESET}"
-    echo -e "${COLOR_CYAN}File:${COLOR_RESET} $(basename "$file")"
-    echo -e "${COLOR_CYAN}Operation:${COLOR_RESET} $operation"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}╭─────────────────────────────────────────────────────╮${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}│${COLOR_RESET}  ${COLOR_BOLD}${COLOR_YELLOW}CONFIRM OPERATION${COLOR_RESET}                             ${COLOR_BOLD}${COLOR_CYAN}│${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_CYAN}╰─────────────────────────────────────────────────────╯${COLOR_RESET}"
+    echo ""
+    echo -e "  ${COLOR_WHITE}File:${COLOR_RESET}      $(basename "$file")"
+    echo -e "  ${COLOR_WHITE}Action:${COLOR_RESET}    $operation"
 
     if [[ -n "$preview" ]]; then
-        echo -e "${COLOR_CYAN}Preview:${COLOR_RESET} $preview"
+        echo -e "  ${COLOR_WHITE}Preview:${COLOR_RESET}   $preview"
     fi
 
     echo ""
-    read -p "Proceed? (y/n/a=all/s=skip all): " -n 1 -r
+    echo -e "  ${COLOR_GREEN}[Y]${COLOR_RESET} Yes, proceed    ${COLOR_RED}[N]${COLOR_RESET} No, skip"
+    echo -e "  ${COLOR_CYAN}[A]${COLOR_RESET} Apply to all    ${COLOR_YELLOW}[S]${COLOR_RESET} Skip all remaining"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Your choice: "
+    read -n 1 -r
     echo ""
 
     case "$REPLY" in
         y|Y) return 0 ;;
-        a|A) INTERACTIVE_CONFIRM=false; return 0 ;;
-        s|S) return 2 ;; # Skip all remaining
+        a|A) INTERACTIVE_CONFIRM=false; log_info "Applying to all remaining files"; return 0 ;;
+        s|S) log_warning "Skipping all remaining files"; return 2 ;;
         *) return 1 ;;
     esac
 }
@@ -824,20 +831,30 @@ show_operation_preview() {
         return
     fi
 
-    echo -e "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} ${COLOR_WHITE}$operation${COLOR_RESET}"
-    echo -e "  ${COLOR_YELLOW}Before:${COLOR_RESET} $original"
-    echo -e "  ${COLOR_GREEN}After: ${COLOR_RESET} $transformed"
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}┌─ $operation${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}│${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}│${COLOR_RESET}  ${COLOR_YELLOW}Before:${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}│${COLOR_RESET}    ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} $original"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}│${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}│${COLOR_RESET}  ${COLOR_GREEN}After:${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}│${COLOR_RESET}    ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} $transformed"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}└─${COLOR_RESET}"
 }
 
 # Pause for step-by-step mode
 step_pause() {
     if [[ "$STEP_BY_STEP" == true ]]; then
         echo ""
-        read -p "Press Enter to continue (q to disable step mode)..." -r
-        if [[ "$REPLY" == "q" ]]; then
+        echo -e "${COLOR_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+        echo -n "${COLOR_YELLOW}${SYMBOL_STAR}${COLOR_RESET} Press ${COLOR_WHITE}[Enter]${COLOR_RESET} to continue, ${COLOR_WHITE}[Q]${COLOR_RESET} to disable step mode: "
+        read -r
+        if [[ "$REPLY" == "q" ]] || [[ "$REPLY" == "Q" ]]; then
             STEP_BY_STEP=false
-            log_info "Step-by-step mode disabled"
+            echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Step-by-step mode disabled"
         fi
+        echo -e "${COLOR_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+        echo ""
     fi
 }
 
@@ -912,16 +929,23 @@ undo_last_operation() {
     local original=$(echo "$last_op" | jq -r '.original')
     local new_path=$(echo "$last_op" | jq -r '.new')
 
-    echo -e "${COLOR_YELLOW}Undoing operation:${COLOR_RESET}"
-    echo -e "  Type: $op_type"
-    echo -e "  File: $(basename "$new_path")"
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}╭─────────────────────────────────────────────────────╮${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}│${COLOR_RESET}  ${COLOR_BOLD}${COLOR_WHITE}UNDO OPERATION${COLOR_RESET}                                  ${COLOR_BOLD}${COLOR_YELLOW}│${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}╰─────────────────────────────────────────────────────╯${COLOR_RESET}"
+    echo ""
+    echo -e "  ${COLOR_CYAN}Operation Type:${COLOR_RESET} ${COLOR_WHITE}$op_type${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}File:${COLOR_RESET}           ${COLOR_WHITE}$(basename "$new_path")${COLOR_RESET}"
+    echo ""
+    echo -e "  ${COLOR_YELLOW}Reverting:${COLOR_RESET}      ${COLOR_RED}$new_path${COLOR_RESET}"
+    echo -e "  ${COLOR_GREEN}Back to:${COLOR_RESET}        ${COLOR_GREEN}$original${COLOR_RESET}"
     echo ""
 
     case "$op_type" in
         rename|move)
             if [[ -f "$new_path" ]] || [[ -d "$new_path" ]]; then
                 mv "$new_path" "$original"
-                log_success "Undone: $new_path -> $original"
+                log_success "Successfully undone operation"
             else
                 log_error "Cannot undo: $new_path does not exist"
                 return 1
@@ -4224,29 +4248,65 @@ show_granular_controls_menu() {
 
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}GRANULAR CONTROLS${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BOLD}${COLOR_WHITE}Interactive Options:${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Per-File Confirmation: $([[ "$INTERACTIVE_CONFIRM" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Show Preview: $([[ "$SHOW_PREVIEW" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Step-by-Step Mode: $([[ "$STEP_BY_STEP" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+
+    # Count active filters
+    local active_count=0
+    [[ "$FILTER_BY_SIZE" == true ]] && ((active_count++))
+    [[ "$FILTER_BY_DATE" == true ]] && ((active_count++))
+    [[ "$FILTER_BY_PATTERN" == true ]] && ((active_count++))
+
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Interactive Mode ━━━${COLOR_RESET}"
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Per-File Confirm:"
+    [[ "$INTERACTIVE_CONFIRM" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Show Preview:"
+    [[ "$SHOW_PREVIEW" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Step-by-Step:"
+    [[ "$STEP_BY_STEP" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
+
     echo ""
-    echo -e "${COLOR_BOLD}${COLOR_WHITE}Filters:${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Size Filter: $([[ "$FILTER_BY_SIZE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}(${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Date Filter: $([[ "$FILTER_BY_DATE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}(${FILTER_DAYS_OLD}+ days)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Pattern Filter: $([[ "$FILTER_BY_PATTERN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}($FILTER_PATTERN)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Filters ${COLOR_RESET}${COLOR_YELLOW}($active_count active)${COLOR_RESET}${COLOR_BOLD}${COLOR_WHITE} ━━━${COLOR_RESET}"
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Size Filter:"
+    if [[ "$FILTER_BY_SIZE" == true ]]; then
+        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_WHITE}(${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB)${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
+    fi
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Date Filter:"
+    if [[ "$FILTER_BY_DATE" == true ]]; then
+        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_WHITE}(${FILTER_DAYS_OLD}+ days old)${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
+    fi
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Pattern Filter:"
+    if [[ "$FILTER_BY_PATTERN" == true ]]; then
+        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_WHITE}($FILTER_PATTERN)${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
+    fi
+
     echo ""
-    echo -e "${COLOR_BOLD}${COLOR_WHITE}Processing:${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Undo System: $([[ "$ENABLE_UNDO" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Batch Size: ${COLOR_WHITE}${BATCH_SIZE}${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Processing ━━━${COLOR_RESET}"
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Undo System:"
+    [[ "$ENABLE_UNDO" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Batch Size:"
+    echo -e "${COLOR_WHITE}$BATCH_SIZE files${COLOR_RESET}"
+
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Toggle Per-File Confirmation${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Preview Mode${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Toggle Step-by-Step Mode${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Configure Size Filter${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Configure Date Filter${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Configure Pattern Filter${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} ${COLOR_WHITE}Toggle Undo System${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[8]${COLOR_RESET} ${COLOR_WHITE}View Undo History${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[9]${COLOR_RESET} ${COLOR_WHITE}Undo Last Operation${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Options ━━━${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Toggle Per-File Confirmation${COLOR_RESET}  ${COLOR_CYAN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Preview${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Toggle Step-by-Step Mode${COLOR_RESET}     ${COLOR_CYAN}[4]${COLOR_RESET} ${COLOR_WHITE}Size Filter${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Date Filter${COLOR_RESET}                  ${COLOR_CYAN}[6]${COLOR_RESET} ${COLOR_WHITE}Pattern Filter${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_YELLOW}[7]${COLOR_RESET} ${COLOR_WHITE}Toggle Undo System${COLOR_RESET}            ${COLOR_YELLOW}[8]${COLOR_RESET} ${COLOR_WHITE}View Undo History${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}[9]${COLOR_RESET} ${COLOR_WHITE}Undo Last Operation${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Settings${COLOR_RESET}"
     echo ""
