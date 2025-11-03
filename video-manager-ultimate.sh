@@ -66,10 +66,17 @@ readonly SYMBOL_VIDEO="🎬"
 DEFAULT_VIDEO_EXTENSIONS=("mp4" "mkv" "avi" "mov" "wmv" "flv" "webm" "m4v" "mpg" "mpeg" "3gp")
 LOG_DIR="$HOME/.video-manager-logs"
 LOG_FILE="$LOG_DIR/video-manager-$(date +%Y%m%d-%H%M%S).log"
+UNDO_LOG_DIR="$LOG_DIR/undo-history"
 MAX_LOG_ENTRIES=1000
 DRY_RUN=false
 VERBOSE=true
 INTERACTIVE=true
+
+# Organize by Subfolder Settings
+ORGANIZE_DEFAULT_TARGET="."
+ORGANIZE_DEFAULT_SEARCH="."
+ORGANIZE_SHOW_PROGRESS=true
+ORGANIZE_LOG_OPERATIONS=true
 
 # Granular Control Settings
 INTERACTIVE_CONFIRM=false # Ask for confirmation on each file
@@ -109,6 +116,7 @@ SUBTITLE_USE_GPU=false # Enable GPU acceleration (auto-detect CUDA)
 SUBTITLE_OPTIMIZE_BATCH=true # Sort videos by size for efficiency
 SUBTITLE_SPEAKER_DIARIZATION=false # Identify different speakers
 SUBTITLE_INTERACTIVE_EDIT=false # Enable interactive editing mode
+SUBTITLE_AUTO_EDIT=true # Automatically edit subtitles without prompting
 SUBTITLE_AUTO_PUNCTUATION=true # Auto-fix punctuation and capitalization
 
 # Recursive scanning options
@@ -2900,8 +2908,13 @@ _postprocess_subtitle() {
         translate_subtitle "$subtitle_file" "$SUBTITLE_TRANSLATE_TO"
     fi
 
-    # Interactive editing if enabled
-    if [[ "$SUBTITLE_INTERACTIVE_EDIT" == true && "$INTERACTIVE" == true ]]; then
+    # Automatic editing if enabled (no prompt)
+    if [[ "$SUBTITLE_AUTO_EDIT" == true && "$INTERACTIVE" == true ]]; then
+        echo ""
+        log_verbose "Auto-editing subtitle..."
+        edit_subtitle_interactive "$subtitle_file"
+    # Interactive editing with prompt if enabled
+    elif [[ "$SUBTITLE_INTERACTIVE_EDIT" == true && "$INTERACTIVE" == true ]]; then
         echo ""
         echo -e "${COLOR_CYAN}Edit this subtitle? (y/n):${COLOR_RESET} "
         read -n 1 -r
@@ -4071,6 +4084,388 @@ workflow_deep_clean() {
     end_operation
 }
 
+# Create undo log for organize operation
+# Args: $1=operation_id
+# Returns: path to undo log file
+_create_undo_log() {
+    local operation_id="$1"
+
+    # Create undo log directory if it doesn't exist
+    mkdir -p "$UNDO_LOG_DIR"
+
+    local undo_file="$UNDO_LOG_DIR/organize-${operation_id}.log"
+
+    # Create log file with header
+    cat > "$undo_file" <<EOF
+# Organize Operation Undo Log
+# Operation ID: $operation_id
+# Timestamp: $(date '+%Y-%m-%d %H:%M:%S')
+# Format: source_path|destination_path
+EOF
+
+    echo "$undo_file"
+}
+
+# Log a move operation for undo
+# Args: $1=undo_log_file $2=source $3=destination
+_log_move_operation() {
+    local undo_log="$1"
+    local source="$2"
+    local dest="$3"
+
+    echo "$source|$dest" >> "$undo_log"
+}
+
+# Undo the last organize operation
+# Args: $1=operation_id (optional, defaults to most recent)
+# Returns: 0 on success
+undo_organize_operation() {
+    local operation_id="$1"
+
+    begin_operation "Undo Organize Operation"
+
+    # Find undo log
+    local undo_log
+    if [[ -n "$operation_id" ]]; then
+        undo_log="$UNDO_LOG_DIR/organize-${operation_id}.log"
+    else
+        # Find most recent undo log
+        undo_log=$(ls -t "$UNDO_LOG_DIR"/organize-*.log 2>/dev/null | head -n 1)
+    fi
+
+    if [[ ! -f "$undo_log" ]]; then
+        log_error "No undo log found"
+        return 1
+    fi
+
+    log_info "Using undo log: $(basename "$undo_log")"
+
+    # Show log header
+    echo ""
+    grep '^#' "$undo_log"
+    echo ""
+
+    # Count operations
+    local total_ops=$(grep -v '^#' "$undo_log" | wc -l)
+    log_info "Found $total_ops operation(s) to undo"
+
+    if [[ $total_ops -eq 0 ]]; then
+        log_warning "No operations to undo"
+        return 1
+    fi
+
+    # Confirm
+    if [[ "$INTERACTIVE" == true ]]; then
+        echo -n "Proceed with undo? (y/n): "
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            log_warning "Undo cancelled"
+            return 1
+        fi
+    fi
+
+    echo ""
+    local success_count=0
+    local error_count=0
+    local current=0
+
+    # Read undo log in reverse order and restore files
+    while IFS='|' read -r source dest; do
+        ((current++))
+
+        if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+            printf "\r${COLOR_CYAN}[%d/%d]${COLOR_RESET} Undoing..." "$current" "$total_ops"
+        fi
+
+        # Check if destination still exists
+        if [[ ! -f "$dest" ]]; then
+            log_verbose "Skipping (file no longer exists): $(basename "$dest")"
+            ((error_count++))
+            continue
+        fi
+
+        # Check if source location is available
+        local source_dir=$(dirname "$source")
+        if [[ ! -d "$source_dir" ]]; then
+            mkdir -p "$source_dir"
+        fi
+
+        if [[ -f "$source" ]]; then
+            log_warning "Source already exists: $(basename "$source")"
+            ((error_count++))
+            continue
+        fi
+
+        # Move file back
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "\n${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would restore: $(basename "$dest") → $source"
+            ((success_count++))
+        else
+            if mv "$dest" "$source"; then
+                log_verbose "Restored: $(basename "$dest") → $source"
+                ((success_count++))
+            else
+                log_error "Failed to restore: $(basename "$dest")"
+                ((error_count++))
+            fi
+        fi
+    done < <(tac "$undo_log" | grep -v '^#')
+
+    echo ""
+
+    # Summary
+    echo ""
+    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Undo Summary:${COLOR_RESET}"
+    echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Successfully restored: ${COLOR_WHITE}$success_count${COLOR_RESET}"
+    echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} Failed/Skipped: ${COLOR_WHITE}$error_count${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+
+    # Archive the undo log
+    if [[ $success_count -gt 0 && "$DRY_RUN" == false ]]; then
+        mv "$undo_log" "${undo_log}.completed"
+        log_info "Undo log archived"
+    fi
+
+    end_operation
+}
+
+# List available undo operations
+list_undo_operations() {
+    begin_operation "Available Undo Operations"
+
+    if [[ ! -d "$UNDO_LOG_DIR" ]] || [[ -z "$(ls -A "$UNDO_LOG_DIR" 2>/dev/null)" ]]; then
+        log_info "No undo operations available"
+        return 0
+    fi
+
+    echo ""
+    echo -e "${COLOR_BRIGHT_CYAN}Available Undo Logs:${COLOR_RESET}"
+    echo ""
+
+    local count=0
+    for log_file in "$UNDO_LOG_DIR"/organize-*.log; do
+        [[ ! -f "$log_file" ]] && continue
+
+        ((count++))
+        local op_id=$(basename "$log_file" .log | sed 's/organize-//')
+        local timestamp=$(grep '# Timestamp:' "$log_file" | cut -d':' -f2- | xargs)
+        local op_count=$(grep -v '^#' "$log_file" | wc -l)
+
+        echo -e "${COLOR_WHITE}[$count]${COLOR_RESET} ID: ${COLOR_CYAN}$op_id${COLOR_RESET}"
+        echo -e "    Timestamp: $timestamp"
+        echo -e "    Operations: $op_count file(s) moved"
+        echo ""
+    done
+
+    if [[ $count -eq 0 ]]; then
+        log_info "No undo operations available"
+    fi
+
+    end_operation
+}
+
+# Organize files by subfolder names
+# Searches for files matching subfolder names and moves them to those subfolders
+# Args: $1=target_folder(optional), $2=search_path(optional)
+# Returns: 0 on success
+organize_by_subfolder_names() {
+    local target_folder="${1:-.}"
+    local search_path="${2:-.}"
+
+    begin_operation "Organize by Subfolder Names"
+
+    # Validate target folder
+    if [[ ! -d "$target_folder" ]]; then
+        log_error "Target folder does not exist: $target_folder"
+        return 1
+    fi
+
+    log_info "Target folder: $target_folder"
+    log_info "Search path: $search_path"
+    echo ""
+
+    # Get all subdirectories (exclude hidden, "full", and common system dirs)
+    local -a subfolders
+    while IFS= read -r dir; do
+        local basename=$(basename "$dir")
+        # Skip hidden, full, and system directories
+        if [[ ! "$basename" =~ ^\. ]] && \
+           [[ "$basename" != "full" ]] && \
+           [[ "$basename" != "Full" ]] && \
+           [[ "$basename" != "FULL" ]] && \
+           [[ "$basename" != "tmp" ]] && \
+           [[ "$basename" != "temp" ]]; then
+            subfolders+=("$dir")
+        fi
+    done < <(find "$target_folder" -mindepth 1 -maxdepth 1 -type d | sort)
+
+    if [[ ${#subfolders[@]} -eq 0 ]]; then
+        log_warning "No valid subfolders found in: $target_folder"
+        return 1
+    fi
+
+    log_info "Found ${#subfolders[@]} subfolder(s) to match against"
+    echo ""
+
+    # Show folders
+    echo -e "${COLOR_BRIGHT_CYAN}Subfolders:${COLOR_RESET}"
+    for dir in "${subfolders[@]}"; do
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} $(basename "$dir")"
+    done
+    echo ""
+
+    # Confirm before proceeding
+    if [[ "$INTERACTIVE" == true ]]; then
+        echo -n "Proceed with organizing files? (y/n): "
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            log_warning "Operation cancelled"
+            return 1
+        fi
+    fi
+
+    echo ""
+
+    # Create undo log
+    local operation_id=$(date +%Y%m%d-%H%M%S)
+    local undo_log=""
+    if [[ "$ORGANIZE_LOG_OPERATIONS" == true && "$DRY_RUN" == false ]]; then
+        undo_log=$(_create_undo_log "$operation_id")
+        log_info "Undo log: $(basename "$undo_log")"
+        echo ""
+    fi
+
+    local moved_count=0
+    local skipped_count=0
+    local total_files=0
+
+    # First pass: count total files to process
+    if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+        log_verbose "Counting files to process..."
+        for subfolder in "${subfolders[@]}"; do
+            local subfolder_name=$(basename "$subfolder")
+            local count=$(find "$search_path" -type f \( \
+                -iname "*${subfolder_name}*" \
+                \) 2>/dev/null | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg)$' | wc -l)
+            ((total_files += count))
+        done
+        log_info "Total files to process: $total_files"
+        echo ""
+    fi
+
+    local processed=0
+
+    # For each subfolder, search for matching files
+    for subfolder in "${subfolders[@]}"; do
+        local subfolder_name=$(basename "$subfolder")
+        local subfolder_name_lower=$(echo "$subfolder_name" | tr '[:upper:]' '[:lower:]')
+
+        log_info "Searching for files matching: $subfolder_name"
+
+        # Find all video files in search path that match the subfolder name
+        local -a matching_files
+        while IFS= read -r file; do
+            # Skip if file doesn't exist
+            [[ ! -f "$file" ]] && continue
+
+            # Get parent directory
+            local parent_dir=$(dirname "$file")
+            local parent_basename=$(basename "$parent_dir")
+            local parent_basename_lower=$(echo "$parent_basename" | tr '[:upper:]' '[:lower:]')
+
+            # Skip if already in the target subfolder
+            if [[ "$parent_dir" == "$subfolder" ]]; then
+                log_verbose "Skipping (already in target): $(basename "$file")"
+                ((skipped_count++))
+                continue
+            fi
+
+            # Skip if in a "full" folder
+            if [[ "$parent_basename_lower" == "full" ]] || [[ "$file" =~ /[Ff][Uu][Ll][Ll]/ ]]; then
+                log_verbose "Skipping (in 'full' folder): $(basename "$file")"
+                ((skipped_count++))
+                continue
+            fi
+
+            matching_files+=("$file")
+        done < <(find "$search_path" -type f \( \
+            -iname "*${subfolder_name}*" -o \
+            -iname "*${subfolder_name_lower}*" \
+            \) 2>/dev/null | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg)$')
+
+        # Move matching files
+        if [[ ${#matching_files[@]} -gt 0 ]]; then
+            log_info "Found ${#matching_files[@]} file(s) to move to: $subfolder_name"
+
+            for file in "${matching_files[@]}"; do
+                ((processed++))
+
+                # Show progress
+                if [[ "$ORGANIZE_SHOW_PROGRESS" == true && $total_files -gt 0 ]]; then
+                    local percent=$((processed * 100 / total_files))
+                    printf "\r${COLOR_CYAN}Progress: [%d/%d] %d%%${COLOR_RESET} " "$processed" "$total_files" "$percent"
+                fi
+
+                local filename=$(basename "$file")
+                local dest="$subfolder/$filename"
+
+                # Check if destination already exists
+                if [[ -f "$dest" ]]; then
+                    if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+                        echo "" # New line before warning
+                    fi
+                    log_warning "Destination already exists: $filename"
+                    ((skipped_count++))
+                    continue
+                fi
+
+                # Move file
+                if [[ "$DRY_RUN" == true ]]; then
+                    if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+                        echo "" # New line before message
+                    fi
+                    echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would move: $filename → $subfolder_name/"
+                    ((moved_count++))
+                else
+                    if mv "$file" "$dest"; then
+                        # Log for undo
+                        if [[ -n "$undo_log" ]]; then
+                            _log_move_operation "$undo_log" "$file" "$dest"
+                        fi
+
+                        if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+                            echo "" # New line before success message
+                        fi
+                        log_success "Moved: $filename → $subfolder_name/"
+                        ((moved_count++))
+                    else
+                        if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+                            echo "" # New line before error
+                        fi
+                        log_error "Failed to move: $filename"
+                        ((skipped_count++))
+                    fi
+                fi
+            done
+        else
+            log_verbose "No matches for: $subfolder_name"
+        fi
+
+        echo ""
+    done
+
+    # Summary
+    echo ""
+    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Summary:${COLOR_RESET}"
+    echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Files moved: ${COLOR_WHITE}$moved_count${COLOR_RESET}"
+    echo -e "  ${COLOR_YELLOW}${SYMBOL_ARROW}${COLOR_RESET} Files skipped: ${COLOR_WHITE}$skipped_count${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+
+    end_operation
+}
+
 ################################################################################
 # INTERACTIVE MENU SYSTEM
 ################################################################################
@@ -4390,10 +4785,13 @@ show_utilities_menu() {
 
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}UTILITIES${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}View Last 50 Log Entries${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Open Log Directory${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Test Filename Transformation${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Display System Information${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Organize by Subfolder Names${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}List Undo Operations${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Undo Last Organize Operation${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}View Last 50 Log Entries${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Open Log Directory${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Test Filename Transformation${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} ${COLOR_WHITE}Display System Information${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
@@ -4414,11 +4812,33 @@ show_settings_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Verbose Output${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}View Supported Extensions${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Granular Controls${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Organize Settings${COLOR_RESET}"
     echo ""
-    echo -e "${COLOR_YELLOW}[5]${COLOR_RESET} ${COLOR_WHITE}Save Configuration${COLOR_RESET}       ${COLOR_YELLOW}[6]${COLOR_RESET} ${COLOR_WHITE}Load Configuration${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}[7]${COLOR_RESET} ${COLOR_WHITE}List Profiles${COLOR_RESET}            ${COLOR_YELLOW}[8]${COLOR_RESET} ${COLOR_WHITE}Delete Profile${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}[6]${COLOR_RESET} ${COLOR_WHITE}Save Configuration${COLOR_RESET}       ${COLOR_YELLOW}[7]${COLOR_RESET} ${COLOR_WHITE}Load Configuration${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}[8]${COLOR_RESET} ${COLOR_WHITE}List Profiles${COLOR_RESET}            ${COLOR_YELLOW}[9]${COLOR_RESET} ${COLOR_WHITE}Delete Profile${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+}
+
+show_organize_settings_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}ORGANIZE SETTINGS${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BOLD}${COLOR_WHITE}Current Settings:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Default Target:  ${COLOR_WHITE}$ORGANIZE_DEFAULT_TARGET${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Default Search:  ${COLOR_WHITE}$ORGANIZE_DEFAULT_SEARCH${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Show Progress:   $([[ "$ORGANIZE_SHOW_PROGRESS" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Log Operations:  $([[ "$ORGANIZE_LOG_OPERATIONS" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Set Default Target Path${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Set Default Search Path${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Toggle Show Progress${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Toggle Log Operations${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Settings${COLOR_RESET}"
     echo ""
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
@@ -4788,12 +5208,13 @@ handle_subtitles() {
                 echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Speaker Diarization (Current: $([[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
                 echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Auto-Punctuation (Current: $([[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
                 echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Editing (Current: $([[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Toggle Auto-Edit (Current: $([[ "$SUBTITLE_AUTO_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
                 echo ""
                 echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
-                echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-                echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
-                echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
-                echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Configure Filters & Selection"
+                echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+                echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
+                echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
+                echo -e "${COLOR_WHITE}[11]${COLOR_RESET} Configure Filters & Selection"
                 echo ""
                 echo -n "Select option (or Enter to skip): "
                 read -r adv_choice
@@ -4855,6 +5276,14 @@ handle_subtitles() {
                         log_success "Interactive editing toggled"
                         ;;
                     7)
+                        if [[ "$SUBTITLE_AUTO_EDIT" == true ]]; then
+                            SUBTITLE_AUTO_EDIT=false
+                        else
+                            SUBTITLE_AUTO_EDIT=true
+                        fi
+                        log_success "Auto-edit toggled"
+                        ;;
+                    8)
                         if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
                             SUBTITLE_RECURSIVE=false
                             log_info "Recursive mode DISABLED - will only scan current directory"
@@ -4865,7 +5294,7 @@ handle_subtitles() {
                             log_info "Max files: $SUBTITLE_MAX_FILES files"
                         fi
                         ;;
-                    8)
+                    9)
                         echo -n "Enter maximum recursion depth (1-50): "
                         read -r depth
                         if [[ $depth -ge 1 && $depth -le 50 ]]; then
@@ -4875,7 +5304,7 @@ handle_subtitles() {
                             log_error "Invalid depth. Must be 1-50"
                         fi
                         ;;
-                    9)
+                    10)
                         echo -n "Enter maximum files to process (1-10000): "
                         read -r max_files
                         if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
@@ -4885,7 +5314,7 @@ handle_subtitles() {
                             log_error "Invalid number. Must be 1-10000"
                         fi
                         ;;
-                    10)
+                    11)
                         # Filters & Selection submenu
                         clear
                         echo -e "${COLOR_BRIGHT_CYAN}Advanced Filters & Selection${COLOR_RESET}"
@@ -5319,13 +5748,48 @@ handle_utilities() {
         case "$choice" in
             1)
                 clear
+                echo -e "${COLOR_BRIGHT_CYAN}Organize by Subfolder Names${COLOR_RESET}"
+                echo ""
+                echo "This feature will:"
+                echo "  1. Scan a target folder for subfolders"
+                echo "  2. Search for video files matching those subfolder names"
+                echo "  3. Move matching files into their respective subfolders"
+                echo "  4. Skip files in 'full' folders or already in place"
+                echo ""
+                echo -n "Enter target folder with subfolders (or . for current): "
+                read -r target_folder
+                target_folder="${target_folder:-.}"
+
+                echo -n "Enter search path (or . for current, or enter for target): "
+                read -r search_path
+                search_path="${search_path:-$target_folder}"
+
+                organize_by_subfolder_names "$target_folder" "$search_path"
+
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                clear
+                list_undo_operations
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                clear
+                undo_organize_operation
+                echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                clear
                 echo -e "${COLOR_BRIGHT_CYAN}Last 50 Log Entries:${COLOR_RESET}"
                 echo ""
                 tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
                 echo ""
                 read -p "Press Enter to continue..."
                 ;;
-            2)
+            5)
                 if command -v xdg-open &> /dev/null; then
                     xdg-open "$LOG_DIR" 2>/dev/null
                 elif command -v explorer.exe &> /dev/null; then
@@ -5335,29 +5799,29 @@ handle_utilities() {
                 fi
                 read -p "Press Enter to continue..."
                 ;;
-            3)
+            6)
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Test Filename Transformation:${COLOR_RESET}"
                 echo ""
                 echo -n "Enter filename to test: "
                 read -r test_file
-                
+
                 echo ""
                 echo -e "${COLOR_WHITE}Original:${COLOR_RESET} $test_file"
-                
+
                 local result=$(remove_dashes "$test_file")
                 echo -e "${COLOR_WHITE}After dash removal:${COLOR_RESET} $result"
-                
+
                 result=$(apply_bracket_notation "$result")
                 echo -e "${COLOR_WHITE}After bracket notation:${COLOR_RESET} $result"
-                
+
                 result=$(fix_bracket_spacing "$result")
                 echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
-                
+
                 echo ""
                 read -p "Press Enter to continue..."
                 ;;
-            4)
+            7)
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}System Information:${COLOR_RESET}"
                 echo ""
@@ -5383,6 +5847,70 @@ handle_utilities() {
                 command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
                 command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
                 echo ""
+                read -p "Press Enter to continue..."
+                ;;
+            b|B)
+                break
+                ;;
+            *)
+                log_error "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
+}
+
+# Handle organize settings
+handle_organize_settings() {
+    while true; do
+        show_organize_settings_menu
+        read -r choice
+
+        case "$choice" in
+            1)
+                echo ""
+                echo -n "Enter default target folder path: "
+                read -r target_path
+                if [[ -d "$target_path" ]]; then
+                    ORGANIZE_DEFAULT_TARGET="$target_path"
+                    log_success "Default target set to: $target_path"
+                else
+                    log_warning "Path does not exist, but setting anyway: $target_path"
+                    ORGANIZE_DEFAULT_TARGET="$target_path"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            2)
+                echo ""
+                echo -n "Enter default search path: "
+                read -r search_path
+                if [[ -d "$search_path" ]]; then
+                    ORGANIZE_DEFAULT_SEARCH="$search_path"
+                    log_success "Default search path set to: $search_path"
+                else
+                    log_warning "Path does not exist, but setting anyway: $search_path"
+                    ORGANIZE_DEFAULT_SEARCH="$search_path"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            3)
+                if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
+                    ORGANIZE_SHOW_PROGRESS=false
+                    log_success "Progress display DISABLED"
+                else
+                    ORGANIZE_SHOW_PROGRESS=true
+                    log_success "Progress display ENABLED"
+                fi
+                read -p "Press Enter to continue..."
+                ;;
+            4)
+                if [[ "$ORGANIZE_LOG_OPERATIONS" == true ]]; then
+                    ORGANIZE_LOG_OPERATIONS=false
+                    log_success "Operation logging DISABLED (undo will not be available)"
+                else
+                    ORGANIZE_LOG_OPERATIONS=true
+                    log_success "Operation logging ENABLED (allows undo)"
+                fi
                 read -p "Press Enter to continue..."
                 ;;
             b|B)
@@ -5437,6 +5965,9 @@ handle_settings() {
                 handle_granular_controls
                 ;;
             5)
+                handle_organize_settings
+                ;;
+            6)
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Save Configuration${COLOR_RESET}"
                 echo ""
@@ -5445,7 +5976,7 @@ handle_settings() {
                 save_config "$profile_name"
                 read -p "Press Enter to continue..."
                 ;;
-            6)
+            7)
                 clear
                 echo -e "${COLOR_BRIGHT_CYAN}Load Configuration${COLOR_RESET}"
                 echo ""
@@ -5455,12 +5986,12 @@ handle_settings() {
                 load_config "$profile_name"
                 read -p "Press Enter to continue..."
                 ;;
-            7)
+            8)
                 clear
                 list_config_profiles
                 read -p "Press Enter to continue..."
                 ;;
-            8)
+            9)
                 clear
                 list_config_profiles
                 echo ""
@@ -5664,6 +6195,10 @@ ${COLOR_BOLD}ADVANCED SUBTITLE OPTIONS:${COLOR_RESET}
     --speaker-diarization   Enable speaker identification
     --no-punctuation        Disable automatic punctuation fixes
 
+${COLOR_BOLD}ORGANIZE OPTIONS:${COLOR_RESET}
+    --organize-target <dir> Set default target folder for organize
+    --organize-search <dir> Set default search path for organize
+
 ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     rename <dir>            Rename files with bracket notation
     flatten <dir>           Move all videos to top directory
@@ -5673,6 +6208,9 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     workflow-new <dir>      New collection setup workflow
     workflow-clean <dir>    Deep clean workflow
     batch                   Batch process multiple folders
+    --organize              Organize files by subfolder names
+    --undo-organize [id]    Undo organize operation (optional: operation ID)
+    --list-undo             List available undo operations
 
 ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
     # Interactive menu
@@ -5698,6 +6236,15 @@ ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
 
     # Full workflow for new collection
     $0 workflow-new /mnt/c/Users/Eric/Videos
+
+    # Organize files by subfolder names
+    $0 --organize-target /path/to/folders --organize-search /path/to/search --organize
+
+    # Undo last organize operation
+    $0 --undo-organize
+
+    # List all available undo operations
+    $0 --list-undo
 
 ${COLOR_BOLD}SUPPORTED VIDEO FORMATS:${COLOR_RESET}
     mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
@@ -5800,6 +6347,39 @@ parse_arguments() {
                 log_info "Auto-punctuation disabled"
                 shift
                 ;;
+            --organize)
+                command="organize"
+                shift
+                ;;
+            --organize-target)
+                shift
+                if [[ -n "$1" ]]; then
+                    ORGANIZE_DEFAULT_TARGET="$1"
+                    log_info "Organize target set to: $ORGANIZE_DEFAULT_TARGET"
+                    shift
+                fi
+                ;;
+            --organize-search)
+                shift
+                if [[ -n "$1" ]]; then
+                    ORGANIZE_DEFAULT_SEARCH="$1"
+                    log_info "Organize search path set to: $ORGANIZE_DEFAULT_SEARCH"
+                    shift
+                fi
+                ;;
+            --undo-organize)
+                command="undo-organize"
+                shift
+                if [[ -n "$1" && "$1" != -* ]]; then
+                    # Operation ID provided
+                    directory="$1"
+                    shift
+                fi
+                ;;
+            --list-undo)
+                command="list-undo"
+                shift
+                ;;
             rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch)
                 command="$1"
                 shift
@@ -5823,7 +6403,7 @@ parse_arguments() {
     fi
 
     # Validate directory for commands that need it
-    if [[ "$command" != "batch" ]]; then
+    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "undo-organize" && "$command" != "organize" ]]; then
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
             show_usage
@@ -5872,6 +6452,15 @@ parse_arguments() {
             start_operation "Batch Processing"
             batch_process_folders
             end_operation
+            ;;
+        organize)
+            organize_by_subfolder_names "$ORGANIZE_DEFAULT_TARGET" "$ORGANIZE_DEFAULT_SEARCH"
+            ;;
+        undo-organize)
+            undo_organize_operation "$directory"
+            ;;
+        list-undo)
+            list_undo_operations
             ;;
     esac
 }
