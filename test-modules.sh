@@ -60,8 +60,28 @@ else
 fi
 echo ""
 
-# Test 5: Initialize core
-echo "Test 5: Testing init_core function..."
+# Test 5: Load utils module
+echo "Test 5: Loading utils.sh..."
+if source "$LIB_DIR/utils.sh"; then
+    echo "  ✓ utils.sh loaded successfully"
+else
+    echo "  ✗ Failed to load utils.sh"
+    exit 1
+fi
+echo ""
+
+# Test 6: Load file-ops module
+echo "Test 6: Loading file-ops.sh..."
+if source "$LIB_DIR/file-ops.sh"; then
+    echo "  ✓ file-ops.sh loaded successfully"
+else
+    echo "  ✗ Failed to load file-ops.sh"
+    exit 1
+fi
+echo ""
+
+# Test 7: Initialize core
+echo "Test 7: Testing init_core function..."
 if init_core; then
     echo "  ✓ init_core executed successfully"
 else
@@ -70,8 +90,8 @@ else
 fi
 echo ""
 
-# Test 6: Initialize logging
-echo "Test 6: Testing init_logging function..."
+# Test 8: Initialize logging
+echo "Test 8: Testing init_logging function..."
 if init_logging; then
     echo "  ✓ init_logging executed successfully"
 else
@@ -80,8 +100,8 @@ else
 fi
 echo ""
 
-# Test 7: Test logging functions
-echo "Test 7: Testing logging functions..."
+# Test 9: Test logging functions
+echo "Test 9: Testing logging functions..."
 log_verbose "This is a verbose message"
 log_info "This is an info message"
 log_success "This is a success message"
@@ -89,8 +109,8 @@ log_warning "This is a warning message"
 echo "  ✓ All logging functions work"
 echo ""
 
-# Test 8: Test platform functions
-echo "Test 8: Testing platform functions..."
+# Test 10: Test platform functions
+echo "Test 10: Testing platform functions..."
 
 # Test format_bytes
 bytes_formatted=$(format_bytes 1073741824)
@@ -103,8 +123,55 @@ echo "  - get_file_size_bytes(test-modules.sh) = $script_size bytes"
 echo "  ✓ Platform functions work"
 echo ""
 
-# Test 9: Test statistics
-echo "Test 9: Testing statistics..."
+# Test 11: Test utils functions
+echo "Test 11: Testing utils functions..."
+
+# Test file type detection
+test_file="test.mp4"
+if is_video_file "$test_file"; then
+    echo "  - is_video_file(test.mp4) = true ✓"
+else
+    echo "  ✗ is_video_file test failed"
+fi
+
+test_image="test.jpg"
+if is_image_file "$test_image"; then
+    echo "  - is_image_file(test.jpg) = true ✓"
+else
+    echo "  ✗ is_image_file test failed"
+fi
+
+# Test media type detection
+media_type=$(get_media_type "video.mkv")
+echo "  - get_media_type(video.mkv) = $media_type"
+
+# Test sanitization
+sanitized=$(sanitize_input "test<>string")
+echo "  - sanitize_input(\"test<>string\") = \"$sanitized\""
+
+echo "  ✓ Utils functions work"
+echo ""
+
+# Test 12: Test file-ops functions
+echo "Test 12: Testing file-ops functions..."
+
+# Test bracket notation
+result=$(apply_bracket_notation "studio.video file.mp4")
+echo "  - apply_bracket_notation(\"studio.video file.mp4\") = \"$result\""
+
+# Test dash removal
+result=$(remove_dashes "video - name.mp4")
+echo "  - remove_dashes(\"video - name.mp4\") = \"$result\""
+
+# Test cleanup pipeline
+result=$(cleanup_filename "studio - video file.mp4")
+echo "  - cleanup_filename(\"studio - video file.mp4\") = \"$result\""
+
+echo "  ✓ File-ops functions work"
+echo ""
+
+# Test 13: Test statistics
+echo "Test 13: Testing statistics..."
 STATS[files_processed]=10
 STATS[files_renamed]=5
 STATS[files_moved]=3
@@ -113,8 +180,8 @@ print_statistics
 echo "  ✓ Statistics display works"
 echo ""
 
-# Test 10: Reset statistics
-echo "Test 10: Testing reset_statistics..."
+# Test 14: Reset statistics
+echo "Test 14: Testing reset_statistics..."
 reset_statistics
 if [[ ${STATS[files_processed]} -eq 0 && ${STATS[errors]} -eq 0 ]]; then
     echo "  ✓ Statistics reset successfully"
@@ -128,11 +195,14 @@ echo ""
 echo "===================================================="
 echo "All module tests passed! ✓"
 echo ""
-echo "Modules loaded:"
-echo "  • lib/core.sh"
-echo "  • lib/platform.sh"
-echo "  • lib/logging.sh"
-echo "  • lib/config.sh"
+echo "Modules loaded (Phase 1 + Phase 2):"
+echo "  • lib/core.sh         (Phase 1)"
+echo "  • lib/platform.sh     (Phase 1)"
+echo "  • lib/logging.sh      (Phase 1)"
+echo "  • lib/config.sh       (Phase 1)"
+echo "  • lib/utils.sh        (Phase 2) ✨"
+echo "  • lib/file-ops.sh     (Phase 2) ✨"
 echo ""
+echo "Progress: 6/12 modules complete (50%)"
 echo "Modular architecture is working correctly!"
 echo "===================================================="
