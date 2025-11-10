@@ -158,6 +158,13 @@ vmgr rename ~/V<Tab>
 
 vmgr duplicates /mnt/<Tab>
 # Shows mounted drives: c d e f ...
+
+# Folder autocomplete for organize options
+vmgr --organize-target ~/V<Tab>
+# Shows directories starting with V in home
+
+vmgr --organize-search /path/to/<Tab>
+# Shows subdirectories in /path/to/
 ```
 
 ### Complex Command Building
@@ -171,6 +178,14 @@ vmgr subtitles --model base --<Tab>  # Select: --format
 vmgr subtitles --model base --format <Tab>  # Select: srt
 vmgr subtitles --model base --format srt ~/Videos/<Tab>
 # Final: vmgr subtitles --model base --format srt ~/Videos/MyFolder
+
+# Organize files with folder autocomplete
+vmgr --organize-target <Tab>  # Shows available folders
+vmgr --organize-target ~/Videos/<Tab>  # Shows subfolders
+vmgr --organize-target ~/Videos/Sorted --organize-search <Tab>
+vmgr --organize-target ~/Videos/Sorted --organize-search ~/Downloads/<Tab>
+vmgr --organize-target ~/Videos/Sorted --organize-search ~/Downloads/Unsorted --organize
+# Final: organize files from ~/Downloads/Unsorted to ~/Videos/Sorted
 ```
 
 ---
@@ -202,6 +217,11 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `--edit` - Interactive edit mode
 - `--speaker-diarization` - Speaker identification
 - `--no-punctuation` - Disable auto-punctuation
+- `--organize` - Organize files by subfolder names
+- `--organize-target` - Set default target folder (with folder autocomplete)
+- `--organize-search` - Set default search path (with folder autocomplete)
+- `--undo-organize` - Undo organize operation
+- `--list-undo` - List available undo operations
 
 ### Whisper Models
 - `tiny` - Fastest, least accurate

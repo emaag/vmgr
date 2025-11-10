@@ -27,6 +27,11 @@ _vmgr_completion() {
         --edit
         --speaker-diarization
         --no-punctuation
+        --organize
+        --organize-target
+        --organize-search
+        --undo-organize
+        --list-undo
     "
 
     # Whisper models
@@ -53,6 +58,11 @@ _vmgr_completion() {
             ;;
         --parallel)
             COMPREPLY=( $(compgen -W "1 2 3 4 5 6 7 8" -- ${cur}) )
+            return 0
+            ;;
+        --organize-target|--organize-search)
+            # Complete directory paths for organize options
+            COMPREPLY=( $(compgen -d -- ${cur}) )
             return 0
             ;;
         vmgr|video-manager-ultimate.sh)
