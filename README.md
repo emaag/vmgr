@@ -189,12 +189,14 @@ mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
 
 ## Documentation
 
-- **README.md** - This file (overview and quick reference)
-- **INSTALLATION-GUIDE.md** - Setup instructions and troubleshooting
+- **README.md** - Overview and quick start (this file)
+- **INSTALLATION-GUIDE.md** - Setup and troubleshooting
 - **VIDEO-MANAGER-BASH-GUIDE.md** - Complete feature documentation
 - **QUICK-REFERENCE.md** - Command cheat sheet
-- **ADVANCED-FEATURES-v1.2.md** - Advanced configuration guide
+- **ADVANCED-FEATURES-v1.2.md** - Advanced features and configuration
 - **SUBTITLE-FEATURE-GUIDE.md** - Subtitle generation guide
+- **TAB-COMPLETION.md** - Tab completion setup
+- **CROSS-PLATFORM.md** - Platform-specific information
 
 ---
 
