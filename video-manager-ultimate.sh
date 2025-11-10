@@ -195,6 +195,13 @@ STATS[low_confidence_count]=0
 CURRENT_OPERATION=""
 START_TIME=""
 TARGET_FOLDER=""
+CONFIG_DIR="$HOME/.config/video-manager"
+
+# Source navigation module
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/lib/navigation.sh" ]]; then
+    source "$SCRIPT_DIR/lib/navigation.sh"
+fi
 
 ################################################################################
 # PLATFORM DETECTION & COMPATIBILITY
@@ -4973,15 +4980,75 @@ show_granular_controls_menu() {
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
-# Get directory input
+# Get directory input with interactive navigation
 get_directory_input() {
-    echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
-    read -r dir
+    local dir=""
+    local use_navigation=""
 
+    # Check if navigation module is available
+    if declare -f interactive_navigation > /dev/null; then
+        echo ""
+        echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} How would you like to select a directory?"
+        echo ""
+        echo "[1] Interactive Navigation (Browse drives, Recent, Favorites)"
+        echo "[2] Enter Path Manually"
+        echo "[0] Cancel"
+        echo ""
+        echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option [0-2]: "
+        read -r use_navigation
+
+        case "$use_navigation" in
+            1)
+                # Use interactive navigation
+                dir=$(interactive_navigation)
+                if [[ $? -ne 0 ]] || [[ -z "$dir" ]]; then
+                    log_warning "Navigation cancelled"
+                    return 1
+                fi
+                ;;
+            2)
+                # Manual entry
+                echo ""
+                echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
+                read -r dir
+                ;;
+            0)
+                return 1
+                ;;
+            *)
+                log_error "Invalid option"
+                return 1
+                ;;
+        esac
+    else
+        # Fallback to manual entry if navigation module not available
+        echo ""
+        echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
+        read -r dir
+    fi
+
+    # Validate the directory
     dir=$(validate_directory "$dir")
     if [[ $? -eq 0 ]]; then
         TARGET_FOLDER="$dir"
+
+        # Add to recent paths if navigation module is available
+        if declare -f add_to_recent_paths > /dev/null; then
+            add_to_recent_paths "$dir"
+        fi
+
+        # Offer to add to favorites
+        if declare -f add_to_favorites > /dev/null; then
+            echo ""
+            echo -n "Add this path to favorites? [y/N]: "
+            read -r add_fav
+            if [[ "$add_fav" =~ ^[Yy]$ ]]; then
+                echo -n "Enter label (or press Enter for '$(basename "$dir")'): "
+                read -r fav_label
+                add_to_favorites "$dir" "$fav_label"
+            fi
+        fi
+
         return 0
     else
         return 1
