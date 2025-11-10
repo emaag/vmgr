@@ -5,6 +5,33 @@
 
 ---
 
+## 🪟 Windows Users - Use WSL!
+
+**If you're on Windows, we highly recommend using WSL (Windows Subsystem for Linux) instead of Git Bash.**
+
+### Why WSL?
+- ✅ **10x faster** file operations
+- ✅ **Full Linux compatibility** - all features work perfectly
+- ✅ **Better performance** - native bash environment
+- ✅ **Easy migration** - automated script included
+
+### Quick WSL Setup
+
+```bash
+# In PowerShell (as Administrator)
+wsl --install
+
+# After restart, from WSL terminal:
+cd ~
+curl -O https://raw.githubusercontent.com/emaag/vmgr/main/migrate-to-wsl.sh
+chmod +x migrate-to-wsl.sh
+./migrate-to-wsl.sh
+```
+
+📖 **See [WSL-SETUP-GUIDE.md](WSL-SETUP-GUIDE.md) for complete instructions**
+
+---
+
 ## ✅ Prerequisites Check
 
 Open your terminal and run these commands:

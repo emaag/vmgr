@@ -206,6 +206,7 @@ detect_os() {
         Linux*)
             if grep -qi microsoft /proc/version 2>/dev/null; then
                 OS_TYPE="WSL"
+                detect_wsl_version
             else
                 OS_TYPE="Linux"
             fi
@@ -221,6 +222,53 @@ detect_os() {
             ;;
     esac
     export OS_TYPE
+}
+
+# Detect WSL version (1 or 2)
+detect_wsl_version() {
+    if [[ -f /proc/version ]]; then
+        if grep -qi "WSL2" /proc/version 2>/dev/null; then
+            WSL_VERSION="2"
+        else
+            # Check kernel version to determine WSL1 vs WSL2
+            local kernel_version=$(uname -r)
+            if [[ "$kernel_version" =~ -microsoft-standard ]]; then
+                WSL_VERSION="2"
+            else
+                WSL_VERSION="1"
+            fi
+        fi
+    else
+        WSL_VERSION="unknown"
+    fi
+    export WSL_VERSION
+}
+
+# Check if path is on Windows filesystem (mounted via /mnt/)
+is_windows_mount() {
+    local path="$1"
+    [[ "$path" =~ ^/mnt/[a-z]/ ]]
+}
+
+# Get WSL performance recommendation
+check_wsl_performance() {
+    local dir="$1"
+
+    if [[ "$OS_TYPE" == "WSL" ]] && is_windows_mount "$dir"; then
+        log_warning "Performance Note: Operating on Windows filesystem (/mnt/)"
+        log_warning "For better performance, consider copying files to WSL filesystem first"
+        log_warning "Example: cp -r '$dir' ~/Videos/"
+        echo ""
+
+        if [[ "$INTERACTIVE" == true ]]; then
+            read -p "Continue anyway? (y/n): " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                return 1
+            fi
+        fi
+    fi
+    return 0
 }
 
 # Platform-specific stat command for file size
@@ -881,34 +929,111 @@ convert_to_wsl_path() {
         echo "$path"
         return 0
     fi
-    
+
     # Convert Windows path (C:\Users\...) to WSL path (/mnt/c/Users/...)
     if [[ "$path" =~ ^([A-Za-z]): ]]; then
         local drive="${BASH_REMATCH[1],,}" # Convert to lowercase
         local rest="${path#*:}"
         rest="${rest//\\//}" # Convert backslashes to forward slashes
         echo "/mnt/$drive$rest"
+        return 0
+    fi
+
+    # Handle UNC paths (\\server\share -> /mnt/server/share or use wslpath if available)
+    if [[ "$path" =~ ^\\\\([^\\]+)\\(.+) ]]; then
+        if command -v wslpath &>/dev/null; then
+            wslpath -u "$path" 2>/dev/null || echo "$path"
+        else
+            local server="${BASH_REMATCH[1]}"
+            local share="${BASH_REMATCH[2]//\\//}"
+            echo "/mnt/$server/$share"
+        fi
+        return 0
+    fi
+
+    # Use wslpath if available for any other Windows-style paths
+    if command -v wslpath &>/dev/null && [[ "$path" =~ [A-Za-z]: ]]; then
+        wslpath -u "$path" 2>/dev/null || echo "$path"
+        return 0
+    fi
+
+    # Return as-is if we can't convert
+    echo "$path"
+}
+
+# Convert WSL path to Windows path (useful for opening files in Windows apps)
+convert_to_windows_path() {
+    local path="$1"
+
+    if [[ -z "$path" ]]; then
+        log_error "convert_to_windows_path: path parameter is required"
+        return 1
+    fi
+
+    # If wslpath is available, use it
+    if command -v wslpath &>/dev/null; then
+        wslpath -w "$path" 2>/dev/null || echo "$path"
+        return 0
+    fi
+
+    # Manual conversion for /mnt/c/ style paths
+    if [[ "$path" =~ ^/mnt/([a-z])(/.*)? ]]; then
+        local drive="${BASH_REMATCH[1]^^}" # Convert to uppercase
+        local rest="${BASH_REMATCH[2]//\//\\}" # Convert forward slashes to backslashes
+        echo "${drive}:${rest}"
+        return 0
+    fi
+
+    # Return as-is if not a convertible path
+    echo "$path"
+}
+
+# Open file or directory in Windows Explorer (WSL only)
+open_in_windows() {
+    local path="$1"
+
+    if [[ "$OS_TYPE" != "WSL" ]]; then
+        log_error "open_in_windows: Only available in WSL"
+        return 1
+    fi
+
+    if [[ ! -e "$path" ]]; then
+        log_error "open_in_windows: Path does not exist: $path"
+        return 1
+    fi
+
+    # Get absolute path
+    path=$(readlink -f "$path")
+
+    # Convert to Windows path
+    local win_path=$(convert_to_windows_path "$path")
+
+    # Open in Explorer
+    if command -v explorer.exe &>/dev/null; then
+        explorer.exe "$win_path" 2>/dev/null &
+        log_info "Opening in Windows Explorer: $win_path"
     else
-        echo "$path"
+        log_error "explorer.exe not found"
+        return 1
     fi
 }
 
 # Validate directory exists
 validate_directory() {
     local dir="$1"
-    
+
     if [[ -z "$dir" ]]; then
         log_error "No directory specified"
         return 1
     fi
-    
+
     dir=$(convert_to_wsl_path "$dir")
-    
+
     if [[ ! -d "$dir" ]]; then
         log_error "Directory does not exist: $dir"
         return 1
     fi
-    
+
     if [[ ! -r "$dir" ]]; then
         log_error "Directory is not readable: $dir"
         return 1

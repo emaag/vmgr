@@ -7,13 +7,30 @@ Cross-platform video file management and organization tool for Linux, macOS, Win
 
 ## Installation
 
+### Quick Install (Linux/macOS/WSL)
+
 ```bash
 git clone https://github.com/emaag/vmgr.git
 cd vmgr
 ./install.sh
 ```
 
-Manual setup:
+### WSL Migration (Windows → WSL)
+
+**Recommended for Windows users!** Migrate from Windows to WSL for better performance:
+
+```bash
+# From WSL terminal
+cd ~
+curl -O https://raw.githubusercontent.com/emaag/vmgr/main/migrate-to-wsl.sh
+chmod +x migrate-to-wsl.sh
+./migrate-to-wsl.sh
+```
+
+See **[WSL-SETUP-GUIDE.md](WSL-SETUP-GUIDE.md)** for complete WSL installation and optimization guide.
+
+### Manual setup
+
 ```bash
 chmod +x video-manager-ultimate.sh
 ./video-manager-ultimate.sh
@@ -68,19 +85,42 @@ chmod +x video-manager-ultimate.sh
 
 ## Quick Start
 
+### First Time Setup
+
 ```bash
 # Check version
 ./video-manager-ultimate.sh --version
 
+# Launch interactive menu
+./video-manager-ultimate.sh
+```
+
+### Basic Usage
+
+```bash
 # Preview changes (dry run)
 ./video-manager-ultimate.sh --dry-run rename /path/to/videos
 
 # Apply changes
 ./video-manager-ultimate.sh rename /path/to/videos
-
-# Launch interactive menu
-./video-manager-ultimate.sh
 ```
+
+### WSL Users - Performance Tip
+
+For best performance, copy files to WSL filesystem first:
+
+```bash
+# Copy from Windows to WSL (much faster processing)
+rsync -avh --progress /mnt/c/Users/YourName/Videos/ ~/Videos/
+
+# Process files
+./video-manager-ultimate.sh rename ~/Videos
+
+# Copy back if needed
+rsync -avh --progress ~/Videos/ /mnt/c/Users/YourName/Videos/
+```
+
+See **[WSL-SETUP-GUIDE.md](WSL-SETUP-GUIDE.md)** for detailed performance optimization.
 
 ---
 
@@ -156,15 +196,28 @@ Or use command-line flags:
 
 ## Platform Support
 
-- **Linux** - Native support
+### Recommended: WSL (Windows Subsystem for Linux)
+
+**Best experience for Windows users!**
+
+- ✅ **Best Performance** - WSL 2 with native Linux filesystem
+- ✅ **Complete Features** - All Linux tools and dependencies
+- ✅ **Windows Integration** - Seamless access to Windows files
+- ✅ **Easy Migration** - Automated migration script included
+
+📖 **[Complete WSL Setup Guide](WSL-SETUP-GUIDE.md)** - Installation, migration, and optimization
+
+### Other Platforms
+
+- **Linux** - Native support with full features
 - **macOS** - Requires Bash 4.0+
-- **WSL** - Windows Subsystem for Linux
-- **Git Bash** - Windows
+- **Git Bash** - Windows (limited features, WSL recommended)
 
 ### Supported Path Formats
-- Unix: `/home/user/Videos`
-- WSL: `/mnt/c/Users/user/Videos`
-- Windows: `C:\Users\user\Videos` (auto-converted)
+- **Unix:** `/home/user/Videos`
+- **WSL:** `/mnt/c/Users/user/Videos` (Windows drives)
+- **WSL Native:** `~/Videos` (best performance)
+- **Windows:** `C:\Users\user\Videos` (auto-converted in WSL)
 
 ### Supported Video Formats
 mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
@@ -189,12 +242,17 @@ mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
 
 ## Documentation
 
+### Getting Started
 - **README.md** - This file (overview and quick reference)
-- **INSTALLATION-GUIDE.md** - Setup instructions and troubleshooting
-- **VIDEO-MANAGER-BASH-GUIDE.md** - Complete feature documentation
+- **[WSL-SETUP-GUIDE.md](WSL-SETUP-GUIDE.md)** - **⭐ WSL installation, migration, and optimization**
+- **INSTALLATION-GUIDE.md** - General setup instructions and troubleshooting
 - **QUICK-REFERENCE.md** - Command cheat sheet
+
+### Complete Guides
+- **VIDEO-MANAGER-BASH-GUIDE.md** - Complete feature documentation
 - **ADVANCED-FEATURES-v1.2.md** - Advanced configuration guide
 - **SUBTITLE-FEATURE-GUIDE.md** - Subtitle generation guide
+- **CROSS-PLATFORM.md** - Platform-specific details
 
 ---
 
