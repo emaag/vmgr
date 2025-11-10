@@ -1024,7 +1024,7 @@ confirm_file_operation() {
     echo -e "  ${COLOR_GREEN}[Y]${COLOR_RESET} Yes, proceed    ${COLOR_RED}[N]${COLOR_RESET} No, skip"
     echo -e "  ${COLOR_CYAN}[A]${COLOR_RESET} Apply to all    ${COLOR_YELLOW}[S]${COLOR_RESET} Skip all remaining"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Your choice: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Your choice: "
     read -n 1 -r
     echo ""
 
@@ -4532,8 +4532,14 @@ organize_by_subfolder_names() {
 
 show_header() {
     clear
+    local title="VIDEO MANAGER ULTIMATE"
+    local version_str="v$SCRIPT_VERSION"
+    local total_width=63
+    local padding=$((total_width - 2 - ${#title} - 2 - ${#version_str}))
+    local spaces=$(printf '%*s' "$padding" '')
+
     echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╔═══════════════════════════════════════════════════════════════╗${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}  ${COLOR_BOLD}${COLOR_BRIGHT_YELLOW}VIDEO MANAGER ULTIMATE${COLOR_RESET}  ${COLOR_WHITE}v$SCRIPT_VERSION${COLOR_RESET}                    ${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}  ${COLOR_BOLD}${COLOR_BRIGHT_YELLOW}${title}${COLOR_RESET}  ${COLOR_WHITE}${version_str}${COLOR_RESET}${spaces}${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
     echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════════╝${COLOR_RESET}"
     echo ""
 }
@@ -4563,7 +4569,7 @@ show_main_menu() {
     echo ""
     echo -e "${COLOR_RED}[Q]${COLOR_RESET} ${COLOR_WHITE}Quit${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choose option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choose option: "
 }
 
 show_single_operations_menu() {
@@ -4581,7 +4587,7 @@ show_single_operations_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_batch_menu() {
@@ -4595,7 +4601,7 @@ show_batch_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_workflow_menu() {
@@ -4611,7 +4617,7 @@ show_workflow_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_duplicate_menu() {
@@ -4625,7 +4631,7 @@ show_duplicate_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_subtitle_menu() {
@@ -4663,7 +4669,7 @@ show_subtitle_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 # Find duplicate files by hash in catalog
@@ -4837,7 +4843,7 @@ show_catalog_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_utilities_menu() {
@@ -4855,7 +4861,7 @@ show_utilities_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_settings_menu() {
@@ -4879,7 +4885,7 @@ show_settings_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_organize_settings_menu() {
@@ -4900,7 +4906,7 @@ show_organize_settings_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Settings${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 show_granular_controls_menu() {
@@ -4970,13 +4976,13 @@ show_granular_controls_menu() {
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Settings${COLOR_RESET}"
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
 # Get directory input
 get_directory_input() {
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
+    echo -ne "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
     read -r dir
 
     dir=$(validate_directory "$dir")
