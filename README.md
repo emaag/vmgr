@@ -50,12 +50,13 @@ chmod +x video-manager-ultimate.sh
 - Command-line and interactive modes
 
 ### Interface
-- Interactive menu system
+- Interactive menu system with cursor navigation (arrow keys!)
 - Command-line interface for automation
 - Color-coded output
 - Real-time progress indicators
 - Comprehensive logging
 - Dry run mode
+- Automatic fallback to standard menus in non-interactive environments
 
 ### Safety
 - Dry run preview mode
@@ -195,6 +196,7 @@ mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
 - **QUICK-REFERENCE.md** - Command cheat sheet
 - **ADVANCED-FEATURES-v1.2.md** - Advanced configuration guide
 - **SUBTITLE-FEATURE-GUIDE.md** - Subtitle generation guide
+- **CURSOR-MENU-NAVIGATION.md** - Interactive menu navigation guide
 
 ---
 
@@ -213,6 +215,12 @@ mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
 ---
 
 ## Version History
+
+### v1.2.1 (November 2025)
+- Cursor-based menu navigation with arrow keys
+- Interactive menu highlighting
+- Automatic fallback to standard menus
+- Enhanced user experience
 
 ### v1.2.0 (November 2025)
 - File organization by subfolder names

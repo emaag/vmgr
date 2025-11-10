@@ -191,18 +191,59 @@ else
 fi
 echo ""
 
+# Test 15: Load menu-navigation module
+echo "Test 15: Loading menu-navigation.sh..."
+if source "$LIB_DIR/menu-navigation.sh"; then
+    echo "  ✓ menu-navigation.sh loaded successfully"
+else
+    echo "  ✗ Failed to load menu-navigation.sh"
+    exit 1
+fi
+echo ""
+
+# Test 16: Test cursor support check
+echo "Test 16: Testing cursor support detection..."
+if check_cursor_support; then
+    echo "  ✓ Terminal supports cursor navigation"
+    SUPPORTS_CURSOR=true
+else
+    echo "  ⚠ Terminal doesn't support cursor navigation (non-interactive or missing tput)"
+    SUPPORTS_CURSOR=false
+fi
+echo ""
+
+# Test 17: Initialize cursor menu
+echo "Test 17: Testing init_cursor_menu..."
+if init_cursor_menu; then
+    echo "  ✓ init_cursor_menu executed successfully"
+    echo "    - CURSOR_MENU_ENABLED: ${CURSOR_MENU_ENABLED:-false}"
+else
+    echo "  ✗ init_cursor_menu failed"
+    exit 1
+fi
+echo ""
+
 # Final summary
 echo "===================================================="
 echo "All module tests passed! ✓"
 echo ""
-echo "Modules loaded (Phase 1 + Phase 2):"
-echo "  • lib/core.sh         (Phase 1)"
-echo "  • lib/platform.sh     (Phase 1)"
-echo "  • lib/logging.sh      (Phase 1)"
-echo "  • lib/config.sh       (Phase 1)"
-echo "  • lib/utils.sh        (Phase 2) ✨"
-echo "  • lib/file-ops.sh     (Phase 2) ✨"
+echo "Modules loaded (Phase 1 + Phase 2 + Phase 3):"
+echo "  • lib/core.sh              (Phase 1)"
+echo "  • lib/platform.sh          (Phase 1)"
+echo "  • lib/logging.sh           (Phase 1)"
+echo "  • lib/config.sh            (Phase 1)"
+echo "  • lib/utils.sh             (Phase 2) ✨"
+echo "  • lib/file-ops.sh          (Phase 2) ✨"
+echo "  • lib/menu-navigation.sh   (Phase 3) 🆕"
 echo ""
-echo "Progress: 6/12 modules complete (50%)"
+echo "Progress: 7/12 modules complete (58%)"
 echo "Modular architecture is working correctly!"
+echo ""
+echo "New Features:"
+echo "  • Cursor-based menu navigation with arrow keys"
+echo "  • Interactive menu highlighting"
+echo "  • Automatic fallback to standard menus"
+echo ""
+echo "To try the new cursor menu navigation:"
+echo "  ./demo-cursor-menu.sh"
 echo "===================================================="
