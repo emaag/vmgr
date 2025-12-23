@@ -172,6 +172,17 @@ calculate_hash() {
     echo "$hash"
 }
 
+# Get video duration in seconds
+get_video_duration() {
+    local video_file="$1"
+
+    if command -v ffprobe &> /dev/null; then
+        ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$video_file" 2>/dev/null | cut -d. -f1
+    else
+        echo "0"
+    fi
+}
+
 ################################################################################
 # PATH VALIDATION AND SANITIZATION
 ################################################################################
@@ -273,6 +284,53 @@ get_safe_filename() {
 }
 
 ################################################################################
+# SUBTITLE-SPECIFIC VALIDATION
+################################################################################
+
+# Validate whisper model name
+validate_whisper_model() {
+    local model="$1"
+    local valid_models=("tiny" "base" "small" "medium" "large" "large-v2" "large-v3")
+
+    for valid in "${valid_models[@]}"; do
+        if [[ "$model" == "$valid" ]]; then
+            return 0
+        fi
+    done
+
+    log_error "Invalid whisper model: $model"
+    return 1
+}
+
+# Validate subtitle format
+validate_subtitle_format() {
+    local format="$1"
+    local valid_formats=("srt" "vtt" "txt" "json")
+
+    for valid in "${valid_formats[@]}"; do
+        if [[ "$format" == "$valid" ]]; then
+            return 0
+        fi
+    done
+
+    log_error "Invalid subtitle format: $format"
+    return 1
+}
+
+# Validate language code
+validate_language_code() {
+    local lang="$1"
+
+    # Allow "auto" or 2-3 letter language codes
+    if [[ "$lang" == "auto" ]] || [[ "$lang" =~ ^[a-z]{2,3}$ ]]; then
+        return 0
+    fi
+
+    log_error "Invalid language code: $lang"
+    return 1
+}
+
+################################################################################
 # FILTER FUNCTIONS
 ################################################################################
 
@@ -350,6 +408,84 @@ passes_all_filters() {
     passes_pattern_filter "$file" || return 1
 
     return 0
+}
+
+# Check if directory should be skipped based on patterns
+should_skip_directory() {
+    local dir_path="$1"
+    local dir_name=$(basename "$dir_path")
+
+    # Check against skip patterns
+    for pattern in "${SUBTITLE_SKIP_PATTERNS[@]}"; do
+        case "$dir_name" in
+            $pattern)
+                return 0  # Should skip
+                ;;
+        esac
+    done
+
+    return 1  # Don't skip
+}
+
+# Check if file meets size requirements (for subtitle processing)
+check_file_size_filter() {
+    local file="$1"
+    local min_bytes=$((SUBTITLE_MIN_SIZE_MB * 1024 * 1024))
+    local max_bytes=$((SUBTITLE_MAX_SIZE_MB * 1024 * 1024))
+
+    local file_size=$(get_file_size "$file")
+
+    # Check minimum size
+    if [[ $SUBTITLE_MIN_SIZE_MB -gt 0 && $file_size -lt $min_bytes ]]; then
+        return 1  # Too small
+    fi
+
+    # Check maximum size
+    if [[ $SUBTITLE_MAX_SIZE_MB -gt 0 && $file_size -gt $max_bytes ]]; then
+        return 1  # Too large
+    fi
+
+    return 0  # Size is OK
+}
+
+# Check if file meets modification date requirements (for subtitle processing)
+check_file_date_filter() {
+    local file="$1"
+
+    # If no date filter, accept all
+    if [[ $SUBTITLE_MODIFIED_DAYS -le 0 ]]; then
+        return 0
+    fi
+
+    # Get file modification time in seconds since epoch
+    local file_mtime=$(stat -f%m "$file" 2>/dev/null || stat -c%Y "$file" 2>/dev/null)
+    local current_time=$(date +%s)
+    local age_seconds=$((current_time - file_mtime))
+    local age_days=$((age_seconds / 86400))
+
+    if [[ $age_days -le $SUBTITLE_MODIFIED_DAYS ]]; then
+        return 0  # File is recent enough
+    fi
+
+    return 1  # File is too old
+}
+
+# Check if subtitle already exists for video
+has_existing_subtitle() {
+    local video_file="$1"
+    local video_dir=$(dirname "$video_file")
+    local name="${video_file%.*}"
+
+    # Check for common subtitle extensions
+    local subtitle_exts=("srt" "vtt" "txt" "ass" "ssa" "sub")
+
+    for ext in "${subtitle_exts[@]}"; do
+        if [[ -f "${name}.${ext}" ]]; then
+            return 0  # Subtitle exists
+        fi
+    done
+
+    return 1  # No subtitle found
 }
 
 ################################################################################
