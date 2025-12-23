@@ -11,6 +11,9 @@ _vmgr_completion() {
     # Main commands
     local commands="rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch"
 
+    # Special commands (prefixed with --)
+    local special_commands="--organize --undo-organize --list-undo"
+
     # Options
     local options="
         --help -h
@@ -27,6 +30,11 @@ _vmgr_completion() {
         --edit
         --speaker-diarization
         --no-punctuation
+        --organize
+        --organize-target
+        --organize-search
+        --undo-organize
+        --list-undo
     "
 
     # Whisper models
@@ -55,7 +63,12 @@ _vmgr_completion() {
             COMPREPLY=( $(compgen -W "1 2 3 4 5 6 7 8" -- ${cur}) )
             return 0
             ;;
-        vmgr|video-manager-ultimate.sh)
+        --organize-target|--organize-search)
+            # After organize options, complete directories
+            COMPREPLY=( $(compgen -d -- ${cur}) )
+            return 0
+            ;;
+        vmgr|video-manager-ultimate.sh|./video-manager-ultimate.sh)
             # First argument - offer commands and options
             COMPREPLY=( $(compgen -W "${commands} ${options}" -- ${cur}) )
             return 0
@@ -76,15 +89,20 @@ _vmgr_completion() {
     # Check if we already have a command
     local has_command=0
     for word in "${COMP_WORDS[@]}"; do
-        if [[ " ${commands} " =~ " ${word} " ]]; then
+        if [[ " ${commands} " =~ " ${word} " ]] || [[ " ${special_commands} " =~ " ${word} " ]]; then
             has_command=1
             break
         fi
     done
 
     if [[ ${has_command} -eq 1 ]]; then
-        # We have a command, complete with directories
-        COMPREPLY=( $(compgen -d -- ${cur}) )
+        # We have a command, complete with directories (except for special commands that don't need directories)
+        if [[ " ${special_commands} " =~ " ${prev} " ]] && [[ "${prev}" == "--list-undo" ]]; then
+            # --list-undo doesn't take arguments
+            COMPREPLY=()
+        else
+            COMPREPLY=( $(compgen -d -- ${cur}) )
+        fi
     else
         # No command yet, offer commands and options
         COMPREPLY=( $(compgen -W "${commands} ${options}" -- ${cur}) )

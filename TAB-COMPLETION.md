@@ -12,14 +12,14 @@ Tab completion enables you to auto-complete commands, options, and paths by pres
 Press Tab after `vmgr` to see available commands:
 ```bash
 vmgr <Tab><Tab>
-# Shows: rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch
+# Shows: rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch --organize --undo-organize --list-undo
 ```
 
 ### ✓ Option Completion
 Press Tab after a dash to see available options:
 ```bash
 vmgr -<Tab><Tab>
-# Shows: --help --version --dry-run --quiet --interactive --model --format --language --gpu --parallel
+# Shows: --help --version --dry-run --quiet --interactive --model --format --language --gpu --parallel --organize --organize-target --organize-search --undo-organize --list-undo
 ```
 
 ### ✓ Context-Aware Completion
@@ -186,6 +186,9 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `workflow-new` - New collection workflow
 - `workflow-clean` - Deep clean workflow
 - `batch` - Batch processing
+- `--organize` - Organize files by subfolder names
+- `--undo-organize` - Undo organize operation
+- `--list-undo` - List available undo operations
 
 ### Options
 - `--help`, `-h` - Show help
@@ -202,6 +205,11 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `--edit` - Interactive edit mode
 - `--speaker-diarization` - Speaker identification
 - `--no-punctuation` - Disable auto-punctuation
+- `--organize` - Organize files by subfolder names
+- `--organize-target` - Set target folder for organize
+- `--organize-search` - Set search path for organize
+- `--undo-organize` - Undo last organize operation
+- `--list-undo` - List available undo operations
 
 ### Whisper Models
 - `tiny` - Fastest, least accurate
