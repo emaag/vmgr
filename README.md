@@ -1,4 +1,13 @@
 # Video Manager Ultimate - Bash Edition
+
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.3.0)
+[![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
+[![Tests](https://img.shields.io/badge/tests-26%2F26%20passing-success.svg)](test-modules.sh)
+[![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](MODULARIZATION-PROGRESS.md)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#installation)
+
 ## Version 1.3.0
 
 Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.
