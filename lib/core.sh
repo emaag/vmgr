@@ -9,15 +9,15 @@
 #
 # Author: Created for Eric's Video Management System
 # Module: core.sh
-# Version: 1.2.0
-# Date: November 8, 2025
+# Version: 1.3.0
+# Date: December 23, 2025
 #
 ################################################################################
 
 # Script metadata
-readonly SCRIPT_VERSION="1.2.0"
+readonly SCRIPT_VERSION="1.3.0"
 readonly SCRIPT_NAME="Video Manager Ultimate - Bash Edition"
-readonly SCRIPT_DATE="2025-11-08"
+readonly SCRIPT_DATE="2025-12-23"
 
 # Color codes for beautiful output
 readonly COLOR_RESET='\033[0m'
