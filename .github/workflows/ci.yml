@@ -24,11 +24,16 @@ jobs:
       run: |
         chmod +x video-manager-ultimate.sh
         chmod +x test-modules.sh
+        chmod +x test-comprehensive.sh
         chmod +x lib/*.sh
 
     - name: Run module tests
       run: |
         ./test-modules.sh
+
+    - name: Run comprehensive tests
+      run: |
+        ./test-comprehensive.sh
 
     - name: Test version command
       run: |
@@ -66,9 +71,10 @@ jobs:
       run: |
         shellcheck -x lib/*.sh || true
 
-    - name: Run ShellCheck on test script
+    - name: Run ShellCheck on test scripts
       run: |
         shellcheck test-modules.sh || true
+        shellcheck test-comprehensive.sh || true
 
     - name: Run ShellCheck on completion
       run: |
@@ -93,11 +99,16 @@ jobs:
       run: |
         chmod +x video-manager-ultimate.sh
         chmod +x test-modules.sh
+        chmod +x test-comprehensive.sh
         chmod +x lib/*.sh
 
-    - name: Run tests
+    - name: Run module tests
       run: |
         ./test-modules.sh
+
+    - name: Run comprehensive tests
+      run: |
+        ./test-comprehensive.sh
 
     - name: Test commands
       run: |

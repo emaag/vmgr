@@ -4,7 +4,7 @@
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-26%2F26%20passing-success.svg)](test-modules.sh)
+[![Tests](https://img.shields.io/badge/tests-105%2F105%20passing-success.svg)](COMPREHENSIVE-TEST-REPORT.md)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](MODULARIZATION-PROGRESS.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#installation)
 
@@ -89,7 +89,8 @@ chmod +x video-manager-ultimate.sh
 - **Clean separation** - Foundation, Core Features, Advanced Features
 - **Maintainable** - Each module focused on single responsibility
 - **Extensible** - Easy to add new features
-- **Well-tested** - Comprehensive test suite (26 tests, 100% pass rate)
+- **Well-tested** - 105 automated tests (26 module + 79 comprehensive, 100% pass rate)
+- **CI/CD** - Automated testing on Ubuntu and macOS via GitHub Actions
 
 ---
 
