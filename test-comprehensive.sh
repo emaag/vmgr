@@ -63,8 +63,18 @@ fi
 # ============================================================================
 test_section "2. TAB COMPLETION - COMPREHENSIVE TESTING"
 
-# Load completion
-source ~/.bash_completion.d/vmgr 2>/dev/null || source vmgr-completion.bash
+# Load completion - try multiple locations
+if [[ -f ~/.bash_completion.d/vmgr ]]; then
+    source ~/.bash_completion.d/vmgr 2>/dev/null
+elif [[ -f vmgr-completion.bash ]]; then
+    source vmgr-completion.bash 2>/dev/null
+fi
+
+# Check if completion function is available
+if ! declare -f _vmgr_completion >/dev/null 2>&1; then
+    echo "⚠️  Skipping tab completion tests (completion function not available)"
+    echo "   This is expected on macOS or when bash-completion is not installed"
+else
 
 test_completion() {
     local cmdline="$1"
@@ -139,6 +149,8 @@ test_completion "vmgr --parallel 4" "4" "Parallel value '4' completion"
 
 echo "Testing directory completion after commands..."
 test_completion "vmgr rename /tm" "/tmp" "Directory completion after rename"
+
+fi  # End of tab completion tests conditional
 
 # ============================================================================
 # SECTION 3: KEYBOARD NAVIGATION - MENU STRUCTURE
@@ -397,7 +409,8 @@ if [[ $FAIL_COUNT -eq 0 ]]; then
     echo ""
     SUCCESS_RATE="100%"
 else
-    SUCCESS_RATE=$(echo "scale=1; $PASS_COUNT * 100 / $TEST_COUNT" | bc)
+    # Use bash arithmetic instead of bc for macOS compatibility
+    SUCCESS_RATE=$((PASS_COUNT * 100 / TEST_COUNT))
     echo "⚠️  Some tests failed. Success rate: ${SUCCESS_RATE}%"
     echo ""
 fi
