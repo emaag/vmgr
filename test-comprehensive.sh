@@ -223,26 +223,32 @@ fi
 
 echo "Testing menu display with simulated input..."
 # Test that menu can be invoked and exited
-if echo "Q" | timeout 2 ./video-manager-ultimate.sh -i 2>&1 | grep -q "MAIN MENU\|Main Menu"; then
-    pass "Interactive menu launches and accepts 'Q' to quit"
-else
-    fail "Interactive menu launch failed"
-fi
+# Skip timeout-based tests on macOS (timeout command not available by default)
+if command -v timeout >/dev/null 2>&1; then
+    if echo "Q" | timeout 2 ./video-manager-ultimate.sh -i 2>&1 | grep -q "MAIN MENU\|Main Menu"; then
+        pass "Interactive menu launches and accepts 'Q' to quit"
+    else
+        fail "Interactive menu launch failed"
+    fi
 
-echo "Testing numeric input handling..."
-# Menu should accept numbers 1-6
-menu_output=$(echo "" | timeout 1 ./video-manager-ultimate.sh -i 2>&1)
-if echo "$menu_output" | grep -qE "\[1\]|\[2\]|\[3\]|\[4\]|\[5\]|\[6\]"; then
-    pass "Menu displays numbered options (1-6)"
-else
-    fail "Menu numbered options not displayed"
-fi
+    echo "Testing numeric input handling..."
+    # Menu should accept numbers 1-6
+    menu_output=$(echo "" | timeout 1 ./video-manager-ultimate.sh -i 2>&1)
+    if echo "$menu_output" | grep -qE "\[1\]|\[2\]|\[3\]|\[4\]|\[5\]|\[6\]"; then
+        pass "Menu displays numbered options (1-6)"
+    else
+        fail "Menu numbered options not displayed"
+    fi
 
-echo "Testing quit option..."
-if echo "$menu_output" | grep -qE "\[Q\].*Quit|\[q\].*Quit"; then
-    pass "Menu displays Quit option"
+    echo "Testing quit option..."
+    if echo "$menu_output" | grep -qE "\[Q\].*Quit|\[q\].*Quit"; then
+        pass "Menu displays Quit option"
+    else
+        fail "Menu Quit option not displayed"
+    fi
 else
-    fail "Menu Quit option not displayed"
+    echo "⚠️  Skipping interactive menu tests (timeout command not available)"
+    echo "   This is expected on macOS where timeout is not installed by default"
 fi
 
 # ============================================================================
@@ -310,10 +316,14 @@ else
 fi
 
 echo "Testing --interactive flag..."
-if echo "Q" | timeout 2 ./video-manager-ultimate.sh --interactive 2>&1 | grep -q "MAIN MENU\|Main Menu"; then
-    pass "--interactive flag works"
+if command -v timeout >/dev/null 2>&1; then
+    if echo "Q" | timeout 2 ./video-manager-ultimate.sh --interactive 2>&1 | grep -q "MAIN MENU\|Main Menu"; then
+        pass "--interactive flag works"
+    else
+        fail "--interactive flag failed"
+    fi
 else
-    fail "--interactive flag failed"
+    echo "⚠️  Skipping --interactive flag test (timeout command not available)"
 fi
 
 echo "Testing subtitle options..."
