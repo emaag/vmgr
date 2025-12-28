@@ -63,11 +63,30 @@ show_single_operations_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Fix Bracket Spacing${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Flatten Directory${COLOR_RESET} ${COLOR_CYAN}(Move All to Top)${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Full Cleanup${COLOR_RESET} ${COLOR_CYAN}(All Operations)${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Convert JPEG to JPG${COLOR_RESET} ${COLOR_CYAN}(Rename Extension)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Image Operations${COLOR_RESET} ${COLOR_CYAN}(Convert to JPG)${COLOR_RESET} ${SYMBOL_ARROW}"
     echo ""
     echo -e "${COLOR_YELLOW}[D]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run${COLOR_RESET} ${COLOR_CYAN}(Current: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"))${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+}
+
+show_image_ops_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}IMAGE OPERATIONS${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Convert JPEG to JPG${COLOR_RESET} ${COLOR_CYAN}(Rename Only)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Convert PNG to JPG${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Convert WebP to JPG${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Convert HEIC to JPG${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Convert All to JPG${COLOR_RESET} ${COLOR_CYAN}(All Formats)${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_YELLOW}[R]${COLOR_RESET} ${COLOR_WHITE}Toggle Recursive${COLOR_RESET} ${COLOR_CYAN}(Current: $([[ "$IMAGE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"))${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}[D]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run${COLOR_RESET} ${COLOR_CYAN}(Current: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"))${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back${COLOR_RESET}"
     echo ""
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
@@ -363,12 +382,7 @@ _handle_single_operations_choice() {
             return 0
             ;;
         6)
-            if get_directory_input; then
-                start_operation "Convert JPEG to JPG"
-                convert_jpeg_to_jpg "$TARGET_FOLDER" "$DRY_RUN"
-                end_operation
-                read -p "Press Enter to continue..."
-            fi
+            handle_image_ops
             return 0
             ;;
         d|D)
@@ -384,6 +398,76 @@ _handle_single_operations_choice() {
 # Handle single operations (using generic menu loop)
 handle_single_operations() {
     run_menu_loop show_single_operations_menu _handle_single_operations_choice true
+}
+
+# Choice handler for image operations menu
+# Returns: 0=continue, 1=break, 2=invalid
+_handle_image_ops_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            if get_directory_input; then
+                start_operation "Convert JPEG to JPG"
+                convert_jpeg_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        2)
+            if get_directory_input; then
+                start_operation "Convert PNG to JPG"
+                convert_png_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        3)
+            if get_directory_input; then
+                start_operation "Convert WebP to JPG"
+                convert_webp_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        4)
+            if get_directory_input; then
+                start_operation "Convert HEIC to JPG"
+                convert_heic_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        5)
+            if get_directory_input; then
+                start_operation "Convert All Images to JPG"
+                convert_all_images_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        r|R)
+            toggle_flag_with_log IMAGE_RECURSIVE "Recursive mode"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        d|D)
+            toggle_flag_with_log DRY_RUN "Dry run mode"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle image operations (using generic menu loop)
+handle_image_ops() {
+    run_menu_loop show_image_ops_menu _handle_image_ops_choice true
 }
 
 # Choice handler for batch processing menu

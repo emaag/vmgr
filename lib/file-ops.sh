@@ -236,22 +236,52 @@ flatten_directory() {
 # IMAGE FORMAT CONVERSION
 ################################################################################
 
-# Convert .jpeg files to .jpg (rename extension)
-convert_jpeg_to_jpg() {
-    local directory="$1"
-    local dry_run="${2:-false}"
+# Global setting for recursive image operations
+IMAGE_RECURSIVE=${IMAGE_RECURSIVE:-false}
 
-    log_info "Converting JPEG to JPG in: $directory"
+# Check if ImageMagick is available
+check_imagemagick() {
+    if ! command -v convert &>/dev/null; then
+        log_error "ImageMagick is required for this operation"
+        log_info "Install with: sudo apt install imagemagick"
+        return 1
+    fi
+    return 0
+}
+
+# Generic image conversion function
+# Usage: convert_images_to_jpg <directory> <extension> <dry_run> <recursive>
+# For rename-only (jpeg->jpg), use rename mode
+convert_images_to_jpg() {
+    local directory="$1"
+    local source_ext="$2"
+    local dry_run="${3:-false}"
+    local recursive="${4:-false}"
+    local rename_only="${5:-false}"
+
+    local ext_upper=$(echo "$source_ext" | tr '[:lower:]' '[:upper:]')
+    log_info "Converting $ext_upper to JPG in: $directory"
+    [[ "$recursive" == true ]] && log_info "Recursive mode: ON"
+
+    # Check for ImageMagick if actual conversion needed
+    if [[ "$rename_only" != true ]]; then
+        check_imagemagick || return 1
+    fi
 
     local file_count=0
     local converted_count=0
+    local error_count=0
 
-    # Count total jpeg files first
-    local total_files=$(find "$directory" -maxdepth 1 -type f -iname "*.jpeg" | wc -l)
-    log_info "Found $total_files .jpeg files to convert"
+    # Build find command based on recursive setting
+    local depth_args=""
+    [[ "$recursive" != true ]] && depth_args="-maxdepth 1"
+
+    # Count total files first
+    local total_files=$(find "$directory" $depth_args -type f -iname "*.$source_ext" 2>/dev/null | wc -l)
+    log_info "Found $total_files .$source_ext files to convert"
 
     if [[ $total_files -eq 0 ]]; then
-        log_info "No .jpeg files found in directory"
+        log_info "No .$source_ext files found"
         return 0
     fi
 
@@ -264,19 +294,18 @@ convert_jpeg_to_jpg() {
         ((STATS[files_processed]++))
 
         local filename=$(basename "$file")
-        local dirname=$(dirname "$file")
-
-        # Replace .jpeg with .jpg (case-insensitive handling)
-        local new_filename="${filename%.[jJ][pP][eE][gG]}.jpg"
-        local new_path="$dirname/$new_filename"
+        local filedir=$(dirname "$file")
+        local basename="${filename%.*}"
+        local new_filename="${basename}.jpg"
+        local new_path="$filedir/$new_filename"
 
         # Progress indicator
         echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
 
         # Check for conflicts
         if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
-            new_filename=$(get_safe_filename "$dirname" "$new_filename")
-            new_path="$dirname/$new_filename"
+            new_filename=$(get_safe_filename "$filedir" "$new_filename")
+            new_path="$filedir/$new_filename"
         fi
 
         echo -ne "\r\033[K" # Clear line
@@ -285,29 +314,102 @@ convert_jpeg_to_jpg() {
             echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would convert:"
             echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
             echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
-            log_message "DRYRUN" "Would convert: $filename -> $new_filename"
+            [[ "$recursive" == true && "$filedir" != "$directory" ]] && \
+                echo -e "  ${COLOR_CYAN}In:${COLOR_RESET}   ${filedir#$directory/}"
+            log_message "DRYRUN" "Would convert: $file -> $new_path"
         else
-            mv -- "$file" "$new_path" 2>/dev/null
-            if [[ $? -eq 0 ]]; then
+            local success=false
+            if [[ "$rename_only" == true ]]; then
+                # Just rename (for jpeg->jpg)
+                mv -- "$file" "$new_path" 2>/dev/null && success=true
+            else
+                # Actual conversion using ImageMagick
+                convert "$file" -quality 90 "$new_path" 2>/dev/null && success=true
+                # Remove original if conversion succeeded
+                [[ "$success" == true ]] && rm -f "$file"
+            fi
+
+            if [[ "$success" == true ]]; then
                 echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Converted:"
                 echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
                 echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
-                log_message "CONVERT" "Success: $filename -> $new_filename"
+                [[ "$recursive" == true && "$filedir" != "$directory" ]] && \
+                    echo -e "  ${COLOR_CYAN}In:${COLOR_RESET}   ${filedir#$directory/}"
+                log_message "CONVERT" "Success: $file -> $new_path"
                 ((converted_count++))
                 ((STATS[files_renamed]++))
             else
                 log_error "Failed to convert: $filename"
+                ((error_count++))
             fi
         fi
-    done < <(find "$directory" -maxdepth 1 -type f -iname "*.jpeg" -print0)
+    done < <(find "$directory" $depth_args -type f -iname "*.$source_ext" -print0 2>/dev/null)
 
     echo -ne "\r\033[K" # Clear progress line
 
     if [[ "$dry_run" == true ]]; then
         log_info "Dry run complete - no files were actually converted"
     else
-        log_success "Converted $converted_count out of $file_count .jpeg files to .jpg"
+        log_success "Converted $converted_count out of $file_count .$source_ext files to .jpg"
+        [[ $error_count -gt 0 ]] && log_warning "$error_count files failed to convert"
     fi
+}
+
+# Convert .jpeg files to .jpg (rename only - same format)
+convert_jpeg_to_jpg() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+    local recursive="${3:-$IMAGE_RECURSIVE}"
+    convert_images_to_jpg "$directory" "jpeg" "$dry_run" "$recursive" true
+}
+
+# Convert .png files to .jpg (requires ImageMagick)
+convert_png_to_jpg() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+    local recursive="${3:-$IMAGE_RECURSIVE}"
+    convert_images_to_jpg "$directory" "png" "$dry_run" "$recursive" false
+}
+
+# Convert .webp files to .jpg (requires ImageMagick)
+convert_webp_to_jpg() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+    local recursive="${3:-$IMAGE_RECURSIVE}"
+    convert_images_to_jpg "$directory" "webp" "$dry_run" "$recursive" false
+}
+
+# Convert .heic files to .jpg (requires ImageMagick with HEIC support)
+convert_heic_to_jpg() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+    local recursive="${3:-$IMAGE_RECURSIVE}"
+    convert_images_to_jpg "$directory" "heic" "$dry_run" "$recursive" false
+}
+
+# Convert all supported image formats to .jpg
+convert_all_images_to_jpg() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+    local recursive="${3:-$IMAGE_RECURSIVE}"
+
+    log_info "Converting all images to JPG in: $directory"
+    echo ""
+
+    # JPEG first (rename only, no ImageMagick needed)
+    convert_jpeg_to_jpg "$directory" "$dry_run" "$recursive"
+    echo ""
+
+    # Check ImageMagick for the rest
+    if check_imagemagick; then
+        convert_png_to_jpg "$directory" "$dry_run" "$recursive"
+        echo ""
+        convert_webp_to_jpg "$directory" "$dry_run" "$recursive"
+        echo ""
+        convert_heic_to_jpg "$directory" "$dry_run" "$recursive"
+    fi
+
+    log_success "All image conversions complete"
 }
 
 ################################################################################
