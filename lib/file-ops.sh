@@ -233,6 +233,84 @@ flatten_directory() {
 }
 
 ################################################################################
+# IMAGE FORMAT CONVERSION
+################################################################################
+
+# Convert .jpeg files to .jpg (rename extension)
+convert_jpeg_to_jpg() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+
+    log_info "Converting JPEG to JPG in: $directory"
+
+    local file_count=0
+    local converted_count=0
+
+    # Count total jpeg files first
+    local total_files=$(find "$directory" -maxdepth 1 -type f -iname "*.jpeg" | wc -l)
+    log_info "Found $total_files .jpeg files to convert"
+
+    if [[ $total_files -eq 0 ]]; then
+        log_info "No .jpeg files found in directory"
+        return 0
+    fi
+
+    echo ""
+
+    while IFS= read -r -d '' file; do
+        [[ "$(basename "$file")" == .* ]] && continue
+
+        ((file_count++))
+        ((STATS[files_processed]++))
+
+        local filename=$(basename "$file")
+        local dirname=$(dirname "$file")
+
+        # Replace .jpeg with .jpg (case-insensitive handling)
+        local new_filename="${filename%.[jJ][pP][eE][gG]}.jpg"
+        local new_path="$dirname/$new_filename"
+
+        # Progress indicator
+        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+
+        # Check for conflicts
+        if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+            new_filename=$(get_safe_filename "$dirname" "$new_filename")
+            new_path="$dirname/$new_filename"
+        fi
+
+        echo -ne "\r\033[K" # Clear line
+
+        if [[ "$dry_run" == true ]]; then
+            echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would convert:"
+            echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+            echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+            log_message "DRYRUN" "Would convert: $filename -> $new_filename"
+        else
+            mv -- "$file" "$new_path" 2>/dev/null
+            if [[ $? -eq 0 ]]; then
+                echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Converted:"
+                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                log_message "CONVERT" "Success: $filename -> $new_filename"
+                ((converted_count++))
+                ((STATS[files_renamed]++))
+            else
+                log_error "Failed to convert: $filename"
+            fi
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -iname "*.jpeg" -print0)
+
+    echo -ne "\r\033[K" # Clear progress line
+
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually converted"
+    else
+        log_success "Converted $converted_count out of $file_count .jpeg files to .jpg"
+    fi
+}
+
+################################################################################
 # MODULE INITIALIZATION
 ################################################################################
 

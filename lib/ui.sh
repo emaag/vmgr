@@ -63,6 +63,7 @@ show_single_operations_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[3]${COLOR_RESET} ${COLOR_WHITE}Fix Bracket Spacing${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[4]${COLOR_RESET} ${COLOR_WHITE}Flatten Directory${COLOR_RESET} ${COLOR_CYAN}(Move All to Top)${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[5]${COLOR_RESET} ${COLOR_WHITE}Full Cleanup${COLOR_RESET} ${COLOR_CYAN}(All Operations)${COLOR_RESET}"
+    echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Convert JPEG to JPG${COLOR_RESET} ${COLOR_CYAN}(Rename Extension)${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_YELLOW}[D]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run${COLOR_RESET} ${COLOR_CYAN}(Current: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"))${COLOR_RESET}"
     echo ""
@@ -357,6 +358,15 @@ _handle_single_operations_choice() {
         5)
             if get_directory_input; then
                 workflow_deep_clean "$TARGET_FOLDER"
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        6)
+            if get_directory_input; then
+                start_operation "Convert JPEG to JPG"
+                convert_jpeg_to_jpg "$TARGET_FOLDER" "$DRY_RUN"
+                end_operation
                 read -p "Press Enter to continue..."
             fi
             return 0
