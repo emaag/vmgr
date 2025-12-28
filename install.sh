@@ -133,9 +133,9 @@ setup_completion() {
                 mkdir -p "$completion_dir"
             fi
 
-            # Copy completion file
-            cp vmgr-completion.bash "$completion_dir/vmgr"
-            echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion file installed to ~/.bash_completion.d/"
+            # Symlink completion file (stays up-to-date with source)
+            ln -sf "$(pwd)/vmgr-completion.bash" "$completion_dir/vmgr"
+            echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion file linked to ~/.bash_completion.d/"
 
             # Add sourcing to bashrc if not already there
             local shell_rc="$HOME/.bashrc"
@@ -151,13 +151,13 @@ setup_completion() {
             # macOS uses different completion path
             local completion_dir="/usr/local/etc/bash_completion.d"
             if [[ -d "$completion_dir" ]] && [[ -w "$completion_dir" ]]; then
-                cp vmgr-completion.bash "$completion_dir/vmgr"
-                echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion file installed to $completion_dir"
+                ln -sf "$(pwd)/vmgr-completion.bash" "$completion_dir/vmgr"
+                echo -e "${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Completion file linked to $completion_dir"
             else
                 # Fallback to user directory
                 completion_dir="$HOME/.bash_completion.d"
                 mkdir -p "$completion_dir"
-                cp vmgr-completion.bash "$completion_dir/vmgr"
+                ln -sf "$(pwd)/vmgr-completion.bash" "$completion_dir/vmgr"
 
                 local shell_rc="$HOME/.zshrc"
                 [[ -f "$HOME/.bash_profile" ]] && shell_rc="$HOME/.bash_profile"
@@ -175,7 +175,7 @@ setup_completion() {
             # Git Bash completion
             local completion_dir="$HOME/.bash_completion.d"
             mkdir -p "$completion_dir"
-            cp vmgr-completion.bash "$completion_dir/vmgr"
+            ln -sf "$(pwd)/vmgr-completion.bash" "$completion_dir/vmgr"
 
             local shell_rc="$HOME/.bashrc"
             if ! grep -q "bash_completion.d/vmgr" "$shell_rc" 2>/dev/null; then
