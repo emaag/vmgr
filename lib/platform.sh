@@ -158,6 +158,57 @@ open_file_manager() {
     esac
 }
 
+# Platform-specific sed in-place editing
+# Handles the difference between GNU sed (-i) and BSD sed (-i '')
+# Args: $1 - file path, $2... - sed expressions
+# Example: sed_inplace "$file" 's/old/new/g'
+sed_inplace() {
+    local file="$1"
+    shift
+
+    if [[ ! -f "$file" ]]; then
+        [[ "$(type -t log_error)" == "function" ]] && log_error "sed_inplace: file does not exist: $file"
+        return 1
+    fi
+
+    case "$OS_TYPE" in
+        macOS)
+            # BSD sed requires '' after -i
+            sed -i '' "$@" "$file"
+            ;;
+        *)
+            # GNU sed doesn't need '' after -i
+            sed -i "$@" "$file"
+            ;;
+    esac
+}
+
+# Platform-specific sed in-place with backup
+# Creates a backup with the specified extension before editing
+# Args: $1 - file path, $2 - backup extension (e.g., ".bak"), $3... - sed expressions
+# Example: sed_inplace_backup "$file" ".bak" 's/old/new/g'
+sed_inplace_backup() {
+    local file="$1"
+    local backup_ext="$2"
+    shift 2
+
+    if [[ ! -f "$file" ]]; then
+        [[ "$(type -t log_error)" == "function" ]] && log_error "sed_inplace_backup: file does not exist: $file"
+        return 1
+    fi
+
+    case "$OS_TYPE" in
+        macOS)
+            # BSD sed: -i requires extension immediately after
+            sed -i"$backup_ext" "$@" "$file"
+            ;;
+        *)
+            # GNU sed: -i can have extension with or without space
+            sed -i"$backup_ext" "$@" "$file"
+            ;;
+    esac
+}
+
 # Convert Windows path to WSL path
 # Args: $1 - path (Windows or Unix format)
 # Returns: Unix-formatted path

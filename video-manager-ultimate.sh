@@ -39,65 +39,24 @@ LIB_DIR="$SCRIPT_DIR/lib"
 # Load all modules in dependency order
 echo "Loading Video Manager Ultimate modules..."
 
+# Core module must be loaded first (defines load_module helper)
 if ! source "$LIB_DIR/core.sh"; then
     echo "ERROR: Failed to load core.sh" >&2
     exit 1
 fi
 
-if ! source "$LIB_DIR/platform.sh"; then
-    echo "ERROR: Failed to load platform.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/logging.sh"; then
-    echo "ERROR: Failed to load logging.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/config.sh"; then
-    echo "ERROR: Failed to load config.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/utils.sh"; then
-    echo "ERROR: Failed to load utils.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/file-ops.sh"; then
-    echo "ERROR: Failed to load file-ops.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/duplicates.sh"; then
-    echo "ERROR: Failed to load duplicates.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/organize.sh"; then
-    echo "ERROR: Failed to load organize.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/subtitles.sh"; then
-    echo "ERROR: Failed to load subtitles.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/catalog.sh"; then
-    echo "ERROR: Failed to load catalog.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/batch.sh"; then
-    echo "ERROR: Failed to load batch.sh" >&2
-    exit 1
-fi
-
-if ! source "$LIB_DIR/ui.sh"; then
-    echo "ERROR: Failed to load ui.sh" >&2
-    exit 1
-fi
+# Load remaining modules using the helper function
+load_module "platform.sh"
+load_module "logging.sh"
+load_module "config.sh"
+load_module "utils.sh"
+load_module "file-ops.sh"
+load_module "duplicates.sh"
+load_module "organize.sh"
+load_module "subtitles.sh"
+load_module "catalog.sh"
+load_module "batch.sh"
+load_module "ui.sh"
 
 # Initialize core module
 init_core

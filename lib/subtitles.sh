@@ -89,16 +89,13 @@ fix_punctuation() {
 
     log_verbose "Applying punctuation fixes to: $(basename "$subtitle_file")"
 
-    # Basic punctuation fixes
-    sed -i.bak \
+    # Basic punctuation fixes (using platform-compatible sed)
+    if sed_inplace_backup "$subtitle_file" ".bak" \
         -e 's/\bi\b/I/g' \
         -e 's/^\([a-z]\)/\U\1/' \
         -e 's/\. \([a-z]\)/. \U\1/g' \
         -e 's/\? \([a-z]\)/? \U\1/g' \
-        -e 's/! \([a-z]\)/! \U\1/g' \
-        "$subtitle_file" 2>/dev/null
-
-    if [[ $? -eq 0 ]]; then
+        -e 's/! \([a-z]\)/! \U\1/g' 2>/dev/null; then
         rm -f "${subtitle_file}.bak"
         log_verbose "Punctuation fixes applied"
         return 0
@@ -119,11 +116,11 @@ remove_filler_words() {
 
     for filler in "${fillers[@]}"; do
         local safe_filler=$(sanitize_for_sed "$filler")
-        sed -i "s/\b${safe_filler}\b//gi" "$subtitle_file" 2>/dev/null
+        sed_inplace "$subtitle_file" "s/\b${safe_filler}\b//gi" 2>/dev/null
     done
 
-    # Clean up extra spaces
-    sed -i 's/  \+/ /g' "$subtitle_file"
+    # Clean up extra spaces (using platform-compatible sed)
+    sed_inplace "$subtitle_file" 's/  \+/ /g'
 
     log_success "Filler words removed"
 }

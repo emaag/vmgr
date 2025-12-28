@@ -191,8 +191,8 @@ undo_last_file_operation() {
             if [[ -f "$dest" ]] || [[ -d "$dest" ]]; then
                 mv "$dest" "$source"
                 log_success "Undone: moved $dest back to $source"
-                # Remove the last line from undo history
-                sed -i '$d' "$UNDO_HISTORY_FILE"
+                # Remove the last line from undo history (using platform-compatible sed)
+                sed_inplace "$UNDO_HISTORY_FILE" '$d'
             else
                 log_error "Cannot undo: $dest no longer exists"
                 return 1

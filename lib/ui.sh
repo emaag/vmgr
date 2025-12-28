@@ -213,9 +213,9 @@ show_settings_menu() {
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}SETTINGS${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_BOLD}${COLOR_WHITE}Current Configuration:${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Dry Run Mode: $([[ "$DRY_RUN" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Verbose Output: $([[ "$VERBOSE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Log Directory: ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
+    print_toggle_setting "Dry Run Mode" "$DRY_RUN"
+    print_toggle_setting "Verbose Output" "$VERBOSE"
+    echo -e "  ${COLOR_CYAN}Log Directory:        ${COLOR_RESET} ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Toggle Dry Run Mode${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Toggle Verbose Output${COLOR_RESET}"
@@ -237,10 +237,10 @@ show_organize_settings_menu() {
     echo -e "${COLOR_BOLD}${COLOR_YELLOW}ORGANIZE SETTINGS${COLOR_RESET}"
     echo ""
     echo -e "${COLOR_BOLD}${COLOR_WHITE}Current Settings:${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Default Target:  ${COLOR_WHITE}$ORGANIZE_DEFAULT_TARGET${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Default Search:  ${COLOR_WHITE}$ORGANIZE_DEFAULT_SEARCH${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Show Progress:   $([[ "$ORGANIZE_SHOW_PROGRESS" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Log Operations:  $([[ "$ORGANIZE_LOG_OPERATIONS" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}")"
+    echo -e "  ${COLOR_CYAN}Default Target:       ${COLOR_RESET} ${COLOR_WHITE}$ORGANIZE_DEFAULT_TARGET${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}Default Search:       ${COLOR_RESET} ${COLOR_WHITE}$ORGANIZE_DEFAULT_SEARCH${COLOR_RESET}"
+    print_toggle_setting "Show Progress" "$ORGANIZE_SHOW_PROGRESS"
+    print_toggle_setting "Log Operations" "$ORGANIZE_LOG_OPERATIONS"
     echo ""
     echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Set Default Target Path${COLOR_RESET}"
     echo -e "${COLOR_BRIGHT_GREEN}[2]${COLOR_RESET} ${COLOR_WHITE}Set Default Search Path${COLOR_RESET}"
@@ -265,44 +265,20 @@ show_granular_controls_menu() {
     [[ "$FILTER_BY_PATTERN" == true ]] && ((active_count++))
 
     echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Interactive Mode ━━━${COLOR_RESET}"
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Per-File Confirm:"
-    [[ "$INTERACTIVE_CONFIRM" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
-
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Show Preview:"
-    [[ "$SHOW_PREVIEW" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
-
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Step-by-Step:"
-    [[ "$STEP_BY_STEP" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
+    print_toggle_setting "Per-File Confirm" "$INTERACTIVE_CONFIRM"
+    print_toggle_setting "Show Preview" "$SHOW_PREVIEW"
+    print_toggle_setting "Step-by-Step" "$STEP_BY_STEP"
 
     echo ""
     echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Filters ${COLOR_RESET}${COLOR_YELLOW}($active_count active)${COLOR_RESET}${COLOR_BOLD}${COLOR_WHITE} ━━━${COLOR_RESET}"
 
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Size Filter:"
-    if [[ "$FILTER_BY_SIZE" == true ]]; then
-        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_WHITE}(${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB)${COLOR_RESET}"
-    else
-        echo -e "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
-    fi
-
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Date Filter:"
-    if [[ "$FILTER_BY_DATE" == true ]]; then
-        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_WHITE}(${FILTER_DAYS_OLD}+ days old)${COLOR_RESET}"
-    else
-        echo -e "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
-    fi
-
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Pattern Filter:"
-    if [[ "$FILTER_BY_PATTERN" == true ]]; then
-        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_WHITE}($FILTER_PATTERN)${COLOR_RESET}"
-    else
-        echo -e "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
-    fi
+    print_toggle_setting "Size Filter" "$FILTER_BY_SIZE" "$([[ "$FILTER_BY_SIZE" == true ]] && echo "(${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB)")"
+    print_toggle_setting "Date Filter" "$FILTER_BY_DATE" "$([[ "$FILTER_BY_DATE" == true ]] && echo "(${FILTER_DAYS_OLD}+ days old)")"
+    print_toggle_setting "Pattern Filter" "$FILTER_BY_PATTERN" "$([[ "$FILTER_BY_PATTERN" == true ]] && echo "($FILTER_PATTERN)")"
 
     echo ""
     echo -e "${COLOR_BOLD}${COLOR_WHITE}━━━ Processing ━━━${COLOR_RESET}"
-
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Undo System:"
-    [[ "$ENABLE_UNDO" == true ]] && echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}" || echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}"
+    print_toggle_setting "Undo System" "$ENABLE_UNDO"
 
     printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Batch Size:"
     echo -e "${COLOR_WHITE}$BATCH_SIZE files${COLOR_RESET}"
@@ -338,193 +314,173 @@ get_directory_input() {
 }
 
 # Handle single operations
-handle_single_operations() {
-    while true; do
-        show_single_operations_menu
-        read -r choice
-        
-        case "$choice" in
-            1)
-                if get_directory_input; then
-                    start_operation "Rename Files (Bracket Notation)"
-                    rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            2)
-                if get_directory_input; then
-                    start_operation "Remove Dashes"
-                    # Would implement dash-only removal here
-                    log_info "Feature coming soon!"
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            3)
-                if get_directory_input; then
-                    start_operation "Fix Bracket Spacing"
-                    # Would implement spacing-only fix here
-                    log_info "Feature coming soon!"
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            4)
-                if get_directory_input; then
-                    start_operation "Flatten Directory"
-                    flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            5)
-                if get_directory_input; then
-                    workflow_deep_clean "$TARGET_FOLDER"
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            d|D)
-                if [[ "$DRY_RUN" == true ]]; then
-                    DRY_RUN=false
-                    log_success "Dry run mode DISABLED - changes will be applied"
-                else
-                    DRY_RUN=true
-                    log_success "Dry run mode ENABLED - no changes will be made"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
-                read -p "Press Enter to continue..."
-                ;;
-        esac
-        
-        reset_statistics
-    done
-}
-
-# Handle batch processing
-handle_batch_processing() {
-    while true; do
-        show_batch_menu
-        read -r choice
-        
-        case "$choice" in
-            1)
-                start_operation "Batch Rename Multiple Folders"
-                batch_process_folders
+# Choice handler for single operations menu
+_handle_single_operations_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            if get_directory_input; then
+                start_operation "Rename Files (Bracket Notation)"
+                rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
                 read -p "Press Enter to continue..."
-                ;;
-            2)
+            fi
+            return 0
+            ;;
+        2)
+            if get_directory_input; then
+                start_operation "Remove Dashes"
                 log_info "Feature coming soon!"
+                end_operation
                 read -p "Press Enter to continue..."
-                ;;
-            3)
+            fi
+            return 0
+            ;;
+        3)
+            if get_directory_input; then
+                start_operation "Fix Bracket Spacing"
                 log_info "Feature coming soon!"
+                end_operation
                 read -p "Press Enter to continue..."
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
+            fi
+            return 0
+            ;;
+        4)
+            if get_directory_input; then
+                start_operation "Flatten Directory"
+                flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
+                end_operation
                 read -p "Press Enter to continue..."
-                ;;
-        esac
-        
-        reset_statistics
-    done
+            fi
+            return 0
+            ;;
+        5)
+            if get_directory_input; then
+                workflow_deep_clean "$TARGET_FOLDER"
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        d|D)
+            toggle_flag_with_log DRY_RUN "Dry run mode"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
 }
 
-# Handle workflows
+# Handle single operations (using generic menu loop)
+handle_single_operations() {
+    run_menu_loop show_single_operations_menu _handle_single_operations_choice true
+}
+
+# Choice handler for batch processing menu
+# Returns: 0=continue, 1=break, 2=invalid
+_handle_batch_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            start_operation "Batch Rename Multiple Folders"
+            batch_process_folders
+            end_operation
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        2|3)
+            log_info "Feature coming soon!"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle batch processing (using generic menu loop)
+handle_batch_processing() {
+    run_menu_loop show_batch_menu _handle_batch_choice true
+}
+
+# Choice handler for workflows menu
+# Returns: 0=continue, 1=break, 2=invalid
+_handle_workflow_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            if get_directory_input; then
+                workflow_new_collection "$TARGET_FOLDER"
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        2)
+            if get_directory_input; then
+                workflow_deep_clean "$TARGET_FOLDER"
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle workflows (using generic menu loop)
 handle_workflows() {
-    while true; do
-        show_workflow_menu
-        read -r choice
-        
-        case "$choice" in
-            1)
-                if get_directory_input; then
-                    workflow_new_collection "$TARGET_FOLDER"
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            2)
-                if get_directory_input; then
-                    workflow_deep_clean "$TARGET_FOLDER"
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
-                read -p "Press Enter to continue..."
-                ;;
-        esac
-        
-        reset_statistics
-    done
+    run_menu_loop show_workflow_menu _handle_workflow_choice true
 }
 
-# Handle duplicate detection
-handle_duplicates() {
-    while true; do
-        show_duplicate_menu
-        read -r choice
-        
-        case "$choice" in
-            1)
-                if get_directory_input; then
-                    start_operation "Find Duplicates (Report Only)"
-                    find_duplicates "$TARGET_FOLDER" "report"
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            2)
-                if get_directory_input; then
-                    start_operation "Find and Delete Duplicates"
-                    echo ""
-                    log_warning "This will DELETE duplicate files!"
-                    read -p "Are you sure? (type 'yes' to confirm): " confirm
-                    if [[ "$confirm" == "yes" ]]; then
-                        find_duplicates "$TARGET_FOLDER" "delete"
-                    else
-                        log_warning "Operation cancelled"
-                    fi
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                ;;
-            3)
-                local old_dry_run="$DRY_RUN"
-                DRY_RUN=true
-                if get_directory_input; then
-                    start_operation "Find Duplicates (Dry Run)"
-                    find_duplicates "$TARGET_FOLDER" "delete"
-                    end_operation
-                    read -p "Press Enter to continue..."
-                fi
-                DRY_RUN="$old_dry_run"
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
+# Choice handler for duplicate detection menu
+_handle_duplicates_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            if get_directory_input; then
+                start_operation "Find Duplicates (Report Only)"
+                find_duplicates "$TARGET_FOLDER" "report"
+                end_operation
                 read -p "Press Enter to continue..."
-                ;;
-        esac
-        
-        reset_statistics
-    done
+            fi
+            return 0
+            ;;
+        2)
+            if get_directory_input; then
+                start_operation "Find and Delete Duplicates"
+                echo ""
+                log_warning "This will DELETE duplicate files!"
+                read -p "Are you sure? (type 'yes' to confirm): " confirm
+                if [[ "$confirm" == "yes" ]]; then
+                    find_duplicates "$TARGET_FOLDER" "delete"
+                else
+                    log_warning "Operation cancelled"
+                fi
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            return 0
+            ;;
+        3)
+            local old_dry_run="$DRY_RUN"
+            DRY_RUN=true
+            if get_directory_input; then
+                start_operation "Find Duplicates (Dry Run)"
+                find_duplicates "$TARGET_FOLDER" "delete"
+                end_operation
+                read -p "Press Enter to continue..."
+            fi
+            DRY_RUN="$old_dry_run"
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle duplicate detection (using generic menu loop)
+handle_duplicates() {
+    run_menu_loop show_duplicate_menu _handle_duplicates_choice true
 }
 
 # Handle subtitle generation
@@ -1149,427 +1105,425 @@ handle_catalog() {
 }
 
 # Handle utilities
+# Choice handler for utilities menu
+_handle_utilities_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Organize by Subfolder Names${COLOR_RESET}"
+            echo ""
+            echo "This feature will:"
+            echo "  1. Scan a target folder for subfolders"
+            echo "  2. Search for video files matching those subfolder names"
+            echo "  3. Move matching files into their respective subfolders"
+            echo "  4. Skip files in 'full' folders or already in place"
+            echo ""
+            echo -n "Enter target folder with subfolders (or . for current): "
+            read -r target_folder
+            target_folder="${target_folder:-.}"
+
+            echo -n "Enter search path (or . for current, or enter for target): "
+            read -r search_path
+            search_path="${search_path:-$target_folder}"
+
+            organize_by_subfolder_names "$target_folder" "$search_path"
+
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        2)
+            clear
+            list_undo_operations
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        3)
+            clear
+            undo_organize_operation
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        4)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Last 50 Log Entries:${COLOR_RESET}"
+            echo ""
+            tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        5)
+            if command -v xdg-open &> /dev/null; then
+                xdg-open "$LOG_DIR" 2>/dev/null
+            elif command -v explorer.exe &> /dev/null; then
+                explorer.exe "$(wslpath -w "$LOG_DIR")" 2>/dev/null
+            else
+                log_info "Log directory: $LOG_DIR"
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        6)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Test Filename Transformation:${COLOR_RESET}"
+            echo ""
+            echo -n "Enter filename to test: "
+            read -r test_file
+
+            echo ""
+            echo -e "${COLOR_WHITE}Original:${COLOR_RESET} $test_file"
+
+            local result=$(remove_dashes "$test_file")
+            echo -e "${COLOR_WHITE}After dash removal:${COLOR_RESET} $result"
+
+            result=$(apply_bracket_notation "$result")
+            echo -e "${COLOR_WHITE}After bracket notation:${COLOR_RESET} $result"
+
+            result=$(fix_bracket_spacing "$result")
+            echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
+
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        7)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}System Information:${COLOR_RESET}"
+            echo ""
+            echo -e "${COLOR_BOLD}${COLOR_WHITE}Environment:${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Script Version: ${COLOR_WHITE}$SCRIPT_VERSION${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Platform: ${COLOR_WHITE}$OS_TYPE${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Bash Version: ${COLOR_WHITE}$BASH_VERSION${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} OS: ${COLOR_WHITE}$(uname -s)${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Kernel: ${COLOR_WHITE}$(uname -r)${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hostname: ${COLOR_WHITE}$(hostname)${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} User: ${COLOR_WHITE}$(whoami)${COLOR_RESET}"
+            echo ""
+            echo -e "${COLOR_BOLD}${COLOR_WHITE}Directories:${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Working: ${COLOR_WHITE}$(pwd)${COLOR_RESET}"
+            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Logs: ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
+            echo ""
+            echo -e "${COLOR_BOLD}${COLOR_WHITE}Available Tools:${COLOR_RESET}"
+            command -v jq &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} jq" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} jq"
+            command -v sha256sum &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} sha256sum" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} sha256sum"
+            command -v shasum &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} shasum" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} shasum"
+            command -v ffprobe &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} ffprobe" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} ffprobe"
+            command -v exiftool &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} exiftool" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} exiftool"
+            command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
+            command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle utilities (using generic menu loop)
 handle_utilities() {
-    while true; do
-        show_utilities_menu
-        read -r choice
-        
-        case "$choice" in
-            1)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Organize by Subfolder Names${COLOR_RESET}"
-                echo ""
-                echo "This feature will:"
-                echo "  1. Scan a target folder for subfolders"
-                echo "  2. Search for video files matching those subfolder names"
-                echo "  3. Move matching files into their respective subfolders"
-                echo "  4. Skip files in 'full' folders or already in place"
-                echo ""
-                echo -n "Enter target folder with subfolders (or . for current): "
-                read -r target_folder
-                target_folder="${target_folder:-.}"
-
-                echo -n "Enter search path (or . for current, or enter for target): "
-                read -r search_path
-                search_path="${search_path:-$target_folder}"
-
-                organize_by_subfolder_names "$target_folder" "$search_path"
-
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            2)
-                clear
-                list_undo_operations
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            3)
-                clear
-                undo_organize_operation
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            4)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Last 50 Log Entries:${COLOR_RESET}"
-                echo ""
-                tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            5)
-                if command -v xdg-open &> /dev/null; then
-                    xdg-open "$LOG_DIR" 2>/dev/null
-                elif command -v explorer.exe &> /dev/null; then
-                    explorer.exe "$(wslpath -w "$LOG_DIR")" 2>/dev/null
-                else
-                    log_info "Log directory: $LOG_DIR"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            6)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Test Filename Transformation:${COLOR_RESET}"
-                echo ""
-                echo -n "Enter filename to test: "
-                read -r test_file
-
-                echo ""
-                echo -e "${COLOR_WHITE}Original:${COLOR_RESET} $test_file"
-
-                local result=$(remove_dashes "$test_file")
-                echo -e "${COLOR_WHITE}After dash removal:${COLOR_RESET} $result"
-
-                result=$(apply_bracket_notation "$result")
-                echo -e "${COLOR_WHITE}After bracket notation:${COLOR_RESET} $result"
-
-                result=$(fix_bracket_spacing "$result")
-                echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
-
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            7)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}System Information:${COLOR_RESET}"
-                echo ""
-                echo -e "${COLOR_BOLD}${COLOR_WHITE}Environment:${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Script Version: ${COLOR_WHITE}$SCRIPT_VERSION${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Platform: ${COLOR_WHITE}$OS_TYPE${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Bash Version: ${COLOR_WHITE}$BASH_VERSION${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} OS: ${COLOR_WHITE}$(uname -s)${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Kernel: ${COLOR_WHITE}$(uname -r)${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hostname: ${COLOR_WHITE}$(hostname)${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} User: ${COLOR_WHITE}$(whoami)${COLOR_RESET}"
-                echo ""
-                echo -e "${COLOR_BOLD}${COLOR_WHITE}Directories:${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Working: ${COLOR_WHITE}$(pwd)${COLOR_RESET}"
-                echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Logs: ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
-                echo ""
-                echo -e "${COLOR_BOLD}${COLOR_WHITE}Available Tools:${COLOR_RESET}"
-                command -v jq &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} jq" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} jq"
-                command -v sha256sum &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} sha256sum" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} sha256sum"
-                command -v shasum &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} shasum" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} shasum"
-                command -v ffprobe &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} ffprobe" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} ffprobe"
-                command -v exiftool &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} exiftool" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} exiftool"
-                command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
-                command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
-                read -p "Press Enter to continue..."
-                ;;
-        esac
-    done
+    run_menu_loop show_utilities_menu _handle_utilities_choice false
 }
 
-# Handle organize settings
+# Choice handler for organize settings menu
+_handle_organize_settings_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            echo ""
+            echo -n "Enter default target folder path: "
+            read -r target_path
+            if [[ -d "$target_path" ]]; then
+                ORGANIZE_DEFAULT_TARGET="$target_path"
+                log_success "Default target set to: $target_path"
+            else
+                log_warning "Path does not exist, but setting anyway: $target_path"
+                ORGANIZE_DEFAULT_TARGET="$target_path"
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        2)
+            echo ""
+            echo -n "Enter default search path: "
+            read -r search_path
+            if [[ -d "$search_path" ]]; then
+                ORGANIZE_DEFAULT_SEARCH="$search_path"
+                log_success "Default search path set to: $search_path"
+            else
+                log_warning "Path does not exist, but setting anyway: $search_path"
+                ORGANIZE_DEFAULT_SEARCH="$search_path"
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        3)
+            toggle_flag_with_log ORGANIZE_SHOW_PROGRESS "Progress display"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        4)
+            toggle_flag_with_log ORGANIZE_LOG_OPERATIONS "Operation logging"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle organize settings (using generic menu loop)
 handle_organize_settings() {
-    while true; do
-        show_organize_settings_menu
-        read -r choice
-
-        case "$choice" in
-            1)
-                echo ""
-                echo -n "Enter default target folder path: "
-                read -r target_path
-                if [[ -d "$target_path" ]]; then
-                    ORGANIZE_DEFAULT_TARGET="$target_path"
-                    log_success "Default target set to: $target_path"
-                else
-                    log_warning "Path does not exist, but setting anyway: $target_path"
-                    ORGANIZE_DEFAULT_TARGET="$target_path"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            2)
-                echo ""
-                echo -n "Enter default search path: "
-                read -r search_path
-                if [[ -d "$search_path" ]]; then
-                    ORGANIZE_DEFAULT_SEARCH="$search_path"
-                    log_success "Default search path set to: $search_path"
-                else
-                    log_warning "Path does not exist, but setting anyway: $search_path"
-                    ORGANIZE_DEFAULT_SEARCH="$search_path"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            3)
-                if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-                    ORGANIZE_SHOW_PROGRESS=false
-                    log_success "Progress display DISABLED"
-                else
-                    ORGANIZE_SHOW_PROGRESS=true
-                    log_success "Progress display ENABLED"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            4)
-                if [[ "$ORGANIZE_LOG_OPERATIONS" == true ]]; then
-                    ORGANIZE_LOG_OPERATIONS=false
-                    log_success "Operation logging DISABLED (undo will not be available)"
-                else
-                    ORGANIZE_LOG_OPERATIONS=true
-                    log_success "Operation logging ENABLED (allows undo)"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
-                read -p "Press Enter to continue..."
-                ;;
-        esac
-    done
+    run_menu_loop show_organize_settings_menu _handle_organize_settings_choice false
 }
 
-# Handle settings
+# Choice handler for settings menu
+_handle_settings_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            toggle_flag_with_log DRY_RUN "Dry run mode"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        2)
+            toggle_flag_with_log VERBOSE "Verbose output"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        3)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Supported Video Extensions:${COLOR_RESET}"
+            echo ""
+            for ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
+                echo "  ${SYMBOL_BULLET} .$ext"
+            done
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        4)
+            handle_granular_controls
+            return 0
+            ;;
+        5)
+            handle_organize_settings
+            return 0
+            ;;
+        6)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Save Configuration${COLOR_RESET}"
+            echo ""
+            read -p "Enter profile name (default): " profile_name
+            profile_name=${profile_name:-default}
+            save_config "$profile_name"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        7)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Load Configuration${COLOR_RESET}"
+            echo ""
+            list_config_profiles
+            read -p "Enter profile name to load (default): " profile_name
+            profile_name=${profile_name:-default}
+            load_config "$profile_name"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        8)
+            clear
+            list_config_profiles
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        9)
+            clear
+            list_config_profiles
+            echo ""
+            read -p "Enter profile name to delete: " profile_name
+            if [[ -n "$profile_name" ]]; then
+                read -p "Are you sure? (y/n): " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    delete_config_profile "$profile_name"
+                fi
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle settings (using generic menu loop)
 handle_settings() {
-    while true; do
-        show_settings_menu
-        read -r choice
-        
-        case "$choice" in
-            1)
-                if [[ "$DRY_RUN" == true ]]; then
-                    DRY_RUN=false
-                    log_success "Dry run mode DISABLED"
-                else
-                    DRY_RUN=true
-                    log_success "Dry run mode ENABLED"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            2)
-                if [[ "$VERBOSE" == true ]]; then
-                    VERBOSE=false
-                    log_success "Verbose output DISABLED"
-                else
-                    VERBOSE=true
-                    log_success "Verbose output ENABLED"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            3)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Supported Video Extensions:${COLOR_RESET}"
-                echo ""
-                for ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
-                    echo "  ${SYMBOL_BULLET} .$ext"
-                done
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            4)
-                handle_granular_controls
-                ;;
-            5)
-                handle_organize_settings
-                ;;
-            6)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Save Configuration${COLOR_RESET}"
-                echo ""
-                read -p "Enter profile name (default): " profile_name
-                profile_name=${profile_name:-default}
-                save_config "$profile_name"
-                read -p "Press Enter to continue..."
-                ;;
-            7)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Load Configuration${COLOR_RESET}"
-                echo ""
-                list_config_profiles
-                read -p "Enter profile name to load (default): " profile_name
-                profile_name=${profile_name:-default}
-                load_config "$profile_name"
-                read -p "Press Enter to continue..."
-                ;;
-            8)
-                clear
-                list_config_profiles
-                read -p "Press Enter to continue..."
-                ;;
-            9)
-                clear
-                list_config_profiles
-                echo ""
-                read -p "Enter profile name to delete: " profile_name
-                if [[ -n "$profile_name" ]]; then
-                    read -p "Are you sure? (y/n): " -n 1 -r
-                    echo ""
-                    if [[ $REPLY =~ ^[Yy]$ ]]; then
-                        delete_config_profile "$profile_name"
-                    fi
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
-                read -p "Press Enter to continue..."
-                ;;
-        esac
-    done
+    run_menu_loop show_settings_menu _handle_settings_choice false
 }
 
-# Handle granular controls menu
+# Choice handler for granular controls menu
+_handle_granular_controls_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            toggle_flag_with_log INTERACTIVE_CONFIRM "Per-file confirmation"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        2)
+            toggle_flag_with_log SHOW_PREVIEW "Preview mode"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        3)
+            toggle_flag_with_log STEP_BY_STEP "Step-by-step mode"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        4)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Configure Size Filter${COLOR_RESET}"
+            echo ""
+            read -p "Enable size filter? (y/n): " -n 1 -r
+            echo ""
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                FILTER_BY_SIZE=true
+                read -p "Minimum size in MB (0 for no minimum): " FILTER_MIN_SIZE_MB
+                read -p "Maximum size in MB (0 for no maximum): " FILTER_MAX_SIZE_MB
+                log_success "Size filter enabled: ${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB"
+            else
+                FILTER_BY_SIZE=false
+                log_success "Size filter disabled"
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        5)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Configure Date Filter${COLOR_RESET}"
+            echo ""
+            read -p "Enable date filter? (y/n): " -n 1 -r
+            echo ""
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                FILTER_BY_DATE=true
+                read -p "Process files older than N days: " FILTER_DAYS_OLD
+                log_success "Date filter enabled: ${FILTER_DAYS_OLD}+ days old"
+            else
+                FILTER_BY_DATE=false
+                log_success "Date filter disabled"
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        6)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Configure Pattern Filter${COLOR_RESET}"
+            echo ""
+            read -p "Enable pattern filter? (y/n): " -n 1 -r
+            echo ""
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                FILTER_BY_PATTERN=true
+                read -p "Enter regex pattern: " FILTER_PATTERN
+                log_success "Pattern filter enabled: $FILTER_PATTERN"
+            else
+                FILTER_BY_PATTERN=false
+                FILTER_PATTERN=""
+                log_success "Pattern filter disabled"
+            fi
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        7)
+            toggle_flag_with_log ENABLE_UNDO "Undo system"
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        8)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Undo History${COLOR_RESET}"
+            echo ""
+            if [[ -f "$UNDO_HISTORY_FILE" ]]; then
+                local operations=$(jq -r '.operations[] | select(.undone == false) | "\(.timestamp) - \(.type): \(.original) -> \(.new)"' "$UNDO_HISTORY_FILE" 2>/dev/null)
+                if [[ -n "$operations" ]]; then
+                    echo "$operations"
+                else
+                    echo "No operations in history"
+                fi
+            else
+                echo "No undo history file found"
+            fi
+            echo ""
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        9)
+            clear
+            undo_last_operation
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# Handle granular controls (using generic menu loop)
 handle_granular_controls() {
-    while true; do
-        show_granular_controls_menu
-        read -r choice
-
-        case "$choice" in
-            1)
-                INTERACTIVE_CONFIRM=$([[ "$INTERACTIVE_CONFIRM" == true ]] && echo "false" || echo "true")
-                log_success "Per-file confirmation: $INTERACTIVE_CONFIRM"
-                read -p "Press Enter to continue..."
-                ;;
-            2)
-                SHOW_PREVIEW=$([[ "$SHOW_PREVIEW" == true ]] && echo "false" || echo "true")
-                log_success "Preview mode: $SHOW_PREVIEW"
-                read -p "Press Enter to continue..."
-                ;;
-            3)
-                STEP_BY_STEP=$([[ "$STEP_BY_STEP" == true ]] && echo "false" || echo "true")
-                log_success "Step-by-step mode: $STEP_BY_STEP"
-                read -p "Press Enter to continue..."
-                ;;
-            4)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Configure Size Filter${COLOR_RESET}"
-                echo ""
-                read -p "Enable size filter? (y/n): " -n 1 -r
-                echo ""
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    FILTER_BY_SIZE=true
-                    read -p "Minimum size in MB (0 for no minimum): " FILTER_MIN_SIZE_MB
-                    read -p "Maximum size in MB (0 for no maximum): " FILTER_MAX_SIZE_MB
-                    log_success "Size filter enabled: ${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB"
-                else
-                    FILTER_BY_SIZE=false
-                    log_success "Size filter disabled"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            5)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Configure Date Filter${COLOR_RESET}"
-                echo ""
-                read -p "Enable date filter? (y/n): " -n 1 -r
-                echo ""
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    FILTER_BY_DATE=true
-                    read -p "Process files older than N days: " FILTER_DAYS_OLD
-                    log_success "Date filter enabled: ${FILTER_DAYS_OLD}+ days old"
-                else
-                    FILTER_BY_DATE=false
-                    log_success "Date filter disabled"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            6)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Configure Pattern Filter${COLOR_RESET}"
-                echo ""
-                read -p "Enable pattern filter? (y/n): " -n 1 -r
-                echo ""
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    FILTER_BY_PATTERN=true
-                    read -p "Enter regex pattern: " FILTER_PATTERN
-                    log_success "Pattern filter enabled: $FILTER_PATTERN"
-                else
-                    FILTER_BY_PATTERN=false
-                    FILTER_PATTERN=""
-                    log_success "Pattern filter disabled"
-                fi
-                read -p "Press Enter to continue..."
-                ;;
-            7)
-                ENABLE_UNDO=$([[ "$ENABLE_UNDO" == true ]] && echo "false" || echo "true")
-                log_success "Undo system: $ENABLE_UNDO"
-                read -p "Press Enter to continue..."
-                ;;
-            8)
-                clear
-                echo -e "${COLOR_BRIGHT_CYAN}Undo History${COLOR_RESET}"
-                echo ""
-                if [[ -f "$UNDO_HISTORY_FILE" ]]; then
-                    local operations=$(jq -r '.operations[] | select(.undone == false) | "\(.timestamp) - \(.type): \(.original) -> \(.new)"' "$UNDO_HISTORY_FILE" 2>/dev/null)
-                    if [[ -n "$operations" ]]; then
-                        echo "$operations"
-                    else
-                        echo "No operations in history"
-                    fi
-                else
-                    echo "No undo history file found"
-                fi
-                echo ""
-                read -p "Press Enter to continue..."
-                ;;
-            9)
-                clear
-                undo_last_operation
-                read -p "Press Enter to continue..."
-                ;;
-            b|B)
-                break
-                ;;
-            *)
-                log_error "Invalid option"
-                read -p "Press Enter to continue..."
-                ;;
-        esac
-    done
+    run_menu_loop show_granular_controls_menu _handle_granular_controls_choice false
 }
 
-# Main interactive menu loop
+# Choice handler for main menu
+_handle_main_menu_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            handle_single_operations
+            return 0
+            ;;
+        2)
+            handle_subtitles
+            return 0
+            ;;
+        3)
+            handle_duplicates
+            return 0
+            ;;
+        4)
+            handle_catalog
+            return 0
+            ;;
+        5)
+            handle_utilities
+            return 0
+            ;;
+        6)
+            handle_settings
+            return 0
+            ;;
+        q|Q)
+            echo ""
+            echo "Goodbye!"
+            exit 0
+            ;;
+        *)
+            echo "Invalid choice"
+            sleep 1
+            return 0
+            ;;
+    esac
+}
+
+# Main interactive menu loop (using generic pattern but with custom invalid handling)
 interactive_menu() {
     while true; do
         show_main_menu
         read -r choice
-
-        case "$choice" in
-            1)
-                handle_single_operations  # File Operations
-                ;;
-            2)
-                handle_subtitles
-                ;;
-            3)
-                handle_duplicates
-                ;;
-            4)
-                handle_catalog
-                ;;
-            5)
-                handle_utilities
-                ;;
-            6)
-                handle_settings
-                ;;
-            q|Q)
-                echo ""
-                echo "Goodbye!"
-                exit 0
-                ;;
-            *)
-                echo "Invalid choice"
-                sleep 1
-                ;;
-        esac
+        _handle_main_menu_choice "$choice"
     done
 }
 

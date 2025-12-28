@@ -183,6 +183,159 @@ START_TIME=""
 TARGET_FOLDER=""
 OS_TYPE=""  # Will be set by platform.sh
 
+################################################################################
+# HELPER FUNCTIONS - Common utilities to reduce code duplication
+################################################################################
+
+# Toggle a boolean variable between true and false
+# Args: $1 - variable name (without $)
+# Example: toggle_flag DRY_RUN
+toggle_flag() {
+    local var_name="$1"
+    local current_value="${!var_name}"
+    if [[ "$current_value" == true ]]; then
+        eval "$var_name=false"
+    else
+        eval "$var_name=true"
+    fi
+}
+
+# Toggle a flag and log the result
+# Args: $1 - variable name, $2 - display name for logging
+# Example: toggle_flag_with_log DRY_RUN "Dry run mode"
+toggle_flag_with_log() {
+    local var_name="$1"
+    local display_name="$2"
+    toggle_flag "$var_name"
+    local new_value="${!var_name}"
+    if [[ "$new_value" == true ]]; then
+        [[ "$(type -t log_success)" == "function" ]] && log_success "$display_name ENABLED" || echo "$display_name ENABLED"
+    else
+        [[ "$(type -t log_success)" == "function" ]] && log_success "$display_name DISABLED" || echo "$display_name DISABLED"
+    fi
+}
+
+# Print a toggle setting with consistent formatting
+# Args: $1 - label, $2 - variable value (true/false), $3 - optional extra info
+# Example: print_toggle_setting "Dry Run" "$DRY_RUN"
+print_toggle_setting() {
+    local label="$1"
+    local value="$2"
+    local extra="${3:-}"
+
+    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "$label:"
+    if [[ "$value" == true ]]; then
+        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}${extra:+ ${COLOR_WHITE}$extra${COLOR_RESET}}"
+    else
+        echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}${extra:+ ${COLOR_WHITE}$extra${COLOR_RESET}}"
+    fi
+}
+
+# Print a toggle status inline (for menu items)
+# Args: $1 - variable value (true/false)
+# Returns: formatted ON/OFF string
+print_toggle_status() {
+    local value="$1"
+    if [[ "$value" == true ]]; then
+        echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}"
+    else
+        echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
+    fi
+}
+
+# Execute a command or simulate in dry-run mode
+# Args: $1 - description, $2... - command to execute
+# Example: execute_or_simulate "Moving file" mv "$src" "$dst"
+execute_or_simulate() {
+    local description="$1"
+    shift
+
+    if [[ "$DRY_RUN" == true ]]; then
+        [[ "$(type -t log_dryrun)" == "function" ]] && log_dryrun "$description" || echo "[DRY RUN] $description"
+        return 0
+    else
+        "$@"
+        return $?
+    fi
+}
+
+# Load a module with standardized error handling
+# Args: $1 - module filename (relative to LIB_DIR)
+# Returns: 0 on success, exits on failure
+load_module() {
+    local module="$1"
+    local module_path="${LIB_DIR:-lib}/$module"
+
+    if ! source "$module_path"; then
+        echo "ERROR: Failed to load $module" >&2
+        exit 1
+    fi
+}
+
+# Generic menu loop handler
+# Reduces boilerplate for menu-based UI patterns
+# Args: $1 - menu display function, $2 - choice handler function
+#       $3 - reset_stats (true/false, default true)
+# The handler function receives the choice and should return:
+#   0 = continue loop, 1 = break loop, 2 = invalid choice
+# Example: run_menu_loop show_settings_menu handle_settings_choice true
+run_menu_loop() {
+    local menu_func="$1"
+    local handler_func="$2"
+    local reset_stats="${3:-true}"
+
+    while true; do
+        # Display the menu
+        "$menu_func"
+
+        # Read user choice
+        read -r choice
+
+        # Handle the choice
+        "$handler_func" "$choice"
+        local result=$?
+
+        case $result in
+            0) ;; # Continue loop
+            1) break ;; # Exit loop
+            2) # Invalid choice
+                [[ "$(type -t log_error)" == "function" ]] && log_error "Invalid option" || echo "Invalid option"
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+
+        # Reset statistics if enabled
+        if [[ "$reset_stats" == true ]] && [[ "$(type -t reset_statistics)" == "function" ]]; then
+            reset_statistics
+        fi
+    done
+}
+
+# Simple menu handler for common back/quit patterns
+# Returns: 0=continue, 1=break, 2=invalid
+# Usage: check_menu_navigation "$choice" "b" && return 1
+check_menu_navigation() {
+    local choice="$1"
+    local back_key="${2:-b}"
+    local quit_key="${3:-q}"
+
+    case "${choice,,}" in  # Convert to lowercase
+        "$back_key")
+            return 0  # Signal to break
+            ;;
+        "$quit_key")
+            echo ""
+            echo "Goodbye!"
+            exit 0
+            ;;
+    esac
+    return 1  # Not a navigation key
+}
+
+################################################################################
+# INITIALIZATION
+################################################################################
+
 # Initialize core module
 init_core() {
     # Create necessary directories
