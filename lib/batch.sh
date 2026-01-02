@@ -64,6 +64,13 @@ batch_process_folders() {
                     ((failed++))
                 fi
                 ;;
+            "cleanup")
+                if workflow_deep_clean "$folder"; then
+                    ((success++))
+                else
+                    ((failed++))
+                fi
+                ;;
             "duplicates")
                 if find_duplicates "$folder" "report"; then
                     ((success++))
@@ -83,6 +90,62 @@ batch_process_folders() {
     log_info "  Processed: $processed"
     log_info "  Successful: $success"
     [[ $failed -gt 0 ]] && log_warning "  Failed: $failed"
+}
+
+################################################################################
+# BATCH WRAPPERS (for interactive menu)
+################################################################################
+
+# Batch flatten multiple folders (interactive)
+batch_flatten_interactive() {
+    log_info "Batch Flatten Multiple Folders"
+    echo ""
+    echo "Enter directories to flatten (one per line, empty line to finish):"
+    echo ""
+
+    local -a folders
+    while true; do
+        read -p "Directory: " dir
+        [[ -z "$dir" ]] && break
+
+        dir=$(validate_directory "$dir")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$dir")
+        fi
+    done
+
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No directories specified"
+        return 1
+    fi
+
+    batch_process_folders "flatten" "${folders[@]}"
+}
+
+# Batch cleanup multiple folders (interactive)
+batch_cleanup_interactive() {
+    log_info "Batch Full Cleanup (Multiple Folders)"
+    echo ""
+    echo "Enter directories to clean (one per line, empty line to finish):"
+    echo ""
+
+    local -a folders
+    while true; do
+        read -p "Directory: " dir
+        [[ -z "$dir" ]] && break
+
+        dir=$(validate_directory "$dir")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$dir")
+        fi
+    done
+
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No directories specified"
+        return 1
+    fi
+
+    batch_process_folders "cleanup" "${folders[@]}"
 }
 
 ################################################################################

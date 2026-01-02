@@ -34,21 +34,21 @@ SCRIPT_NAME="Video Manager Ultimate - Bash Edition"
 SCRIPT_DATE="2025-11-02"
 
 # Color codes for beautiful output
-readonly COLOR_RESET='\033[0m'
-readonly COLOR_BOLD='\033[1m'
-readonly COLOR_RED='\033[0;31m'
-readonly COLOR_GREEN='\033[0;32m'
-readonly COLOR_YELLOW='\033[0;33m'
-readonly COLOR_BLUE='\033[0;34m'
-readonly COLOR_MAGENTA='\033[0;35m'
-readonly COLOR_CYAN='\033[0;36m'
-readonly COLOR_WHITE='\033[0;37m'
-readonly COLOR_BRIGHT_RED='\033[1;31m'
-readonly COLOR_BRIGHT_GREEN='\033[1;32m'
-readonly COLOR_BRIGHT_YELLOW='\033[1;33m'
-readonly COLOR_BRIGHT_BLUE='\033[1;34m'
-readonly COLOR_BRIGHT_MAGENTA='\033[1;35m'
-readonly COLOR_BRIGHT_CYAN='\033[1;36m'
+readonly COLOR_RESET=$'\033[0m'
+readonly COLOR_BOLD=$'\033[1m'
+readonly COLOR_RED=$'\033[0;31m'
+readonly COLOR_GREEN=$'\033[0;32m'
+readonly COLOR_YELLOW=$'\033[0;33m'
+readonly COLOR_BLUE=$'\033[0;34m'
+readonly COLOR_MAGENTA=$'\033[0;35m'
+readonly COLOR_CYAN=$'\033[0;36m'
+readonly COLOR_WHITE=$'\033[0;37m'
+readonly COLOR_BRIGHT_RED=$'\033[1;31m'
+readonly COLOR_BRIGHT_GREEN=$'\033[1;32m'
+readonly COLOR_BRIGHT_YELLOW=$'\033[1;33m'
+readonly COLOR_BRIGHT_BLUE=$'\033[1;34m'
+readonly COLOR_BRIGHT_MAGENTA=$'\033[1;35m'
+readonly COLOR_BRIGHT_CYAN=$'\033[1;36m'
 
 # Unicode characters for visual appeal
 readonly SYMBOL_CHECK="✓"
@@ -1390,6 +1390,158 @@ rename_files_in_directory() {
     
     echo -ne "\r\033[K" # Clear progress line
     
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually renamed"
+    else
+        log_success "Renamed $renamed_count out of $file_count video files"
+    fi
+}
+
+# Remove dashes from filenames in directory
+remove_dashes_in_directory() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+
+    log_info "Scanning directory: $directory"
+
+    local file_count=0
+    local renamed_count=0
+
+    # Count total video files first
+    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    log_info "Found $total_files video files to process"
+
+    echo ""
+
+    while IFS= read -r -d '' file; do
+        [[ "$(basename "$file")" == .* ]] && continue
+
+        if ! is_video_file "$file"; then
+            continue
+        fi
+
+        ((file_count++))
+        ((STATS[files_processed]++))
+
+        local filename=$(basename "$file")
+        local new_filename=$(remove_dashes "$filename")
+
+        # Progress indicator
+        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+
+        if [[ "$filename" != "$new_filename" ]]; then
+            local new_path="$directory/$new_filename"
+
+            # Check for conflicts
+            if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+                new_filename=$(get_safe_filename "$directory" "$new_filename")
+                new_path="$directory/$new_filename"
+            fi
+
+            echo -ne "\r\033[K" # Clear line
+
+            if [[ "$dry_run" == true ]]; then
+                echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
+                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                log_message "DRYRUN" "Would rename: $filename -> $new_filename"
+            else
+                mv -- "$file" "$new_path" 2>/dev/null
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
+                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    log_message "RENAME" "Success: $filename -> $new_filename"
+                    ((renamed_count++))
+                    ((STATS[files_renamed]++))
+                else
+                    log_error "Failed to rename: $filename"
+                fi
+            fi
+        else
+            ((STATS[files_skipped]++))
+            log_verbose "Skipped (no change needed): $filename"
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -print0)
+
+    echo -ne "\r\033[K" # Clear progress line
+
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually renamed"
+    else
+        log_success "Renamed $renamed_count out of $file_count video files"
+    fi
+}
+
+# Fix bracket spacing in filenames in directory
+fix_bracket_spacing_in_directory() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+
+    log_info "Scanning directory: $directory"
+
+    local file_count=0
+    local renamed_count=0
+
+    # Count total video files first
+    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    log_info "Found $total_files video files to process"
+
+    echo ""
+
+    while IFS= read -r -d '' file; do
+        [[ "$(basename "$file")" == .* ]] && continue
+
+        if ! is_video_file "$file"; then
+            continue
+        fi
+
+        ((file_count++))
+        ((STATS[files_processed]++))
+
+        local filename=$(basename "$file")
+        local new_filename=$(fix_bracket_spacing "$filename")
+
+        # Progress indicator
+        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+
+        if [[ "$filename" != "$new_filename" ]]; then
+            local new_path="$directory/$new_filename"
+
+            # Check for conflicts
+            if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+                new_filename=$(get_safe_filename "$directory" "$new_filename")
+                new_path="$directory/$new_filename"
+            fi
+
+            echo -ne "\r\033[K" # Clear line
+
+            if [[ "$dry_run" == true ]]; then
+                echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
+                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                log_message "DRYRUN" "Would rename: $filename -> $new_filename"
+            else
+                mv -- "$file" "$new_path" 2>/dev/null
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
+                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    log_message "RENAME" "Success: $filename -> $new_filename"
+                    ((renamed_count++))
+                    ((STATS[files_renamed]++))
+                else
+                    log_error "Failed to rename: $filename"
+                fi
+            fi
+        else
+            ((STATS[files_skipped]++))
+            log_verbose "Skipped (no change needed): $filename"
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -print0)
+
+    echo -ne "\r\033[K" # Clear progress line
+
     if [[ "$dry_run" == true ]]; then
         log_info "Dry run complete - no files were actually renamed"
     else
@@ -4053,6 +4205,104 @@ batch_process_folders() {
     log_success "Batch processing complete!"
 }
 
+# Batch flatten multiple folders
+batch_flatten_interactive() {
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_FOLDER} Batch Flatten Mode${COLOR_RESET}"
+    echo ""
+    echo "Enter directory paths to flatten (one per line, empty line to finish):"
+    echo ""
+
+    local folders=()
+    local line_num=1
+
+    while true; do
+        echo -n "[$line_num] Directory: "
+        read -r folder
+
+        if [[ -z "$folder" ]]; then
+            break
+        fi
+
+        folder=$(validate_directory "$folder")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$folder")
+            log_success "Added: $folder"
+            ((line_num++))
+        fi
+    done
+
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No valid directories provided"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}Flattening ${#folders[@]} directories:${COLOR_RESET}"
+    echo ""
+
+    local folder_num=1
+    for folder in "${folders[@]}"; do
+        echo -e "${COLOR_BRIGHT_MAGENTA}[$folder_num/${#folders[@]}] Flattening: $folder${COLOR_RESET}"
+        echo ""
+
+        flatten_directory "$folder" false
+
+        echo ""
+        ((folder_num++))
+    done
+
+    log_success "Batch flattening complete!"
+}
+
+# Batch cleanup multiple folders
+batch_cleanup_interactive() {
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_FOLDER} Batch Cleanup Mode${COLOR_RESET}"
+    echo ""
+    echo "Enter directory paths to clean (one per line, empty line to finish):"
+    echo ""
+
+    local folders=()
+    local line_num=1
+
+    while true; do
+        echo -n "[$line_num] Directory: "
+        read -r folder
+
+        if [[ -z "$folder" ]]; then
+            break
+        fi
+
+        folder=$(validate_directory "$folder")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$folder")
+            log_success "Added: $folder"
+            ((line_num++))
+        fi
+    done
+
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No valid directories provided"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${COLOR_BOLD}Cleaning ${#folders[@]} directories:${COLOR_RESET}"
+    echo ""
+
+    local folder_num=1
+    for folder in "${folders[@]}"; do
+        echo -e "${COLOR_BRIGHT_MAGENTA}[$folder_num/${#folders[@]}] Cleaning: $folder${COLOR_RESET}"
+        echo ""
+
+        workflow_deep_clean "$folder"
+
+        echo ""
+        ((folder_num++))
+    done
+
+    log_success "Batch cleanup complete!"
+}
+
 ################################################################################
 # AUTOMATED WORKFLOWS
 ################################################################################
@@ -5006,8 +5256,7 @@ handle_single_operations() {
             2)
                 if get_directory_input; then
                     start_operation "Remove Dashes"
-                    # Would implement dash-only removal here
-                    log_info "Feature coming soon!"
+                    remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     read -p "Press Enter to continue..."
                 fi
@@ -5015,8 +5264,7 @@ handle_single_operations() {
             3)
                 if get_directory_input; then
                     start_operation "Fix Bracket Spacing"
-                    # Would implement spacing-only fix here
-                    log_info "Feature coming soon!"
+                    fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     read -p "Press Enter to continue..."
                 fi
@@ -5072,11 +5320,15 @@ handle_batch_processing() {
                 read -p "Press Enter to continue..."
                 ;;
             2)
-                log_info "Feature coming soon!"
+                start_operation "Batch Flatten Multiple Folders"
+                batch_flatten_interactive
+                end_operation
                 read -p "Press Enter to continue..."
                 ;;
             3)
-                log_info "Feature coming soon!"
+                start_operation "Batch Full Cleanup"
+                batch_cleanup_interactive
+                end_operation
                 read -p "Press Enter to continue..."
                 ;;
             b|B)

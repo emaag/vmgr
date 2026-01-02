@@ -350,7 +350,7 @@ _handle_single_operations_choice() {
         2)
             if get_directory_input; then
                 start_operation "Remove Dashes"
-                log_info "Feature coming soon!"
+                remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
                 read -p "Press Enter to continue..."
             fi
@@ -359,7 +359,7 @@ _handle_single_operations_choice() {
         3)
             if get_directory_input; then
                 start_operation "Fix Bracket Spacing"
-                log_info "Feature coming soon!"
+                fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
                 read -p "Press Enter to continue..."
             fi
@@ -482,8 +482,17 @@ _handle_batch_choice() {
             read -p "Press Enter to continue..."
             return 0
             ;;
-        2|3)
-            log_info "Feature coming soon!"
+        2)
+            start_operation "Batch Flatten Multiple Folders"
+            batch_flatten_interactive
+            end_operation
+            read -p "Press Enter to continue..."
+            return 0
+            ;;
+        3)
+            start_operation "Batch Full Cleanup"
+            batch_cleanup_interactive
+            end_operation
             read -p "Press Enter to continue..."
             return 0
             ;;

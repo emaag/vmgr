@@ -165,6 +165,158 @@ rename_files_in_directory() {
     fi
 }
 
+# Remove dashes from filenames in directory
+remove_dashes_in_directory() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+
+    log_info "Scanning directory: $directory"
+
+    local file_count=0
+    local renamed_count=0
+
+    # Count total video files first
+    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    log_info "Found $total_files video files to process"
+
+    echo ""
+
+    while IFS= read -r -d '' file; do
+        [[ "$(basename "$file")" == .* ]] && continue
+
+        if ! is_video_file "$file"; then
+            continue
+        fi
+
+        ((file_count++))
+        ((STATS[files_processed]++))
+
+        local filename=$(basename "$file")
+        local new_filename=$(remove_dashes "$filename")
+
+        # Progress indicator
+        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+
+        if [[ "$filename" != "$new_filename" ]]; then
+            local new_path="$directory/$new_filename"
+
+            # Check for conflicts
+            if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+                new_filename=$(get_safe_filename "$directory" "$new_filename")
+                new_path="$directory/$new_filename"
+            fi
+
+            echo -ne "\r\033[K" # Clear line
+
+            if [[ "$dry_run" == true ]]; then
+                echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
+                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                log_message "DRYRUN" "Would rename: $filename -> $new_filename"
+            else
+                mv -- "$file" "$new_path" 2>/dev/null
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
+                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    log_message "RENAME" "Success: $filename -> $new_filename"
+                    ((renamed_count++))
+                    ((STATS[files_renamed]++))
+                else
+                    log_error "Failed to rename: $filename"
+                fi
+            fi
+        else
+            ((STATS[files_skipped]++))
+            log_verbose "Skipped (no change needed): $filename"
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -print0)
+
+    echo -ne "\r\033[K" # Clear progress line
+
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually renamed"
+    else
+        log_success "Renamed $renamed_count out of $file_count video files"
+    fi
+}
+
+# Fix bracket spacing in filenames in directory
+fix_bracket_spacing_in_directory() {
+    local directory="$1"
+    local dry_run="${2:-false}"
+
+    log_info "Scanning directory: $directory"
+
+    local file_count=0
+    local renamed_count=0
+
+    # Count total video files first
+    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    log_info "Found $total_files video files to process"
+
+    echo ""
+
+    while IFS= read -r -d '' file; do
+        [[ "$(basename "$file")" == .* ]] && continue
+
+        if ! is_video_file "$file"; then
+            continue
+        fi
+
+        ((file_count++))
+        ((STATS[files_processed]++))
+
+        local filename=$(basename "$file")
+        local new_filename=$(fix_bracket_spacing "$filename")
+
+        # Progress indicator
+        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+
+        if [[ "$filename" != "$new_filename" ]]; then
+            local new_path="$directory/$new_filename"
+
+            # Check for conflicts
+            if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+                new_filename=$(get_safe_filename "$directory" "$new_filename")
+                new_path="$directory/$new_filename"
+            fi
+
+            echo -ne "\r\033[K" # Clear line
+
+            if [[ "$dry_run" == true ]]; then
+                echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
+                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                log_message "DRYRUN" "Would rename: $filename -> $new_filename"
+            else
+                mv -- "$file" "$new_path" 2>/dev/null
+                if [[ $? -eq 0 ]]; then
+                    echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
+                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    log_message "RENAME" "Success: $filename -> $new_filename"
+                    ((renamed_count++))
+                    ((STATS[files_renamed]++))
+                else
+                    log_error "Failed to rename: $filename"
+                fi
+            fi
+        else
+            ((STATS[files_skipped]++))
+            log_verbose "Skipped (no change needed): $filename"
+        fi
+    done < <(find "$directory" -maxdepth 1 -type f -print0)
+
+    echo -ne "\r\033[K" # Clear progress line
+
+    if [[ "$dry_run" == true ]]; then
+        log_info "Dry run complete - no files were actually renamed"
+    else
+        log_success "Renamed $renamed_count out of $file_count video files"
+    fi
+}
+
 ################################################################################
 # DIRECTORY FLATTENING
 ################################################################################
