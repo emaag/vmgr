@@ -53,10 +53,11 @@ log_message() {
 
 # Verbose console output with logging
 # Args: $* - message
+# Note: Output goes to stderr to avoid polluting stdout (used for return values)
 log_verbose() {
     local message="$*"
     if [[ "$VERBOSE" == true ]]; then
-        echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message"
+        echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message" >&2
     fi
     log_message "INFO" "$message"
 }
@@ -65,7 +66,7 @@ log_verbose() {
 # Args: $* - message
 log_success() {
     local message="$*"
-    echo -e "${COLOR_BRIGHT_GREEN}${SYMBOL_CHECK}${COLOR_RESET} $message"
+    echo -e "${COLOR_BRIGHT_GREEN}${SYMBOL_CHECK}${COLOR_RESET} $message" >&2
     log_message "SUCCESS" "$message"
 }
 
@@ -73,7 +74,7 @@ log_success() {
 # Args: $* - message
 log_error() {
     local message="$*"
-    echo -e "${COLOR_BRIGHT_RED}${SYMBOL_CROSS}${COLOR_RESET} $message"
+    echo -e "${COLOR_BRIGHT_RED}${SYMBOL_CROSS}${COLOR_RESET} $message" >&2
     log_message "ERROR" "$message"
     ((STATS[errors]++))
 }
@@ -82,7 +83,7 @@ log_error() {
 # Args: $* - message
 log_warning() {
     local message="$*"
-    echo -e "${COLOR_BRIGHT_YELLOW}${SYMBOL_WARN}${COLOR_RESET} $message"
+    echo -e "${COLOR_BRIGHT_YELLOW}${SYMBOL_WARN}${COLOR_RESET} $message" >&2
     log_message "WARN" "$message"
 }
 
@@ -90,7 +91,7 @@ log_warning() {
 # Args: $* - message
 log_info() {
     local message="$*"
-    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message"
+    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message" >&2
     log_message "INFO" "$message"
 }
 
