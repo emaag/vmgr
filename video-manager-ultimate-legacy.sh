@@ -5006,8 +5006,7 @@ handle_single_operations() {
             2)
                 if get_directory_input; then
                     start_operation "Remove Dashes"
-                    # Would implement dash-only removal here
-                    log_info "Feature coming soon!"
+                    remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     read -p "Press Enter to continue..."
                 fi
@@ -5015,8 +5014,7 @@ handle_single_operations() {
             3)
                 if get_directory_input; then
                     start_operation "Fix Bracket Spacing"
-                    # Would implement spacing-only fix here
-                    log_info "Feature coming soon!"
+                    fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     read -p "Press Enter to continue..."
                 fi
@@ -5072,11 +5070,15 @@ handle_batch_processing() {
                 read -p "Press Enter to continue..."
                 ;;
             2)
-                log_info "Feature coming soon!"
+                start_operation "Batch Flatten Multiple Folders"
+                batch_flatten_interactive
+                end_operation
                 read -p "Press Enter to continue..."
                 ;;
             3)
-                log_info "Feature coming soon!"
+                start_operation "Batch Full Cleanup"
+                batch_cleanup_interactive
+                end_operation
                 read -p "Press Enter to continue..."
                 ;;
             b|B)
