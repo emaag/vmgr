@@ -1616,7 +1616,7 @@ _handle_main_menu_choice() {
     esac
 }
 
-# Main interactive menu loop (using generic pattern but with custom invalid handling)
+# Main interactive menu loop (simple number-based input)
 interactive_menu() {
     while true; do
         show_main_menu
