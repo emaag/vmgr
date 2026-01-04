@@ -68,7 +68,7 @@ find_duplicates() {
         else
             hash_map[$hash]="$file"
         fi
-    done < <(find "$directory" -type f -print0 | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    done < <(find "$directory" -type f -print0 | grep -zE "$VIDEO_EXTENSIONS_PATTERN")
 
     echo -ne "\r\033[K" # Clear line
 
@@ -77,8 +77,12 @@ find_duplicates() {
         return 0
     fi
 
-    # Create report
-    mkdir -p "$report_dir" 2>/dev/null
+    # Create report directory with proper error handling
+    if ! mkdir -p "$report_dir" 2>/dev/null; then
+        log_error "Failed to create report directory: $report_dir"
+        return 1
+    fi
+
     local report_file="$report_dir/duplicates.txt"
     local csv_file="$report_dir/duplicates.csv"
 
@@ -87,7 +91,7 @@ find_duplicates() {
         echo "Generated: $(date '+%Y-%m-%d %H:%M:%S')"
         echo "Directory: $directory"
         echo "Total Duplicates: $total_duplicates"
-        echo "Space Wasted: $((space_wasted / 1024 / 1024)) MB"
+        echo "Space Wasted: $((space_wasted / BYTES_PER_MB)) MB"
         echo ""
         echo "========================================"
         echo ""
@@ -100,7 +104,7 @@ find_duplicates() {
         local original="${hash_map[$hash]}"
         local dupes="${duplicate_groups[$hash]}"
         local size=$(get_file_size "$original")
-        local size_mb=$((size / 1024 / 1024))
+        local size_mb=$((size / BYTES_PER_MB))
 
         echo -e "${COLOR_MAGENTA}Duplicate Group #$group_num${COLOR_RESET}"
         echo "  Hash: $hash"
@@ -144,7 +148,7 @@ find_duplicates() {
     log_success "Report generated: $report_file"
     log_success "CSV export: $csv_file"
 
-    local space_mb=$((space_wasted / 1024 / 1024))
+    local space_mb=$((space_wasted / BYTES_PER_MB))
     log_info "Total space wasted by duplicates: ${space_mb} MB"
 }
 

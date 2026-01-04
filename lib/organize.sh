@@ -502,7 +502,7 @@ organize_by_subfolder_names() {
             local subfolder_name=$(basename "$subfolder")
             local count=$(find "$search_path" -type f \( \
                 -iname "*${subfolder_name}*" \
-                \) 2>/dev/null | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg)$' | wc -l)
+                \) 2>/dev/null | grep -iE "$VIDEO_EXTENSIONS_PATTERN" | wc -l)
             ((total_files += count))
         done
         log_info "Total files to process: $total_files"
@@ -547,7 +547,7 @@ organize_by_subfolder_names() {
         done < <(find "$search_path" -type f \( \
             -iname "*${subfolder_name}*" -o \
             -iname "*${subfolder_name_lower}*" \
-            \) 2>/dev/null | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg)$')
+            \) 2>/dev/null | grep -iE "$VIDEO_EXTENSIONS_PATTERN")
 
         # Move matching files
         if [[ ${#matching_files[@]} -gt 0 ]]; then

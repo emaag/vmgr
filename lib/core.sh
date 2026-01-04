@@ -177,6 +177,21 @@ STATS[subtitles_failed]=0
 STATS[subtitles_translated]=0
 STATS[low_confidence_count]=0
 
+# File system constants
+readonly BYTES_PER_KB=1024
+readonly BYTES_PER_MB=1048576
+readonly BYTES_PER_GB=1073741824
+readonly SUBTITLE_MIN_FILE_SIZE_BYTES=100
+readonly DEFAULT_FIND_MAX_DEPTH=1
+readonly WHISPER_QUALITY=90  # ImageMagick JPEG quality
+
+# Available Whisper models (in order of size/accuracy)
+readonly WHISPER_MODELS=("tiny" "base" "small" "medium" "large")
+readonly SUBTITLE_FORMATS=("srt" "vtt" "txt" "json")
+
+# Build video extensions pattern for grep
+readonly VIDEO_EXTENSIONS_PATTERN='\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$'
+
 # Global variables
 CURRENT_OPERATION=""
 START_TIME=""

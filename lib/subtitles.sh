@@ -152,10 +152,10 @@ verify_subtitle_quality() {
         return 1
     fi
 
-    # Check file size (should be > 100 bytes for valid subtitle)
+    # Check file size (should be > SUBTITLE_MIN_FILE_SIZE_BYTES for valid subtitle)
     local file_size=$(stat -f%z "$subtitle_file" 2>/dev/null || stat -c%s "$subtitle_file" 2>/dev/null)
 
-    if [[ $file_size -lt 100 ]]; then
+    if [[ $file_size -lt $SUBTITLE_MIN_FILE_SIZE_BYTES ]]; then
         log_warning "Subtitle file is too small (${file_size} bytes), might be invalid"
         return 1
     fi
