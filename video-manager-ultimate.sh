@@ -64,6 +64,9 @@ init_core
 # Detect operating system
 detect_os
 
+# Ensure terminal is in a good state (echo enabled)
+stty echo 2>/dev/null || true
+
 ################################################################################
 # COMMAND LINE INTERFACE
 ################################################################################
