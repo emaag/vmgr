@@ -168,46 +168,6 @@ show_progress() {
     fi
 }
 
-# Show spinner for indefinite operations
-# Args: $1 - PID to monitor, $2 - message (optional)
-show_spinner() {
-    local pid=$1
-    local message="${2:-Working}"
-    local delay=0.1
-    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-
-    while kill -0 $pid 2>/dev/null; do
-        local temp=${spinstr#?}
-        printf "\r${COLOR_CYAN}%s${COLOR_RESET} ${COLOR_YELLOW}%c${COLOR_RESET} " "$message" "$spinstr"
-        spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
-    done
-
-    printf "\r${COLOR_GREEN}%s${COLOR_RESET} ${COLOR_GREEN}✓${COLOR_RESET}\n" "$message"
-}
-
-# Draw simple progress bar
-# Args: $1 - current count, $2 - total count
-draw_progress_bar() {
-    local current=$1
-    local total=$2
-    local width=50
-
-    # Prevent division by zero
-    if [[ $total -eq 0 ]]; then
-        printf "\r[%${width}s] 0%% (0/0)" | tr ' ' '░'
-        return
-    fi
-
-    local percentage=$((current * 100 / total))
-    local filled=$((width * current / total))
-    local empty=$((width - filled))
-
-    printf "\r["
-    printf "%${filled}s" | tr ' ' '█'
-    printf "%${empty}s" | tr ' ' '░'
-    printf "] %3d%% (%d/%d)" $percentage $current $total
-}
 
 # Print statistics summary
 # Displays current STATS array values

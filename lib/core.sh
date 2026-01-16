@@ -96,58 +96,11 @@ SUBTITLE_LANGUAGE="auto" # auto or language code (en, es, fr, etc.)
 SUBTITLE_SUFFIX=".srt"
 SUBTITLE_PARALLEL_JOBS=2 # Number of parallel subtitle generation jobs (1-8)
 SUBTITLE_RESUME_FILE="$HOME/.video-manager-subtitle-resume.txt"
-SUBTITLE_MIN_CONFIDENCE=0.5 # Minimum confidence score (0.0 - 1.0)
-SUBTITLE_AUTO_TRANSLATE=false # Auto-translate subtitles
-SUBTITLE_TRANSLATE_TO="en" # Target language for translation
-
-# Advanced subtitle features
-SUBTITLE_USE_GPU=false # Enable GPU acceleration (auto-detect CUDA)
-SUBTITLE_OPTIMIZE_BATCH=true # Sort videos by size for efficiency
-SUBTITLE_SPEAKER_DIARIZATION=false # Identify different speakers
-SUBTITLE_INTERACTIVE_EDIT=false # Enable interactive editing mode
-SUBTITLE_AUTO_EDIT=true # Automatically edit subtitles without prompting
-SUBTITLE_AUTO_PUNCTUATION=true # Auto-fix punctuation and capitalization
-
-# Recursive scanning options
-SUBTITLE_RECURSIVE=false # Scan subdirectories recursively
-SUBTITLE_MAX_DEPTH=10 # Maximum recursion depth (1-50)
-SUBTITLE_MAX_FILES=1000 # Maximum files to process in recursive mode
-SUBTITLE_MIN_DEPTH=1 # Minimum depth to start scanning (0=include current dir)
-SUBTITLE_INTERACTIVE_SELECT=false # Interactively choose subdirectories
-
-# Advanced filtering
-SUBTITLE_SKIP_PATTERNS=(".*" "_*" "node_modules" ".git" ".svn" "Trash" "tmp" "temp") # Directories to skip
-SUBTITLE_MIN_SIZE_MB=0 # Minimum file size in MB (0=no limit)
-SUBTITLE_MAX_SIZE_MB=0 # Maximum file size in MB (0=no limit)
-SUBTITLE_MODIFIED_DAYS=0 # Only process files modified in last N days (0=no limit)
-SUBTITLE_SHOW_DIR_STATS=true # Show statistics per directory
-SUBTITLE_SKIP_EXISTING=true # Skip videos that already have subtitles
-
 # Quick-win features
 ENABLE_UNDO=true # Enable undo/rollback functionality
-MAX_UNDO_ENTRIES=100 # Maximum undo entries to keep
 UNDO_HISTORY_FILE="$HOME/.video-manager-undo.json"
-FAVORITES_FILE="$HOME/.video-manager-favorites.txt"
-WATCH_FOLDERS_FILE="$HOME/.video-manager-watch.txt"
-RENAME_PRESETS_FILE="$HOME/.video-manager-presets.json"
-ENABLE_EMAIL_NOTIFY=false # Send email notifications
-EMAIL_RECIPIENT="" # Email address for notifications
 ENABLE_SOUND_NOTIFY=true # Sound notifications on completion
-THEME="auto" # Color theme: auto, dark, light
 DRY_RUN_DIFF=true # Show before/after preview in dry-run
-
-# Backup & Restore System
-BACKUP_ENABLED=true # Enable automatic backups before operations
-BACKUP_DIR="$HOME/.video-manager-backups" # Backup storage location
-BACKUP_MAX_COUNT=20 # Maximum backups to keep (auto-cleanup)
-BACKUP_COMPRESSION=true # Compress backups with gzip
-BACKUP_INCLUDE_LOGS=true # Include operation logs in backups
-
-# Configuration Management
-CONFIG_FILE="$HOME/.video-manager.conf" # Main configuration file
-CONFIG_AUTO_SAVE=true # Auto-save settings on change
-CONFIG_AUTO_LOAD=true # Auto-load settings on startup
-CONFIG_PROFILE="default" # Active configuration profile
 
 # Multi-Drive Catalog System
 CATALOG_ENABLED=true # Enable catalog system
@@ -178,7 +131,6 @@ STATS[subtitles_translated]=0
 STATS[low_confidence_count]=0
 
 # Global variables
-CURRENT_OPERATION=""
 START_TIME=""
 TARGET_FOLDER=""
 OS_TYPE=""  # Will be set by platform.sh
@@ -231,33 +183,6 @@ print_toggle_setting() {
     fi
 }
 
-# Print a toggle status inline (for menu items)
-# Args: $1 - variable value (true/false)
-# Returns: formatted ON/OFF string
-print_toggle_status() {
-    local value="$1"
-    if [[ "$value" == true ]]; then
-        echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}"
-    else
-        echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}"
-    fi
-}
-
-# Execute a command or simulate in dry-run mode
-# Args: $1 - description, $2... - command to execute
-# Example: execute_or_simulate "Moving file" mv "$src" "$dst"
-execute_or_simulate() {
-    local description="$1"
-    shift
-
-    if [[ "$DRY_RUN" == true ]]; then
-        [[ "$(type -t log_dryrun)" == "function" ]] && log_dryrun "$description" || echo "[DRY RUN] $description"
-        return 0
-    else
-        "$@"
-        return $?
-    fi
-}
 
 # Load a module with standardized error handling
 # Args: $1 - module filename (relative to LIB_DIR)
@@ -311,26 +236,6 @@ run_menu_loop() {
     done
 }
 
-# Simple menu handler for common back/quit patterns
-# Returns: 0=continue, 1=break, 2=invalid
-# Usage: check_menu_navigation "$choice" "b" && return 1
-check_menu_navigation() {
-    local choice="$1"
-    local back_key="${2:-b}"
-    local quit_key="${3:-q}"
-
-    case "${choice,,}" in  # Convert to lowercase
-        "$back_key")
-            return 0  # Signal to break
-            ;;
-        "$quit_key")
-            echo ""
-            echo "Goodbye!"
-            exit 0
-            ;;
-    esac
-    return 1  # Not a navigation key
-}
 
 
 ################################################################################

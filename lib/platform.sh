@@ -129,34 +129,6 @@ format_bytes() {
     fi
 }
 
-# Platform-specific file opening
-# Args: $1 - file or directory path
-# Opens file/directory in native file manager
-open_file_manager() {
-    local path="$1"
-
-    case "$OS_TYPE" in
-        macOS)
-            open "$path"
-            ;;
-        Windows|WSL)
-            if command -v explorer.exe &>/dev/null; then
-                explorer.exe "$path"
-            elif command -v xdg-open &>/dev/null; then
-                xdg-open "$path"
-            fi
-            ;;
-        Linux)
-            if command -v xdg-open &>/dev/null; then
-                xdg-open "$path"
-            elif command -v nautilus &>/dev/null; then
-                nautilus "$path"
-            elif command -v dolphin &>/dev/null; then
-                dolphin "$path"
-            fi
-            ;;
-    esac
-}
 
 # Platform-specific sed in-place editing
 # Handles the difference between GNU sed (-i) and BSD sed (-i '')
@@ -209,34 +181,6 @@ sed_inplace_backup() {
     esac
 }
 
-# Convert Windows path to WSL path
-# Args: $1 - path (Windows or Unix format)
-# Returns: Unix-formatted path
-convert_to_wsl_path() {
-    local path="$1"
-
-    # Validate input
-    if [[ -z "$path" ]]; then
-        [[ "$(type -t log_error)" == "function" ]] && log_error "convert_to_wsl_path: path parameter is required"
-        return 1
-    fi
-
-    # Check if already a Unix path
-    if [[ "$path" =~ ^/ ]]; then
-        echo "$path"
-        return 0
-    fi
-
-    # Convert Windows path (C:\Users\...) to WSL path (/mnt/c/Users/...)
-    if [[ "$path" =~ ^([A-Za-z]): ]]; then
-        local drive="${BASH_REMATCH[1],,}" # Convert to lowercase
-        local rest="${path#*:}"
-        rest="${rest//\\//}" # Convert backslashes to forward slashes
-        echo "/mnt/$drive$rest"
-    else
-        echo "$path"
-    fi
-}
 
 # Check for required commands and suggest installation
 # Checks for jq, ffprobe, exiftool, etc.
