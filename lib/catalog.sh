@@ -134,6 +134,62 @@ register_drive() {
 }
 
 ################################################################################
+# CATALOG OPERATIONS (STUB IMPLEMENTATIONS)
+################################################################################
+
+# Catalog a drive and index all media files
+# Note: This is a stub - full implementation not yet available
+catalog_drive() {
+    local mount_point="$1"
+    local recursive="${2:-true}"
+
+    log_warning "Drive cataloging feature is not yet implemented"
+    echo ""
+    echo -e "${COLOR_YELLOW}This feature would:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Scan drive: $mount_point"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Index all media files"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Extract metadata (duration, resolution, etc.)"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Calculate file hashes for duplicate detection"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Store in catalog database"
+    echo ""
+    return 1
+}
+
+# List all cataloged drives
+# Note: This is a stub - full implementation not yet available
+list_cataloged_drives() {
+    log_warning "Drive listing feature is not yet implemented"
+    echo ""
+    echo -e "${COLOR_YELLOW}This feature would show:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} All registered drives"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Drive status (online/offline)"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Number of files cataloged"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Last scan date"
+    echo ""
+    return 1
+}
+
+# Search catalog for media files
+# Note: This is a stub - full implementation not yet available
+search_catalog() {
+    local search_term="$1"
+    local media_filter="${2:-all}"
+
+    log_warning "Catalog search feature is not yet implemented"
+    echo ""
+    echo -e "${COLOR_YELLOW}This feature would allow:${COLOR_RESET}"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Searching across all cataloged drives"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Finding files by name, metadata, or hash"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Filtering by media type (video, image, audio)"
+    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Showing file location even if drive is offline"
+    echo ""
+    echo -e "${COLOR_WHITE}Search term: ${COLOR_RESET}$search_term"
+    echo -e "${COLOR_WHITE}Filter: ${COLOR_RESET}$media_filter"
+    echo ""
+    return 1
+}
+
+################################################################################
 # MODULE INITIALIZATION
 ################################################################################
 

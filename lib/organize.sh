@@ -15,17 +15,6 @@
 #
 
 ################################################################################
-# OPERATION TRACKING
-################################################################################
-
-# Begin operation (wrapper for start_operation with additional context)
-begin_operation() {
-    local operation_name="$1"
-    start_operation "$operation_name"
-}
-
-
-################################################################################
 # ORGANIZE OPERATION HELPERS
 ################################################################################
 
@@ -71,7 +60,7 @@ _log_move_operation() {
 undo_organize_operation() {
     local operation_id="$1"
 
-    begin_operation "Undo Organize Operation"
+    start_operation "Undo Organize Operation"
 
     # Find undo log
     local undo_log
@@ -194,7 +183,7 @@ undo_organize_operation() {
 
 # List available undo operations
 list_undo_operations() {
-    begin_operation "Available Undo Operations"
+    start_operation "Available Undo Operations"
 
     # Check if directory exists and has files
     if [[ ! -d "$UNDO_LOG_DIR" ]]; then
@@ -246,7 +235,7 @@ organize_by_subfolder_names() {
     local target_folder="${1:-.}"
     local search_path="${2:-.}"
 
-    begin_operation "Organize by Subfolder Names"
+    start_operation "Organize by Subfolder Names"
 
     # Validate target folder
     if [[ ! -d "$target_folder" ]]; then
