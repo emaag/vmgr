@@ -38,3 +38,4 @@ test-results/
 
 # Large external projects (not part of this repo)
 llvm-project/
+node_modules/
