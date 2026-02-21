@@ -4,7 +4,7 @@
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-105%2F105%20passing-success.svg)](COMPREHENSIVE-TEST-REPORT.md)
+[![Tests](https://img.shields.io/badge/tests-158%2F158%20passing-success.svg)](tests/)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](MODULARIZATION-PROGRESS.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#installation)
 
@@ -12,14 +12,15 @@
 
 Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.
 
-### 🎉 New in v1.3.0: Modular Architecture!
+### New in v1.3.0: Modular Architecture + Subtitle Generation!
 
 This release features a **complete architectural transformation**:
 - ✅ **93% smaller main script** (6,590 → 465 lines)
 - ✅ **12 independent modules** for better maintainability
-- ✅ **100% test coverage** with comprehensive test suite
-- ✅ **All functionality preserved** from previous versions
+- ✅ **All core functionality preserved** from previous versions
 - ✅ **Improved tab completion** for all commands
+- ✅ **Subtitle generation implemented** — OpenAI Whisper backend with GPU, parallel jobs, skip-existing, dry-run, and more
+- ✅ **158-test automated suite** — full integration coverage
 
 [Read about the modularization journey →](MODULARIZATION-PROGRESS.md)
 
@@ -43,23 +44,19 @@ chmod +x video-manager-ultimate.sh
 
 ## Features
 
-### Core Operations
+### Core Operations (Implemented)
 - **File Renaming** - Bracket notation formatting (`[Studio] filename.mp4`)
 - **Directory Flattening** - Move files from subdirectories to top level
 - **Duplicate Detection** - SHA-256 hash-based with detailed reports
-- **Subtitle Generation** - AI-powered using Whisper (multiple models and formats)
 - **File Organization** - Automatic sorting by subfolder names with undo functionality
 - **Batch Processing** - Multi-directory operations with accumulated statistics
+- **Image Conversion** - Convert PNG/WebP/HEIC to JPG (requires ImageMagick)
+- **Subtitle Generation** - OpenAI Whisper backend; GPU acceleration, parallel jobs,
+  skip-existing, dry-run, size/date filters, and interactive editing.
+  Requires `pip install openai-whisper` (or whisper.cpp).
 
-### Subtitle Features
-- Multiple Whisper models (tiny, base, small, medium, large)
-- Output formats: SRT, VTT, TXT, JSON
-- Language detection and manual selection
-- GPU acceleration support
-- Parallel processing (1-8 workers)
-- Speaker diarization
-- Auto-punctuation and editing
-- Recursive directory scanning
+### Planned Features (Not Yet Implemented)
+- **Multi-Drive Catalog** - Index and search media across drives; UI exists but scanning is a stub.
 
 ### Organization Features
 - Organize files by matching subfolder names
@@ -85,11 +82,10 @@ chmod +x video-manager-ultimate.sh
 - Operation logging and undo support
 
 ### Architecture
-- **Modular design** - 12 independent, testable modules
+- **Modular design** - 12 independent modules
 - **Clean separation** - Foundation, Core Features, Advanced Features
 - **Maintainable** - Each module focused on single responsibility
 - **Extensible** - Easy to add new features
-- **Well-tested** - 105 automated tests (26 module + 79 comprehensive, 100% pass rate)
 - **CI/CD** - Automated testing on Ubuntu and macOS via GitHub Actions
 
 ---

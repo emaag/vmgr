@@ -56,6 +56,8 @@ DEFAULT_AUDIO_EXTENSIONS=("mp3" "flac" "wav" "aac" "m4a" "ogg" "opus" "wma" "ala
 LOG_DIR="$HOME/.video-manager-logs"
 LOG_FILE="$LOG_DIR/video-manager-$(date +%Y%m%d-%H%M%S).log"
 UNDO_LOG_DIR="$LOG_DIR/undo-history"
+BACKUP_DIR="$HOME/.video-manager-backups"
+CONFIG_FILE="$HOME/.video-manager-config.conf"
 MAX_LOG_ENTRIES=1000
 DRY_RUN=false
 VERBOSE=true
@@ -95,7 +97,27 @@ SUBTITLE_FORMAT="srt" # srt, vtt, txt, json
 SUBTITLE_LANGUAGE="auto" # auto or language code (en, es, fr, etc.)
 SUBTITLE_SUFFIX=".srt"
 SUBTITLE_PARALLEL_JOBS=2 # Number of parallel subtitle generation jobs (1-8)
-SUBTITLE_RESUME_FILE="$HOME/.video-manager-subtitle-resume.txt"
+SUBTITLE_USE_GPU=false # Use GPU acceleration if available
+SUBTITLE_OPTIMIZE_BATCH=false # Optimize batch processing order
+SUBTITLE_RECURSIVE=false # Scan subdirectories recursively
+SUBTITLE_MIN_DEPTH=1 # Minimum subdirectory depth for recursive scan
+SUBTITLE_MAX_DEPTH=5 # Maximum subdirectory depth for recursive scan
+SUBTITLE_MIN_SIZE_MB=0 # Minimum file size filter in MB (0=disabled)
+SUBTITLE_MAX_SIZE_MB=0 # Maximum file size filter in MB (0=disabled)
+SUBTITLE_MODIFIED_DAYS=0 # Only process files modified within N days (0=disabled)
+SUBTITLE_SKIP_EXISTING=true # Skip files that already have subtitles
+SUBTITLE_INTERACTIVE_SELECT=false # Interactively select files before processing
+SUBTITLE_RESUME_FILE="$HOME/.video-manager-subtitle-resume.txt" # For future resume/checkpoint feature
+
+# Advanced subtitle settings (referenced by ui.sh advanced menu)
+SUBTITLE_SPEAKER_DIARIZATION=false  # Speaker diarization (future: pyannote-audio)
+SUBTITLE_AUTO_PUNCTUATION=false     # Run fix_punctuation() after generation
+SUBTITLE_INTERACTIVE_EDIT=false     # Open editor after each subtitle is generated
+SUBTITLE_AUTO_EDIT=false            # Auto-apply fixes without interactive prompt
+SUBTITLE_MAX_FILES=0                # Max files to process per run (0=unlimited)
+SUBTITLE_SHOW_DIR_STATS=true        # Show per-directory stats summary
+SUBTITLE_SKIP_PATTERNS=(".*" "_*" "node_modules" ".git" ".svn" "Trash" "tmp" "temp")
+
 # Quick-win features
 ENABLE_UNDO=true # Enable undo/rollback functionality
 UNDO_HISTORY_FILE="$HOME/.video-manager-undo.json"
@@ -146,9 +168,9 @@ toggle_flag() {
     local var_name="$1"
     local current_value="${!var_name}"
     if [[ "$current_value" == true ]]; then
-        eval "$var_name=false"
+        printf -v "$var_name" false
     else
-        eval "$var_name=true"
+        printf -v "$var_name" true
     fi
 }
 
