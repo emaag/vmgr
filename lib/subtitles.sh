@@ -104,6 +104,25 @@ fix_punctuation() {
 # SUBTITLE GENERATION
 ################################################################################
 
+# Print a progress bar line to stderr.
+# Args: current total status label
+#   status: proc | skip | dry | fail
+_print_subtitle_progress() {
+    local current="$1"
+    local total="$2"
+    local status="$3"
+    local label="$4"
+    local bar_width=25
+    local filled=$(( current * bar_width / total ))
+    local empty=$(( bar_width - filled ))
+    local pct=$(( current * 100 / total ))
+    local bar="" i
+    for ((i=0; i<filled; i++)); do bar+="#"; done
+    for ((i=0; i<empty; i++)); do bar+="-"; done
+    printf "[%s] %d/%d (%3d%%) %-4s %s\n" \
+        "$bar" "$current" "$total" "$pct" "$status" "${label:0:60}" >&2
+}
+
 # Internal helper: run whisper on a single file and update stats.
 # Args: video_file whisper_cmd model format language device output_dir
 # Language "auto" omits --language entirely (older whisper versions error otherwise).
@@ -129,8 +148,6 @@ _generate_single_subtitle() {
     if [[ "$device" == "cpu" ]]; then
         fp16_args=("--fp16" "False")
     fi
-
-    log_info "Processing: $(basename "$video_file")"
 
     # timeout: kill whisper if it hangs (default 2 hours per file)
     # stdout suppressed (raw transcription text); stderr shown live for progress
@@ -257,23 +274,27 @@ generate_subtitles_in_directory() {
 
     # 10. Process each file
     local -a pids=()
+    local current=0
     for video_file in "${video_files[@]}"; do
+        current=$(( current + 1 ))
         local output_dir
         output_dir="$(dirname "$video_file")"
         local subtitle_file="${video_file%.*}.${format}"
 
         # Skip when subtitle already exists
         if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true && -f "$subtitle_file" ]]; then
-            log_verbose "Skipping (exists): $(basename "$subtitle_file")"
+            _print_subtitle_progress "$current" "$total" "skip" "$(basename "$subtitle_file")"
             STATS[files_skipped]=$(( STATS[files_skipped] + 1 ))
             continue
         fi
 
         # Dry run: log intent only
         if [[ "$dry_run" == true ]]; then
-            log_info "[DRY RUN] Would generate: $(basename "$video_file")"
+            _print_subtitle_progress "$current" "$total" "dry" "$(basename "$video_file")"
             continue
         fi
+
+        _print_subtitle_progress "$current" "$total" "proc" "$(basename "$video_file")"
 
         # Parallel dispatch (only when interactive edit is off)
         if [[ "${SUBTITLE_PARALLEL_JOBS:-1}" -gt 1 && "${SUBTITLE_INTERACTIVE_EDIT:-false}" != true ]]; then
