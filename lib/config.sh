@@ -89,6 +89,14 @@ load_config() {
 
     log_verbose "Loading configuration from $config_file"
 
+    # Validate file ownership before sourcing (security check)
+    local file_owner
+    file_owner=$(stat -c '%U' "$config_file" 2>/dev/null || stat -f '%Su' "$config_file" 2>/dev/null)
+    if [[ "$file_owner" != "$USER" ]]; then
+        log_error "Config file not owned by current user ($file_owner) - refusing to load: $config_file"
+        return 1
+    fi
+
     # Source the configuration file
     source "$config_file"
 

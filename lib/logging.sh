@@ -27,10 +27,16 @@ init_logging() {
     fi
 
     # Rotate old logs if too many exist
-    local log_count=$(find "$LOG_DIR" -name "video-manager-*.log" 2>/dev/null | wc -l)
+    local -a log_files
+    mapfile -t log_files < <(find "$LOG_DIR" -name "video-manager-*.log" -type f 2>/dev/null | sort)
+    local log_count=${#log_files[@]}
     if [[ $log_count -gt 50 ]]; then
         log_verbose "Rotating old log files (found $log_count logs)..."
-        find "$LOG_DIR" -name "video-manager-*.log" -type f | sort | head -n -50 | xargs rm -f 2>/dev/null
+        local excess=$(( log_count - 50 ))
+        local i
+        for ((i=0; i<excess; i++)); do
+            rm -f "${log_files[$i]}" 2>/dev/null
+        done
     fi
 
     # Create new log file

@@ -45,7 +45,7 @@ find_duplicates() {
         local filename=$(basename "$file")
         echo -ne "\r${COLOR_CYAN}Hashing: [$file_count files] Current: ${filename:0:50}...${COLOR_RESET}"
 
-        local hash=$(calculate_hash "$file")
+        local hash=$(calculate_file_hash "$file")
         if [[ -z "$hash" ]]; then
             log_error "Failed to hash: $filename"
             continue

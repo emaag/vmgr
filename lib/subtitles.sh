@@ -124,15 +124,32 @@ _generate_single_subtitle() {
         lang_args=("--language" "$language")
     fi
 
-    "$whisper_cmd" "$video_file" \
+    # --fp16 False: prevent fp16 on CPU (avoids memory spikes in some whisper versions)
+    local -a fp16_args=()
+    if [[ "$device" == "cpu" ]]; then
+        fp16_args=("--fp16" "False")
+    fi
+
+    log_info "Processing: $(basename "$video_file")"
+
+    # timeout: kill whisper if it hangs (default 2 hours per file)
+    # stdout suppressed (raw transcription text); stderr shown live for progress
+    timeout "${SUBTITLE_TIMEOUT:-7200}" \
+        "$whisper_cmd" "$video_file" \
         --model "$model" \
         --output_format "$format" \
         "${lang_args[@]}" \
         --output_dir "$output_dir" \
-        --device "$device" >/dev/null 2>&1
+        --device "$device" \
+        --verbose False \
+        "${fp16_args[@]}" >/dev/null
     local rc=$?
 
-    if [[ $rc -ne 0 ]]; then
+    if [[ $rc -eq 124 ]]; then
+        log_warning "Whisper timed out after ${SUBTITLE_TIMEOUT:-7200}s: $(basename "$video_file")"
+        STATS[subtitles_failed]=$(( STATS[subtitles_failed] + 1 ))
+        return 1
+    elif [[ $rc -ne 0 ]]; then
         log_warning "Whisper failed for: $(basename "$video_file")"
         STATS[subtitles_failed]=$(( STATS[subtitles_failed] + 1 ))
         return 1

@@ -100,8 +100,18 @@ rename_files_in_directory() {
     local renamed_count=0
 
     # Count total video files first
-    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    local total_files
+    total_files=$(find "$directory" -maxdepth 1 -type f \( \
+        -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
+        -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
+        -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \
+        \) 2>/dev/null | wc -l)
     log_info "Found $total_files video files to process"
+
+    if [[ "$total_files" -eq 0 ]]; then
+        log_info "Nothing to do"
+        return 0
+    fi
 
     echo ""
 
@@ -176,8 +186,18 @@ remove_dashes_in_directory() {
     local renamed_count=0
 
     # Count total video files first
-    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    local total_files
+    total_files=$(find "$directory" -maxdepth 1 -type f \( \
+        -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
+        -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
+        -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \
+        \) 2>/dev/null | wc -l)
     log_info "Found $total_files video files to process"
+
+    if [[ "$total_files" -eq 0 ]]; then
+        log_info "Nothing to do"
+        return 0
+    fi
 
     echo ""
 
@@ -252,8 +272,18 @@ fix_bracket_spacing_in_directory() {
     local renamed_count=0
 
     # Count total video files first
-    local total_files=$(find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' | wc -l)
+    local total_files
+    total_files=$(find "$directory" -maxdepth 1 -type f \( \
+        -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
+        -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
+        -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \
+        \) 2>/dev/null | wc -l)
     log_info "Found $total_files video files to process"
+
+    if [[ "$total_files" -eq 0 ]]; then
+        log_info "Nothing to do"
+        return 0
+    fi
 
     echo ""
 
@@ -372,7 +402,11 @@ flatten_directory() {
                 log_error "Failed to move: $file"
             fi
         fi
-    done < <(find "$top_dir" -mindepth 2 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    done < <(find "$top_dir" -mindepth 2 -type f \( \
+        -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
+        -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
+        -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \
+        \))
 
     if [[ "$dry_run" == true ]]; then
         log_info "Dry run complete - no files were actually moved"
