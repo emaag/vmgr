@@ -48,6 +48,9 @@ show_main_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Settings${COLOR_RESET}"
     echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Configure options and preferences"
     echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} ${COLOR_WHITE}Reddit Downloader${COLOR_RESET}"
+    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Download images from a subreddit"
+    echo ""
     echo -e "${COLOR_RED}[Q]${COLOR_RESET} ${COLOR_WHITE}Quit${COLOR_RESET}"
     echo ""
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choose option: "
@@ -1603,6 +1606,10 @@ _handle_main_menu_choice() {
             handle_settings
             return 0
             ;;
+        7)
+            handle_reddit
+            return 0
+            ;;
         q|Q)
             echo ""
             echo "Goodbye!"
@@ -1614,6 +1621,55 @@ _handle_main_menu_choice() {
             return 0
             ;;
     esac
+}
+
+show_reddit_menu() {
+    show_header
+
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}REDDIT IMAGE DOWNLOADER${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Download Images from Subreddit${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
+    echo ""
+    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+}
+
+_handle_reddit_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Reddit Image Downloader${COLOR_RESET}"
+            echo ""
+            read -rp "Subreddit name (e.g. EarthPorn): " subreddit
+            if [[ -z "$subreddit" ]]; then
+                log_error "No subreddit specified"
+                read -rp "Press Enter to continue..."
+                return 0
+            fi
+
+            local default_dir="$HOME/Pictures/reddit/${subreddit}"
+            read -rp "Output directory [${default_dir}]: " output_dir
+            [[ -z "$output_dir" ]] && output_dir="$default_dir"
+
+            read -rp "Max images to download [200]: " max_images
+            [[ -z "$max_images" || ! "$max_images" =~ ^[0-9]+$ ]] && max_images=200
+
+            echo ""
+            start_operation "Reddit Download: r/${subreddit}"
+            download_subreddit_images "$subreddit" "$output_dir" "$max_images"
+            end_operation
+            read -rp "Press Enter to continue..."
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+handle_reddit() {
+    run_menu_loop show_reddit_menu _handle_reddit_choice true
 }
 
 # Main interactive menu loop (simple number-based input)
