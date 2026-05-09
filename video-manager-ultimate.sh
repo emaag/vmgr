@@ -115,6 +115,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     --organize              Organize files by subfolder names
     --undo-organize [id]    Undo organize operation (optional: operation ID)
     --list-undo             List available undo operations
+    reddit <subreddit> <dir> [max]  Download images from a subreddit
 
 ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
     # Interactive menu
@@ -284,6 +285,22 @@ parse_arguments() {
                 command="list-undo"
                 shift
                 ;;
+            reddit)
+                command="reddit"
+                shift
+                if [[ -n "$1" && "$1" != -* ]]; then
+                    REDDIT_SUBREDDIT="$1"
+                    shift
+                fi
+                if [[ -n "$1" && "$1" != -* ]]; then
+                    directory="$1"
+                    shift
+                fi
+                if [[ -n "$1" && "$1" =~ ^[0-9]+$ ]]; then
+                    REDDIT_MAX_IMAGES="$1"
+                    shift
+                fi
+                ;;
             rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch)
                 command="$1"
                 shift
@@ -307,7 +324,7 @@ parse_arguments() {
     fi
 
     # Validate directory for commands that need it
-    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "undo-organize" && "$command" != "organize" ]]; then
+    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
             show_usage
@@ -365,6 +382,15 @@ parse_arguments() {
             ;;
         list-undo)
             list_undo_operations
+            ;;
+        reddit)
+            if [[ -z "$REDDIT_SUBREDDIT" || -z "$directory" ]]; then
+                log_error "Usage: vmgr reddit <subreddit> <output_dir> [max_images]"
+                exit 1
+            fi
+            start_operation "Reddit Image Download"
+            download_subreddit_images "$REDDIT_SUBREDDIT" "$directory" "${REDDIT_MAX_IMAGES:-200}"
+            end_operation
             ;;
     esac
 }
