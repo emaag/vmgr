@@ -175,15 +175,21 @@ show_progress() {
 }
 
 
-# Print statistics summary
-# Displays current STATS array values
+# Print statistics summary — only shows counters that are non-zero
 print_statistics() {
+    local _any=0
+    for k in files_processed files_renamed files_moved files_skipped \
+              subtitles_generated subtitles_failed duplicates_found errors; do
+        [[ ${STATS[$k]:-0} -gt 0 ]] && _any=1 && break
+    done
+    [[ $_any -eq 0 ]] && return
+
     echo ""
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}📊 Statistics:${COLOR_RESET}"
-    echo -e "   ${COLOR_WHITE}Files Processed:${COLOR_RESET}  ${COLOR_BRIGHT_CYAN}${STATS[files_processed]}${COLOR_RESET}"
-    echo -e "   ${COLOR_WHITE}Files Renamed:${COLOR_RESET}    ${COLOR_BRIGHT_GREEN}${STATS[files_renamed]}${COLOR_RESET}"
-    echo -e "   ${COLOR_WHITE}Files Moved:${COLOR_RESET}      ${COLOR_BRIGHT_GREEN}${STATS[files_moved]}${COLOR_RESET}"
-    echo -e "   ${COLOR_WHITE}Files Skipped:${COLOR_RESET}    ${COLOR_BRIGHT_YELLOW}${STATS[files_skipped]}${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}Statistics:${COLOR_RESET}"
+    [[ ${STATS[files_processed]:-0} -gt 0 ]] && echo -e "   ${COLOR_WHITE}Files Processed:${COLOR_RESET}  ${COLOR_BRIGHT_CYAN}${STATS[files_processed]}${COLOR_RESET}"
+    [[ ${STATS[files_renamed]:-0}   -gt 0 ]] && echo -e "   ${COLOR_WHITE}Files Renamed:${COLOR_RESET}    ${COLOR_BRIGHT_GREEN}${STATS[files_renamed]}${COLOR_RESET}"
+    [[ ${STATS[files_moved]:-0}     -gt 0 ]] && echo -e "   ${COLOR_WHITE}Files Moved:${COLOR_RESET}      ${COLOR_BRIGHT_GREEN}${STATS[files_moved]}${COLOR_RESET}"
+    [[ ${STATS[files_skipped]:-0}   -gt 0 ]] && echo -e "   ${COLOR_WHITE}Files Skipped:${COLOR_RESET}    ${COLOR_BRIGHT_YELLOW}${STATS[files_skipped]}${COLOR_RESET}"
 
     if [[ ${STATS[subtitles_generated]} -gt 0 || ${STATS[subtitles_failed]} -gt 0 ]]; then
         echo -e "   ${COLOR_WHITE}Subtitles Generated:${COLOR_RESET} ${COLOR_BRIGHT_GREEN}${STATS[subtitles_generated]}${COLOR_RESET}"

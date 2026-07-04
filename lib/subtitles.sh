@@ -417,19 +417,41 @@ generate_subtitles_in_directory() {
 # Interactively collect directories from the user and run subtitle generation on each.
 batch_generate_subtitles() {
     echo -e "${COLOR_BRIGHT_CYAN}Batch Subtitle Generation${COLOR_RESET}"
-    echo "Enter directories to process (one per line, empty line to start):"
+    echo ""
 
     local -a dirs=()
-    local dir
+    local _batch_input _batch_dir
     while true; do
-        echo -n "Directory: "
-        read -r dir
-        [[ -z "$dir" ]] && break
-        if [[ -d "$dir" ]]; then
-            dirs+=("$dir")
-        else
-            log_warning "Not found, skipping: $dir"
-        fi
+        [[ ${#dirs[@]} -gt 0 ]] && log_info "Queued: ${#dirs[@]} director(ies)"
+        echo -e "  ${COLOR_BRIGHT_GREEN}[B]${COLOR_RESET} Browse  ${COLOR_CYAN}[T]${COLOR_RESET} Type path  ${COLOR_GREEN}[D]${COLOR_RESET} Done  ${COLOR_RED}[C]${COLOR_RESET} Cancel"
+        echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choice: "
+        read -r _batch_input
+        case "${_batch_input,,}" in
+            b)
+                if declare -f browse_directory >/dev/null 2>&1; then
+                    if browse_directory; then
+                        dirs+=("$TARGET_FOLDER")
+                        log_info "Added: $TARGET_FOLDER"
+                    fi
+                else
+                    echo -n "Directory: "
+                    read -r _batch_dir
+                    [[ -d "$_batch_dir" ]] && dirs+=("$_batch_dir") || log_warning "Not found: $_batch_dir"
+                fi
+                ;;
+            t)
+                echo -n "Directory: "
+                read -r _batch_dir
+                if [[ -d "$_batch_dir" ]]; then
+                    dirs+=("$_batch_dir")
+                    log_info "Added: $_batch_dir"
+                else
+                    log_warning "Not found, skipping: $_batch_dir"
+                fi
+                ;;
+            d|"") break ;;
+            c) return 0 ;;
+        esac
     done
 
     if [[ ${#dirs[@]} -eq 0 ]]; then

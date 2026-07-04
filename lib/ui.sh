@@ -455,6 +455,15 @@ _handle_single_operations_choice() {
                     start_operation "Rename Files (Bracket Notation)"
                     rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
+                    if [[ "$DRY_RUN" == true ]]; then
+                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
+                        read -r _apply
+                        if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Rename Files" "$TARGET_FOLDER"; then
+                            start_operation "Rename Files (Apply)"
+                            rename_files_in_directory "$TARGET_FOLDER" false
+                            end_operation
+                        fi
+                    fi
                     read -p "Press Enter to continue..."
                 fi
             fi
@@ -466,6 +475,15 @@ _handle_single_operations_choice() {
                     start_operation "Remove Dashes"
                     remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
+                    if [[ "$DRY_RUN" == true ]]; then
+                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
+                        read -r _apply
+                        if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Remove Dashes" "$TARGET_FOLDER"; then
+                            start_operation "Remove Dashes (Apply)"
+                            remove_dashes_in_directory "$TARGET_FOLDER" false
+                            end_operation
+                        fi
+                    fi
                     read -p "Press Enter to continue..."
                 fi
             fi
@@ -477,6 +495,15 @@ _handle_single_operations_choice() {
                     start_operation "Fix Bracket Spacing"
                     fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
+                    if [[ "$DRY_RUN" == true ]]; then
+                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
+                        read -r _apply
+                        if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Fix Bracket Spacing" "$TARGET_FOLDER"; then
+                            start_operation "Fix Bracket Spacing (Apply)"
+                            fix_bracket_spacing_in_directory "$TARGET_FOLDER" false
+                            end_operation
+                        fi
+                    fi
                     read -p "Press Enter to continue..."
                 fi
             fi
@@ -488,6 +515,15 @@ _handle_single_operations_choice() {
                     start_operation "Flatten Directory"
                     flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
+                    if [[ "$DRY_RUN" == true ]]; then
+                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
+                        read -r _apply
+                        if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Flatten Directory" "$TARGET_FOLDER" "deep"; then
+                            start_operation "Flatten Directory (Apply)"
+                            flatten_directory "$TARGET_FOLDER" false
+                            end_operation
+                        fi
+                    fi
                     read -p "Press Enter to continue..."
                 fi
             fi
@@ -703,6 +739,276 @@ handle_duplicates() {
     run_menu_loop show_duplicate_menu _handle_duplicates_choice true
 }
 
+# Configure basic subtitle settings (model, format, language)
+_handle_subtitle_configure() {
+    clear
+    echo -e "${COLOR_BRIGHT_CYAN}Configure Subtitle Settings${COLOR_RESET}"
+    echo ""
+
+    echo -e "${COLOR_WHITE}Select Whisper Model:${COLOR_RESET}"
+    echo "  [1] tiny   - Fastest, least accurate"
+    echo "  [2] base   - Balanced (default)"
+    echo "  [3] small  - Good accuracy"
+    echo "  [4] medium - Better accuracy"
+    echo "  [5] large  - Best accuracy, slowest"
+    echo -n "Choice [1-5]: "
+    read -r model_choice
+    case "$model_choice" in
+        1) WHISPER_MODEL="tiny" ;;
+        2) WHISPER_MODEL="base" ;;
+        3) WHISPER_MODEL="small" ;;
+        4) WHISPER_MODEL="medium" ;;
+        5) WHISPER_MODEL="large" ;;
+    esac
+
+    echo ""
+    echo -e "${COLOR_WHITE}Select Output Format:${COLOR_RESET}"
+    echo "  [1] srt  - SubRip (default)"
+    echo "  [2] vtt  - WebVTT"
+    echo "  [3] txt  - Plain text"
+    echo "  [4] json - JSON format"
+    echo -n "Choice [1-4]: "
+    read -r format_choice
+    case "$format_choice" in
+        1) SUBTITLE_FORMAT="srt" ;;
+        2) SUBTITLE_FORMAT="vtt" ;;
+        3) SUBTITLE_FORMAT="txt" ;;
+        4) SUBTITLE_FORMAT="json" ;;
+    esac
+
+    echo ""
+    echo -e "${COLOR_WHITE}Language (enter code or 'auto'):${COLOR_RESET}"
+    echo "  Examples: en (English), es (Spanish), fr (French), auto (detect)"
+    echo -n "Language: "
+    read -r lang_choice
+    [[ -n "$lang_choice" ]] && SUBTITLE_LANGUAGE="$lang_choice"
+
+    echo ""
+    log_success "Settings updated!"
+    log_info "Model: $WHISPER_MODEL | Format: $SUBTITLE_FORMAT | Language: $SUBTITLE_LANGUAGE"
+}
+
+# Configure advanced subtitle settings (GPU, parallel, toggles, filters)
+_handle_subtitle_advanced() {
+    clear
+    echo -e "${COLOR_BRIGHT_CYAN}Advanced Subtitle Settings${COLOR_RESET}"
+    echo ""
+
+    echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle GPU Acceleration (Current: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Parallel Jobs (Current: ${COLOR_CYAN}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET})"
+    echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Toggle Batch Optimization (Current: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Speaker Diarization (Current: $([[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Auto-Punctuation (Current: $([[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Editing (Current: $([[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Toggle Auto-Edit (Current: $([[ "$SUBTITLE_AUTO_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo ""
+    echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
+    echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
+    echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
+    echo -e "${COLOR_WHITE}[11]${COLOR_RESET} Configure Filters & Selection"
+    echo ""
+    echo -n "Select option (or Enter to skip): "
+    read -r adv_choice
+
+    case "$adv_choice" in
+        1)
+            if [[ "$SUBTITLE_USE_GPU" == true ]]; then
+                SUBTITLE_USE_GPU=false
+                log_info "GPU acceleration disabled"
+            else
+                SUBTITLE_USE_GPU=true
+                if detect_gpu; then
+                    log_success "GPU acceleration enabled"
+                else
+                    log_warning "GPU not detected on this system"
+                fi
+            fi
+            ;;
+        2)
+            echo -n "Enter number of parallel jobs (1-8): "
+            read -r jobs
+            if [[ $jobs -ge 1 && $jobs -le 8 ]]; then
+                SUBTITLE_PARALLEL_JOBS=$jobs
+                log_success "Parallel jobs set to: $jobs"
+            else
+                log_error "Invalid number. Must be 1-8"
+            fi
+            ;;
+        3)
+            [[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && SUBTITLE_OPTIMIZE_BATCH=false || SUBTITLE_OPTIMIZE_BATCH=true
+            log_success "Batch optimization toggled"
+            ;;
+        4)
+            [[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && SUBTITLE_SPEAKER_DIARIZATION=false || SUBTITLE_SPEAKER_DIARIZATION=true
+            log_success "Speaker diarization toggled"
+            ;;
+        5)
+            [[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && SUBTITLE_AUTO_PUNCTUATION=false || SUBTITLE_AUTO_PUNCTUATION=true
+            log_success "Auto-punctuation toggled"
+            ;;
+        6)
+            [[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && SUBTITLE_INTERACTIVE_EDIT=false || SUBTITLE_INTERACTIVE_EDIT=true
+            log_success "Interactive editing toggled"
+            ;;
+        7)
+            [[ "$SUBTITLE_AUTO_EDIT" == true ]] && SUBTITLE_AUTO_EDIT=false || SUBTITLE_AUTO_EDIT=true
+            log_success "Auto-edit toggled"
+            ;;
+        8)
+            if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
+                SUBTITLE_RECURSIVE=false
+                log_info "Recursive mode DISABLED - will only scan current directory"
+            else
+                SUBTITLE_RECURSIVE=true
+                log_success "Recursive mode ENABLED - will scan subdirectories"
+                log_info "Max depth: $SUBTITLE_MAX_DEPTH levels | Max files: $SUBTITLE_MAX_FILES files"
+            fi
+            ;;
+        9)
+            echo -n "Enter maximum recursion depth (1-50): "
+            read -r depth
+            if [[ $depth -ge 1 && $depth -le 50 ]]; then
+                SUBTITLE_MAX_DEPTH=$depth
+                log_success "Max depth set to: $depth"
+            else
+                log_error "Invalid depth. Must be 1-50"
+            fi
+            ;;
+        10)
+            echo -n "Enter maximum files to process (1-10000): "
+            read -r max_files
+            if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
+                SUBTITLE_MAX_FILES=$max_files
+                log_success "Max files set to: $max_files"
+            else
+                log_error "Invalid number. Must be 1-10000"
+            fi
+            ;;
+        11)
+            # Filters & Selection submenu
+            clear
+            echo -e "${COLOR_BRIGHT_CYAN}Advanced Filters & Selection${COLOR_RESET}"
+            echo ""
+            echo -e "${COLOR_YELLOW}Current Filters:${COLOR_RESET}"
+            echo -e "  Min Size: ${COLOR_CYAN}${SUBTITLE_MIN_SIZE_MB}${COLOR_RESET} MB"
+            echo -e "  Max Size: ${COLOR_CYAN}${SUBTITLE_MAX_SIZE_MB}${COLOR_RESET} MB (0=unlimited)"
+            echo -e "  Modified: ${COLOR_CYAN}${SUBTITLE_MODIFIED_DAYS}${COLOR_RESET} days (0=all)"
+            echo -e "  Skip Existing: $([[ "$SUBTITLE_SKIP_EXISTING" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+            echo -e "  Show Dir Stats: $([[ "$SUBTITLE_SHOW_DIR_STATS" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+            echo -e "  Interactive Select: $([[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
+            echo -e "  Min Depth: ${COLOR_CYAN}${SUBTITLE_MIN_DEPTH}${COLOR_RESET}"
+            echo -e "  Skip Patterns: ${COLOR_CYAN}${#SUBTITLE_SKIP_PATTERNS[@]}${COLOR_RESET} patterns"
+            echo ""
+            echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Set Minimum File Size (MB)"
+            echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Maximum File Size (MB)"
+            echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Set Modified Days Filter"
+            echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Skip Existing Subtitles"
+            echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Show Directory Stats"
+            echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Directory Selection"
+            echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Set Minimum Depth"
+            echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Manage Skip Patterns"
+            echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Reset All Filters to Default"
+            echo ""
+            echo -n "Select option: "
+            read -r filter_choice
+
+            case "$filter_choice" in
+                1)
+                    echo -n "Enter minimum file size in MB (0=no limit): "
+                    read -r min_size
+                    if [[ $min_size -ge 0 ]]; then
+                        SUBTITLE_MIN_SIZE_MB=$min_size
+                        log_success "Minimum size set to: ${min_size}MB"
+                    else
+                        log_error "Invalid size"
+                    fi
+                    ;;
+                2)
+                    echo -n "Enter maximum file size in MB (0=no limit): "
+                    read -r max_size
+                    if [[ $max_size -ge 0 ]]; then
+                        SUBTITLE_MAX_SIZE_MB=$max_size
+                        log_success "Maximum size set to: ${max_size}MB"
+                    else
+                        log_error "Invalid size"
+                    fi
+                    ;;
+                3)
+                    echo -n "Process files modified in last N days (0=all files): "
+                    read -r days
+                    if [[ $days -ge 0 ]]; then
+                        SUBTITLE_MODIFIED_DAYS=$days
+                        log_success "Date filter set to: ${days} days"
+                    else
+                        log_error "Invalid number of days"
+                    fi
+                    ;;
+                4)
+                    if [[ "$SUBTITLE_SKIP_EXISTING" == true ]]; then
+                        SUBTITLE_SKIP_EXISTING=false
+                        log_info "Will process videos even if subtitles exist"
+                    else
+                        SUBTITLE_SKIP_EXISTING=true
+                        log_success "Will skip videos that already have subtitles"
+                    fi
+                    ;;
+                5)
+                    [[ "$SUBTITLE_SHOW_DIR_STATS" == true ]] && SUBTITLE_SHOW_DIR_STATS=false || SUBTITLE_SHOW_DIR_STATS=true
+                    log_success "Directory statistics toggled"
+                    ;;
+                6)
+                    if [[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]]; then
+                        SUBTITLE_INTERACTIVE_SELECT=false
+                        log_info "Interactive selection DISABLED - will process all subdirectories"
+                    else
+                        SUBTITLE_INTERACTIVE_SELECT=true
+                        log_success "Interactive selection ENABLED - you'll choose which folders to process"
+                    fi
+                    ;;
+                7)
+                    echo -n "Enter minimum depth (0=include current dir, 1=subdirs only): "
+                    read -r min_depth
+                    if [[ $min_depth -ge 0 && $min_depth -le 50 ]]; then
+                        SUBTITLE_MIN_DEPTH=$min_depth
+                        log_success "Minimum depth set to: $min_depth"
+                    else
+                        log_error "Invalid depth. Must be 0-50"
+                    fi
+                    ;;
+                8)
+                    echo ""
+                    echo -e "${COLOR_CYAN}Current Skip Patterns:${COLOR_RESET}"
+                    for i in "${!SUBTITLE_SKIP_PATTERNS[@]}"; do
+                        echo "  [$i] ${SUBTITLE_SKIP_PATTERNS[$i]}"
+                    done
+                    echo ""
+                    echo "Common patterns: .* (hidden), _* (underscore), tmp, temp, Trash"
+                    echo "Leave empty to keep current patterns"
+                    echo ""
+                    echo -n "Enter new patterns (space-separated): "
+                    read -r new_patterns
+                    if [[ -n "$new_patterns" ]]; then
+                        read -ra SUBTITLE_SKIP_PATTERNS <<< "$new_patterns"
+                        log_success "Skip patterns updated: ${SUBTITLE_SKIP_PATTERNS[*]}"
+                    fi
+                    ;;
+                9)
+                    SUBTITLE_MIN_SIZE_MB=0
+                    SUBTITLE_MAX_SIZE_MB=0
+                    SUBTITLE_MODIFIED_DAYS=0
+                    SUBTITLE_SKIP_EXISTING=true
+                    SUBTITLE_SHOW_DIR_STATS=true
+                    SUBTITLE_INTERACTIVE_SELECT=false
+                    SUBTITLE_MIN_DEPTH=1
+                    SUBTITLE_SKIP_PATTERNS=(".*" "_*" "node_modules" ".git" ".svn" "Trash" "tmp" "temp")
+                    log_success "All filters reset to default values"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
 # Choice handler for subtitle generation menu
 # Returns: 0=continue, 1=break, 2=invalid
 _handle_subtitles_choice() {
@@ -725,306 +1031,11 @@ _handle_subtitles_choice() {
             return 0
             ;;
         3)
-            # Configure subtitle settings
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Configure Subtitle Settings${COLOR_RESET}"
-            echo ""
-
-            # Select model
-            echo -e "${COLOR_WHITE}Select Whisper Model:${COLOR_RESET}"
-            echo "  [1] tiny   - Fastest, least accurate"
-            echo "  [2] base   - Balanced (default)"
-            echo "  [3] small  - Good accuracy"
-            echo "  [4] medium - Better accuracy"
-            echo "  [5] large  - Best accuracy, slowest"
-            echo -n "Choice [1-5]: "
-            read -r model_choice
-
-            case "$model_choice" in
-                1) WHISPER_MODEL="tiny" ;;
-                2) WHISPER_MODEL="base" ;;
-                3) WHISPER_MODEL="small" ;;
-                4) WHISPER_MODEL="medium" ;;
-                5) WHISPER_MODEL="large" ;;
-            esac
-
-            echo ""
-            echo -e "${COLOR_WHITE}Select Output Format:${COLOR_RESET}"
-            echo "  [1] srt  - SubRip (default)"
-            echo "  [2] vtt  - WebVTT"
-            echo "  [3] txt  - Plain text"
-            echo "  [4] json - JSON format"
-            echo -n "Choice [1-4]: "
-            read -r format_choice
-
-            case "$format_choice" in
-                1) SUBTITLE_FORMAT="srt" ;;
-                2) SUBTITLE_FORMAT="vtt" ;;
-                3) SUBTITLE_FORMAT="txt" ;;
-                4) SUBTITLE_FORMAT="json" ;;
-            esac
-
-            echo ""
-            echo -e "${COLOR_WHITE}Language (enter code or 'auto'):${COLOR_RESET}"
-            echo "  Examples: en (English), es (Spanish), fr (French), auto (detect)"
-            echo -n "Language: "
-            read -r lang_choice
-
-            if [[ -n "$lang_choice" ]]; then
-                SUBTITLE_LANGUAGE="$lang_choice"
-            fi
-
-            echo ""
-            log_success "Settings updated!"
-            log_info "Model: $WHISPER_MODEL"
-            log_info "Format: $SUBTITLE_FORMAT"
-            log_info "Language: $SUBTITLE_LANGUAGE"
+            _handle_subtitle_configure
             return 0
             ;;
         4)
-            # Advanced Settings
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Advanced Subtitle Settings${COLOR_RESET}"
-            echo ""
-
-            echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle GPU Acceleration (Current: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Parallel Jobs (Current: ${COLOR_CYAN}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET})"
-            echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Toggle Batch Optimization (Current: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Speaker Diarization (Current: $([[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Auto-Punctuation (Current: $([[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Editing (Current: $([[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Toggle Auto-Edit (Current: $([[ "$SUBTITLE_AUTO_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo ""
-            echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
-            echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-            echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
-            echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
-            echo -e "${COLOR_WHITE}[11]${COLOR_RESET} Configure Filters & Selection"
-            echo ""
-            echo -n "Select option (or Enter to skip): "
-            read -r adv_choice
-
-            case "$adv_choice" in
-                1)
-                    if [[ "$SUBTITLE_USE_GPU" == true ]]; then
-                        SUBTITLE_USE_GPU=false
-                        log_info "GPU acceleration disabled"
-                    else
-                        SUBTITLE_USE_GPU=true
-                        if detect_gpu; then
-                            log_success "GPU acceleration enabled"
-                        else
-                            log_warning "GPU not detected on this system"
-                        fi
-                    fi
-                    ;;
-                2)
-                    echo -n "Enter number of parallel jobs (1-8): "
-                    read -r jobs
-                    if [[ $jobs -ge 1 && $jobs -le 8 ]]; then
-                        SUBTITLE_PARALLEL_JOBS=$jobs
-                        log_success "Parallel jobs set to: $jobs"
-                    else
-                        log_error "Invalid number. Must be 1-8"
-                    fi
-                    ;;
-                3)
-                    if [[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]]; then
-                        SUBTITLE_OPTIMIZE_BATCH=false
-                    else
-                        SUBTITLE_OPTIMIZE_BATCH=true
-                    fi
-                    log_success "Batch optimization toggled"
-                    ;;
-                4)
-                    if [[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]]; then
-                        SUBTITLE_SPEAKER_DIARIZATION=false
-                    else
-                        SUBTITLE_SPEAKER_DIARIZATION=true
-                    fi
-                    log_success "Speaker diarization toggled"
-                    ;;
-                5)
-                    if [[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]]; then
-                        SUBTITLE_AUTO_PUNCTUATION=false
-                    else
-                        SUBTITLE_AUTO_PUNCTUATION=true
-                    fi
-                    log_success "Auto-punctuation toggled"
-                    ;;
-                6)
-                    if [[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]]; then
-                        SUBTITLE_INTERACTIVE_EDIT=false
-                    else
-                        SUBTITLE_INTERACTIVE_EDIT=true
-                    fi
-                    log_success "Interactive editing toggled"
-                    ;;
-                7)
-                    if [[ "$SUBTITLE_AUTO_EDIT" == true ]]; then
-                        SUBTITLE_AUTO_EDIT=false
-                    else
-                        SUBTITLE_AUTO_EDIT=true
-                    fi
-                    log_success "Auto-edit toggled"
-                    ;;
-                8)
-                    if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
-                        SUBTITLE_RECURSIVE=false
-                        log_info "Recursive mode DISABLED - will only scan current directory"
-                    else
-                        SUBTITLE_RECURSIVE=true
-                        log_success "Recursive mode ENABLED - will scan subdirectories"
-                        log_info "Max depth: $SUBTITLE_MAX_DEPTH levels"
-                        log_info "Max files: $SUBTITLE_MAX_FILES files"
-                    fi
-                    ;;
-                9)
-                    echo -n "Enter maximum recursion depth (1-50): "
-                    read -r depth
-                    if [[ $depth -ge 1 && $depth -le 50 ]]; then
-                        SUBTITLE_MAX_DEPTH=$depth
-                        log_success "Max depth set to: $depth"
-                    else
-                        log_error "Invalid depth. Must be 1-50"
-                    fi
-                    ;;
-                10)
-                    echo -n "Enter maximum files to process (1-10000): "
-                    read -r max_files
-                    if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
-                        SUBTITLE_MAX_FILES=$max_files
-                        log_success "Max files set to: $max_files"
-                    else
-                        log_error "Invalid number. Must be 1-10000"
-                    fi
-                    ;;
-                11)
-                    # Filters & Selection submenu
-                    clear
-                    echo -e "${COLOR_BRIGHT_CYAN}Advanced Filters & Selection${COLOR_RESET}"
-                    echo ""
-                    echo -e "${COLOR_YELLOW}Current Filters:${COLOR_RESET}"
-                    echo -e "  Min Size: ${COLOR_CYAN}${SUBTITLE_MIN_SIZE_MB}${COLOR_RESET} MB"
-                    echo -e "  Max Size: ${COLOR_CYAN}${SUBTITLE_MAX_SIZE_MB}${COLOR_RESET} MB (0=unlimited)"
-                    echo -e "  Modified: ${COLOR_CYAN}${SUBTITLE_MODIFIED_DAYS}${COLOR_RESET} days (0=all)"
-                    echo -e "  Skip Existing: $([[ "$SUBTITLE_SKIP_EXISTING" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-                    echo -e "  Show Dir Stats: $([[ "$SUBTITLE_SHOW_DIR_STATS" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-                    echo -e "  Interactive Select: $([[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-                    echo -e "  Min Depth: ${COLOR_CYAN}${SUBTITLE_MIN_DEPTH}${COLOR_RESET}"
-                    echo -e "  Skip Patterns: ${COLOR_CYAN}${#SUBTITLE_SKIP_PATTERNS[@]}${COLOR_RESET} patterns"
-                    echo ""
-                    echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Set Minimum File Size (MB)"
-                    echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Maximum File Size (MB)"
-                    echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Set Modified Days Filter"
-                    echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Skip Existing Subtitles"
-                    echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Show Directory Stats"
-                    echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Directory Selection"
-                    echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Set Minimum Depth"
-                    echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Manage Skip Patterns"
-                    echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Reset All Filters to Default"
-                    echo ""
-                    echo -n "Select option: "
-                    read -r filter_choice
-
-                    case "$filter_choice" in
-                        1)
-                            echo -n "Enter minimum file size in MB (0=no limit): "
-                            read -r min_size
-                            if [[ $min_size -ge 0 ]]; then
-                                SUBTITLE_MIN_SIZE_MB=$min_size
-                                log_success "Minimum size set to: ${min_size}MB"
-                            else
-                                log_error "Invalid size"
-                            fi
-                            ;;
-                        2)
-                            echo -n "Enter maximum file size in MB (0=no limit): "
-                            read -r max_size
-                            if [[ $max_size -ge 0 ]]; then
-                                SUBTITLE_MAX_SIZE_MB=$max_size
-                                log_success "Maximum size set to: ${max_size}MB"
-                            else
-                                log_error "Invalid size"
-                            fi
-                            ;;
-                        3)
-                            echo -n "Process files modified in last N days (0=all files): "
-                            read -r days
-                            if [[ $days -ge 0 ]]; then
-                                SUBTITLE_MODIFIED_DAYS=$days
-                                log_success "Date filter set to: ${days} days"
-                            else
-                                log_error "Invalid number of days"
-                            fi
-                            ;;
-                        4)
-                            if [[ "$SUBTITLE_SKIP_EXISTING" == true ]]; then
-                                SUBTITLE_SKIP_EXISTING=false
-                                log_info "Will process videos even if subtitles exist"
-                            else
-                                SUBTITLE_SKIP_EXISTING=true
-                                log_success "Will skip videos that already have subtitles"
-                            fi
-                            ;;
-                        5)
-                            if [[ "$SUBTITLE_SHOW_DIR_STATS" == true ]]; then
-                                SUBTITLE_SHOW_DIR_STATS=false
-                            else
-                                SUBTITLE_SHOW_DIR_STATS=true
-                            fi
-                            log_success "Directory statistics toggled"
-                            ;;
-                        6)
-                            if [[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]]; then
-                                SUBTITLE_INTERACTIVE_SELECT=false
-                                log_info "Interactive selection DISABLED - will process all subdirectories"
-                            else
-                                SUBTITLE_INTERACTIVE_SELECT=true
-                                log_success "Interactive selection ENABLED - you'll choose which folders to process"
-                            fi
-                            ;;
-                        7)
-                            echo -n "Enter minimum depth (0=include current dir, 1=subdirs only): "
-                            read -r min_depth
-                            if [[ $min_depth -ge 0 && $min_depth -le 50 ]]; then
-                                SUBTITLE_MIN_DEPTH=$min_depth
-                                log_success "Minimum depth set to: $min_depth"
-                            else
-                                log_error "Invalid depth. Must be 0-50"
-                            fi
-                            ;;
-                        8)
-                            echo ""
-                            echo -e "${COLOR_CYAN}Current Skip Patterns:${COLOR_RESET}"
-                            for i in "${!SUBTITLE_SKIP_PATTERNS[@]}"; do
-                                echo "  [$i] ${SUBTITLE_SKIP_PATTERNS[$i]}"
-                            done
-                            echo ""
-                            echo "Common patterns: .* (hidden), _* (underscore), tmp, temp, Trash"
-                            echo "Leave empty to keep current patterns"
-                            echo ""
-                            echo -n "Enter new patterns (space-separated): "
-                            read -r new_patterns
-                            if [[ -n "$new_patterns" ]]; then
-                                read -ra SUBTITLE_SKIP_PATTERNS <<< "$new_patterns"
-                                log_success "Skip patterns updated: ${SUBTITLE_SKIP_PATTERNS[*]}"
-                            fi
-                            ;;
-                        9)
-                            SUBTITLE_MIN_SIZE_MB=0
-                            SUBTITLE_MAX_SIZE_MB=0
-                            SUBTITLE_MODIFIED_DAYS=0
-                            SUBTITLE_SKIP_EXISTING=true
-                            SUBTITLE_SHOW_DIR_STATS=true
-                            SUBTITLE_INTERACTIVE_SELECT=false
-                            SUBTITLE_MIN_DEPTH=1
-                            SUBTITLE_SKIP_PATTERNS=(".*" "_*" "node_modules" ".git" ".svn" "Trash" "tmp" "temp")
-                            log_success "All filters reset to default values"
-                            ;;
-                    esac
-                    ;;
-            esac
+            _handle_subtitle_advanced
             return 0
             ;;
         5)

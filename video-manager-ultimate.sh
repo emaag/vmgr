@@ -450,6 +450,12 @@ main() {
         parse_arguments "$@"
     fi
 
+    # Silently load default profile if one has been saved
+    local _default_cfg="${CONFIG_FILE%.conf}-default.conf"
+    if [[ -f "$_default_cfg" ]]; then
+        load_config "default"
+    fi
+
     # Launch interactive menu if needed
     if [[ "$INTERACTIVE" == true ]]; then
         interactive_menu
