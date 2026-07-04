@@ -105,8 +105,7 @@ fix_punctuation() {
 ################################################################################
 
 # Print a progress bar line to stderr.
-# Args: current total status label
-#   status: proc | skip | dry | fail
+# Args: current total status label  (status: proc | skip | dry | fail)
 _print_subtitle_progress() {
     local current="$1"
     local total="$2"
@@ -124,7 +123,7 @@ _print_subtitle_progress() {
 }
 
 # Internal helper: run whisper on a single file and update stats.
-# Args: video_file whisper_cmd model format language device output_dir
+# Args: video_file whisper_cmd model format language device output_dir [file_idx] [file_total]
 # Language "auto" omits --language entirely (older whisper versions error otherwise).
 # Note: STATS updates here only propagate when called inline (sequential mode);
 #       in background subshells the parent increments stats at dispatch time.
@@ -136,6 +135,10 @@ _generate_single_subtitle() {
     local language="$5"
     local device="$6"
     local output_dir="$7"
+    local file_idx="${8:-0}"
+    local file_total="${9:-0}"
+    local elapsed_sum="${10:-0}"
+    local files_done="${11:-0}"
 
     # Build language args inside helper to avoid array-passing issues in subshells
     local -a lang_args=()
@@ -148,6 +151,46 @@ _generate_single_subtitle() {
     if [[ "$device" == "cpu" ]]; then
         fp16_args=("--fp16" "False")
     fi
+
+    # Print per-file header
+    local filename
+    filename="$(basename "$video_file")"
+    local file_size
+    file_size=$(du -sh "$video_file" 2>/dev/null | cut -f1 || echo "?")
+    local counter_str=""
+    [[ $file_total -gt 0 ]] && counter_str="${file_idx}/${file_total}"
+    local file_start_time
+    file_start_time=$(date +%s)
+
+    local eta_str=""
+    if [[ $files_done -gt 0 && $file_total -gt 0 ]]; then
+        local avg=$(( elapsed_sum / files_done ))
+        local remaining=$(( (file_total - file_idx) * avg ))
+        if [[ $remaining -ge 60 ]]; then
+            eta_str="  ETA ${COLOR_CYAN}$(( remaining / 60 ))m$(( remaining % 60 ))s${COLOR_RESET}"
+        elif [[ $remaining -gt 0 ]]; then
+            eta_str="  ETA ${COLOR_CYAN}${remaining}s${COLOR_RESET}"
+        fi
+    fi
+
+    {
+        echo ""
+        echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+        if [[ -n "$counter_str" ]]; then
+            printf " ${COLOR_BOLD}${COLOR_WHITE}%s${COLOR_RESET}  ${COLOR_BRIGHT_YELLOW}[%s]${COLOR_RESET}%b\n" "$filename" "$counter_str" "$eta_str"
+        else
+            printf " ${COLOR_BOLD}${COLOR_WHITE}%s${COLOR_RESET}\n" "$filename"
+        fi
+        printf " ${COLOR_WHITE}Model:${COLOR_RESET} ${COLOR_BRIGHT_CYAN}%-8s${COLOR_RESET}  ${COLOR_WHITE}Device:${COLOR_RESET} ${COLOR_BRIGHT_CYAN}%-6s${COLOR_RESET}  ${COLOR_WHITE}Format:${COLOR_RESET} ${COLOR_BRIGHT_CYAN}%-5s${COLOR_RESET}  ${COLOR_WHITE}Size:${COLOR_RESET} ${COLOR_BRIGHT_CYAN}%s${COLOR_RESET}\n" \
+            "$model" "$device" "$format" "$file_size"
+        echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+    } >&2
+
+    log_message "INFO" "Processing: $filename [${counter_str:-?}] model=$model device=$device"
+
+    # Compute expected output path before running whisper so we can clean it up
+    # if the process is killed or exits with an error.
+    local expected_subtitle="${output_dir}/$(basename "${video_file%.*}").${format}"
 
     # timeout: kill whisper if it hangs (default 2 hours per file)
     # stdout suppressed (raw transcription text); stderr shown live for progress
@@ -162,12 +205,16 @@ _generate_single_subtitle() {
         "${fp16_args[@]}" >/dev/null
     local rc=$?
 
+    # On failure or timeout, remove any partial file whisper may have written so
+    # the next run does not mistake it for a completed subtitle.
     if [[ $rc -eq 124 ]]; then
         log_warning "Whisper timed out after ${SUBTITLE_TIMEOUT:-7200}s: $(basename "$video_file")"
+        [[ -f "$expected_subtitle" ]] && rm -f "$expected_subtitle"
         STATS[subtitles_failed]=$(( STATS[subtitles_failed] + 1 ))
         return 1
     elif [[ $rc -ne 0 ]]; then
         log_warning "Whisper failed for: $(basename "$video_file")"
+        [[ -f "$expected_subtitle" ]] && rm -f "$expected_subtitle"
         STATS[subtitles_failed]=$(( STATS[subtitles_failed] + 1 ))
         return 1
     fi
@@ -183,8 +230,26 @@ _generate_single_subtitle() {
 
     STATS[subtitles_generated]=$(( STATS[subtitles_generated] + 1 ))
     STATS[files_processed]=$(( STATS[files_processed] + 1 ))
-    log_success "Generated: $(basename "$subtitle_file")"
+
+    local file_end_time elapsed elapsed_str
+    file_end_time=$(date +%s)
+    elapsed=$(( file_end_time - file_start_time ))
+    if [[ $elapsed -ge 60 ]]; then
+        elapsed_str="$(( elapsed / 60 ))m $(( elapsed % 60 ))s"
+    else
+        elapsed_str="${elapsed}s"
+    fi
+    log_success "Generated: $(basename "$subtitle_file")  ${COLOR_WHITE}(${elapsed_str})${COLOR_RESET}"
     return 0
+}
+
+# Return 0 if a subtitle file exists, is non-empty, and contains at least one
+# SRT timestamp line (hh:mm:ss,ms --> hh:mm:ss,ms).  Partial files written by a
+# killed whisper process pass the -f/-s tests but fail the timestamp check.
+_is_valid_subtitle() {
+    local file="$1"
+    [[ -f "$file" && -s "$file" ]] || return 1
+    grep -qP '\d{2}:\d{2}:\d{2},\d{3} --> ' "$file" 2>/dev/null
 }
 
 # Generate subtitles for all videos in a directory using OpenAI Whisper.
@@ -274,27 +339,35 @@ generate_subtitles_in_directory() {
 
     # 10. Process each file
     local -a pids=()
-    local current=0
+    local file_idx=0
+    local _eta_elapsed_sum=0
+    local _eta_files_done=0
     for video_file in "${video_files[@]}"; do
-        current=$(( current + 1 ))
+        file_idx=$(( file_idx + 1 ))
         local output_dir
         output_dir="$(dirname "$video_file")"
         local subtitle_file="${video_file%.*}.${format}"
 
-        # Skip when subtitle already exists
-        if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true && -f "$subtitle_file" ]]; then
-            _print_subtitle_progress "$current" "$total" "skip" "$(basename "$subtitle_file")"
-            STATS[files_skipped]=$(( STATS[files_skipped] + 1 ))
-            continue
+        # Skip when a valid subtitle already exists.
+        # If the file is present but invalid (empty or no timestamps), it was
+        # likely left behind by a previously interrupted whisper run — delete it
+        # and fall through to reprocess.
+        if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true ]]; then
+            if _is_valid_subtitle "$subtitle_file"; then
+                log_verbose "Skipping (exists): $(basename "$subtitle_file")"
+                STATS[files_skipped]=$(( STATS[files_skipped] + 1 ))
+                continue
+            elif [[ -f "$subtitle_file" ]]; then
+                log_warning "Incomplete subtitle removed, will reprocess: $(basename "$subtitle_file")"
+                rm -f "$subtitle_file"
+            fi
         fi
 
         # Dry run: log intent only
         if [[ "$dry_run" == true ]]; then
-            _print_subtitle_progress "$current" "$total" "dry" "$(basename "$video_file")"
+            log_info "[DRY RUN] Would generate: $(basename "$video_file")"
             continue
         fi
-
-        _print_subtitle_progress "$current" "$total" "proc" "$(basename "$video_file")"
 
         # Parallel dispatch (only when interactive edit is off)
         if [[ "${SUBTITLE_PARALLEL_JOBS:-1}" -gt 1 && "${SUBTITLE_INTERACTIVE_EDIT:-false}" != true ]]; then
@@ -315,14 +388,19 @@ generate_subtitles_in_directory() {
             {
                 _generate_single_subtitle \
                     "$video_file" "$whisper_cmd" "$model" "$format" \
-                    "$language" "$device" "$output_dir"
+                    "$language" "$device" "$output_dir" "$file_idx" "$total"
             } &
             pids+=($!)
         else
-            # Sequential: _generate_single_subtitle updates STATS inline
+            # Sequential: track elapsed for ETA
+            local _iter_start
+            _iter_start=$(date +%s)
             _generate_single_subtitle \
                 "$video_file" "$whisper_cmd" "$model" "$format" \
-                "$language" "$device" "$output_dir"
+                "$language" "$device" "$output_dir" "$file_idx" "$total" \
+                "$_eta_elapsed_sum" "$_eta_files_done"
+            _eta_elapsed_sum=$(( _eta_elapsed_sum + $(date +%s) - _iter_start ))
+            (( _eta_files_done++ ))
         fi
     done
 

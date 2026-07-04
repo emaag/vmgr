@@ -48,9 +48,6 @@ show_main_menu() {
     echo -e "${COLOR_BRIGHT_GREEN}[6]${COLOR_RESET} ${COLOR_WHITE}Settings${COLOR_RESET}"
     echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Configure options and preferences"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[7]${COLOR_RESET} ${COLOR_WHITE}Reddit Downloader${COLOR_RESET}"
-    echo -e "    ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Download images from a subreddit"
-    echo ""
     echo -e "${COLOR_RED}[Q]${COLOR_RESET} ${COLOR_WHITE}Quit${COLOR_RESET}"
     echo ""
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choose option: "
@@ -321,19 +318,130 @@ show_granular_controls_menu() {
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
+# Interactive directory browser — navigate with numbers, [U]p, [S]elect, [T]ype
+browse_directory() {
+    local current_dir="${1:-${TARGET_FOLDER:-$HOME}}"
+
+    # Resolve to an absolute path
+    current_dir="$(cd "$current_dir" 2>/dev/null && pwd)" || current_dir="$HOME"
+
+    while true; do
+        clear
+        show_header
+
+        echo -e "${COLOR_BOLD}${COLOR_YELLOW}SELECT DIRECTORY${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}Location:${COLOR_RESET} ${COLOR_WHITE}${current_dir}${COLOR_RESET}"
+        echo ""
+
+        # Collect non-hidden subdirectories
+        local dirs=()
+        while IFS= read -r d; do
+            dirs+=("$d")
+        done < <(find "$current_dir" -maxdepth 1 -mindepth 1 -type d -not -name '.*' 2>/dev/null | sort)
+
+        if [[ ${#dirs[@]} -gt 0 ]]; then
+            echo -e "${COLOR_BOLD}${COLOR_WHITE}Subdirectories:${COLOR_RESET}"
+            local i=1
+            for d in "${dirs[@]}"; do
+                echo -e "  ${COLOR_BRIGHT_GREEN}[$i]${COLOR_RESET} ${COLOR_WHITE}$(basename "$d")/${COLOR_RESET}"
+                ((i++))
+            done
+        else
+            echo -e "  ${COLOR_CYAN}(no subdirectories)${COLOR_RESET}"
+        fi
+
+        echo ""
+        echo -e "  ${COLOR_YELLOW}[U]${COLOR_RESET} Go up one level"
+        echo -e "  ${COLOR_BRIGHT_GREEN}[S]${COLOR_RESET} Select this directory"
+        echo -e "  ${COLOR_CYAN}[T]${COLOR_RESET} Type a path manually"
+        echo -e "  ${COLOR_RED}[C]${COLOR_RESET} Cancel"
+        echo ""
+        echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Choose: "
+
+        read -r choice
+
+        case "${choice,,}" in
+            u)
+                local parent
+                parent="$(dirname "$current_dir")"
+                [[ "$parent" != "$current_dir" ]] && current_dir="$parent"
+                ;;
+            s|"")
+                TARGET_FOLDER="$current_dir"
+                return 0
+                ;;
+            t)
+                echo ""
+                echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter path: "
+                read -r typed_path
+                local validated
+                validated=$(validate_directory "$typed_path")
+                if [[ $? -eq 0 ]]; then
+                    current_dir="$validated"
+                else
+                    echo -e "${COLOR_RED}Directory not found.${COLOR_RESET}"
+                    sleep 1
+                fi
+                ;;
+            c)
+                return 1
+                ;;
+            *)
+                if [[ "$choice" =~ ^[0-9]+$ ]]; then
+                    local idx=$(( choice - 1 ))
+                    if [[ $idx -ge 0 && $idx -lt ${#dirs[@]} ]]; then
+                        current_dir="${dirs[$idx]}"
+                    else
+                        echo -e "${COLOR_RED}Invalid choice.${COLOR_RESET}"
+                        sleep 1
+                    fi
+                fi
+                ;;
+        esac
+    done
+}
+
+# Show count + sample of affected files and ask for confirmation.
+# $1 = operation label, $2 = directory, $3 = "deep" for flatten (mindepth 2)
+confirm_destructive_op() {
+    local op_label="$1"
+    local directory="$2"
+    local depth_mode="${3:-shallow}"
+
+    local count
+    if [[ "$depth_mode" == "deep" ]]; then
+        count=$(find "$directory" -mindepth 2 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || echo 0)
+    else
+        count=$(find "$directory" -maxdepth 1 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || echo 0)
+    fi
+
+    echo ""
+    echo -e "${COLOR_YELLOW}${op_label}${COLOR_RESET} will affect ${COLOR_BOLD}${count}${COLOR_RESET} file(s) in:"
+    echo -e "  ${COLOR_WHITE}${directory}${COLOR_RESET}"
+
+    if [[ "${count:-0}" -gt 0 ]]; then
+        echo -e "${COLOR_CYAN}Sample:${COLOR_RESET}"
+        if [[ "$depth_mode" == "deep" ]]; then
+            find "$directory" -mindepth 2 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null | head -5 | while IFS= read -r f; do
+                echo -e "  $(basename "$f")"
+            done
+        else
+            find "$directory" -maxdepth 1 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null | head -5 | while IFS= read -r f; do
+                echo -e "  $(basename "$f")"
+            done
+        fi
+        [[ "${count:-0}" -gt 5 ]] && echo -e "  ${COLOR_CYAN}... and $((count - 5)) more${COLOR_RESET}"
+    fi
+
+    echo ""
+    echo -n "${COLOR_YELLOW}Proceed? [y/N]:${COLOR_RESET} "
+    read -r answer
+    [[ "${answer,,}" == "y" ]]
+}
+
 # Get directory input
 get_directory_input() {
-    echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
-    read -r dir
-
-    dir=$(validate_directory "$dir")
-    if [[ $? -eq 0 ]]; then
-        TARGET_FOLDER="$dir"
-        return 0
-    else
-        return 1
-    fi
+    browse_directory
 }
 
 # Handle single operations
@@ -343,44 +451,54 @@ _handle_single_operations_choice() {
     case "$choice" in
         1)
             if get_directory_input; then
-                start_operation "Rename Files (Bracket Notation)"
-                rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
-                end_operation
-                read -p "Press Enter to continue..."
+                if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Rename Files" "$TARGET_FOLDER"; then
+                    start_operation "Rename Files (Bracket Notation)"
+                    rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
             fi
             return 0
             ;;
         2)
             if get_directory_input; then
-                start_operation "Remove Dashes"
-                remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
-                end_operation
-                read -p "Press Enter to continue..."
+                if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Remove Dashes" "$TARGET_FOLDER"; then
+                    start_operation "Remove Dashes"
+                    remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
             fi
             return 0
             ;;
         3)
             if get_directory_input; then
-                start_operation "Fix Bracket Spacing"
-                fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
-                end_operation
-                read -p "Press Enter to continue..."
+                if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Fix Bracket Spacing" "$TARGET_FOLDER"; then
+                    start_operation "Fix Bracket Spacing"
+                    fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
             fi
             return 0
             ;;
         4)
             if get_directory_input; then
-                start_operation "Flatten Directory"
-                flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
-                end_operation
-                read -p "Press Enter to continue..."
+                if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Flatten Directory" "$TARGET_FOLDER" "deep"; then
+                    start_operation "Flatten Directory"
+                    flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
+                    end_operation
+                    read -p "Press Enter to continue..."
+                fi
             fi
             return 0
             ;;
         5)
             if get_directory_input; then
-                workflow_deep_clean "$TARGET_FOLDER"
-                read -p "Press Enter to continue..."
+                if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Full Cleanup" "$TARGET_FOLDER"; then
+                    workflow_deep_clean "$TARGET_FOLDER"
+                    read -p "Press Enter to continue..."
+                fi
             fi
             return 0
             ;;
@@ -390,7 +508,6 @@ _handle_single_operations_choice() {
             ;;
         d|D)
             toggle_flag_with_log DRY_RUN "Dry run mode"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -455,12 +572,10 @@ _handle_image_ops_choice() {
             ;;
         r|R)
             toggle_flag_with_log IMAGE_RECURSIVE "Recursive mode"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         d|D)
             toggle_flag_with_log DRY_RUN "Dry run mode"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -547,7 +662,6 @@ _handle_duplicates_choice() {
                 start_operation "Find Duplicates (Report Only)"
                 find_duplicates "$TARGET_FOLDER" "report"
                 end_operation
-                read -p "Press Enter to continue..."
             fi
             return 0
             ;;
@@ -574,7 +688,6 @@ _handle_duplicates_choice() {
                 start_operation "Find Duplicates (Dry Run)"
                 find_duplicates "$TARGET_FOLDER" "delete"
                 end_operation
-                read -p "Press Enter to continue..."
             fi
             DRY_RUN="$old_dry_run"
             return 0
@@ -585,6 +698,7 @@ _handle_duplicates_choice() {
 }
 
 # Handle duplicate detection (using generic menu loop)
+
 handle_duplicates() {
     run_menu_loop show_duplicate_menu _handle_duplicates_choice true
 }
@@ -665,7 +779,6 @@ _handle_subtitles_choice() {
             log_info "Model: $WHISPER_MODEL"
             log_info "Format: $SUBTITLE_FORMAT"
             log_info "Language: $SUBTITLE_LANGUAGE"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         4)
@@ -910,10 +1023,8 @@ _handle_subtitles_choice() {
                             log_success "All filters reset to default values"
                             ;;
                     esac
-                    read -p "Press Enter to continue..."
                     ;;
             esac
-            read -p "Press Enter to continue..."
             return 0
             ;;
         5)
@@ -945,9 +1056,9 @@ _handle_subtitles_choice() {
                 echo ""
                 echo -e "${COLOR_WHITE}Testing whisper command...${COLOR_RESET}"
                 if [[ "$whisper_cmd" == "whisper" ]]; then
-                    whisper --help | head -n 10
+                    timeout 30 whisper --help 2>&1 | head -n 10
                 elif [[ "$whisper_cmd" == "whisper.cpp" ]]; then
-                    whisper.cpp --help 2>&1 | head -n 10
+                    timeout 30 whisper.cpp --help 2>&1 | head -n 10
                 fi
             else
                 log_error "Whisper is not installed!"
@@ -963,7 +1074,6 @@ _handle_subtitles_choice() {
                 echo "  # Add to PATH or create symlink"
                 echo ""
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -995,7 +1105,6 @@ _handle_catalog_choice() {
 
             if [[ -z "$mount_point" ]]; then
                 log_error "No mount point specified"
-                read -p "Press Enter to continue..."
                 return 0
             fi
 
@@ -1016,7 +1125,6 @@ _handle_catalog_choice() {
             start_operation "List Cataloged Drives"
             list_cataloged_drives
             end_operation
-            read -p "Press Enter to continue..."
             return 0
             ;;
         3)
@@ -1048,7 +1156,6 @@ _handle_catalog_choice() {
                 search_catalog "$search_term" "$media_filter"
                 end_operation
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         4)
@@ -1057,7 +1164,6 @@ _handle_catalog_choice() {
             start_operation "Find Duplicate Files"
             show_duplicates_report
             end_operation
-            read -p "Press Enter to continue..."
             return 0
             ;;
         5)
@@ -1077,7 +1183,6 @@ _handle_catalog_choice() {
 
             if [[ ${#mount_points[@]} -eq 0 ]]; then
                 log_warning "No mount points specified"
-                read -p "Press Enter to continue..."
                 return 0
             fi
 
@@ -1119,7 +1224,6 @@ _handle_catalog_choice() {
             } > "$report_file"
 
             log_success "Report exported to: $report_file"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         7)
@@ -1184,7 +1288,6 @@ _handle_catalog_choice() {
                     fi
                     ;;
             esac
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -1198,7 +1301,6 @@ handle_catalog() {
     if ! command -v jq >/dev/null 2>&1; then
         log_error "jq is not installed. Please install it first:"
         echo "  sudo apt-get install jq"
-        read -p "Press Enter to continue..."
         return 1
     fi
 
@@ -1237,8 +1339,6 @@ _handle_utilities_choice() {
         2)
             clear
             list_undo_operations
-            echo ""
-            read -p "Press Enter to continue..."
             return 0
             ;;
         3)
@@ -1253,8 +1353,6 @@ _handle_utilities_choice() {
             echo -e "${COLOR_BRIGHT_CYAN}Last 50 Log Entries:${COLOR_RESET}"
             echo ""
             tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
-            echo ""
-            read -p "Press Enter to continue..."
             return 0
             ;;
         5)
@@ -1265,7 +1363,6 @@ _handle_utilities_choice() {
             else
                 log_info "Log directory: $LOG_DIR"
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         6)
@@ -1286,9 +1383,6 @@ _handle_utilities_choice() {
 
             result=$(fix_bracket_spacing "$result")
             echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
-
-            echo ""
-            read -p "Press Enter to continue..."
             return 0
             ;;
         7)
@@ -1316,8 +1410,6 @@ _handle_utilities_choice() {
             command -v exiftool &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} exiftool" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} exiftool"
             command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
             command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
-            echo ""
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -1345,7 +1437,6 @@ _handle_organize_settings_choice() {
                 log_warning "Path does not exist, but setting anyway: $target_path"
                 ORGANIZE_DEFAULT_TARGET="$target_path"
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         2)
@@ -1359,17 +1450,14 @@ _handle_organize_settings_choice() {
                 log_warning "Path does not exist, but setting anyway: $search_path"
                 ORGANIZE_DEFAULT_SEARCH="$search_path"
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         3)
             toggle_flag_with_log ORGANIZE_SHOW_PROGRESS "Progress display"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         4)
             toggle_flag_with_log ORGANIZE_LOG_OPERATIONS "Operation logging"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -1388,12 +1476,10 @@ _handle_settings_choice() {
     case "$choice" in
         1)
             toggle_flag_with_log DRY_RUN "Dry run mode"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         2)
             toggle_flag_with_log VERBOSE "Verbose output"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         3)
@@ -1403,8 +1489,6 @@ _handle_settings_choice() {
             for ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
                 echo "  ${SYMBOL_BULLET} .$ext"
             done
-            echo ""
-            read -p "Press Enter to continue..."
             return 0
             ;;
         4)
@@ -1422,7 +1506,6 @@ _handle_settings_choice() {
             read -p "Enter profile name (default): " profile_name
             profile_name=${profile_name:-default}
             save_config "$profile_name"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         7)
@@ -1433,13 +1516,11 @@ _handle_settings_choice() {
             read -p "Enter profile name to load (default): " profile_name
             profile_name=${profile_name:-default}
             load_config "$profile_name"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         8)
             clear
             list_config_profiles
-            read -p "Press Enter to continue..."
             return 0
             ;;
         9)
@@ -1454,7 +1535,6 @@ _handle_settings_choice() {
                     delete_config_profile "$profile_name"
                 fi
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         b|B) return 1 ;;
@@ -1473,17 +1553,14 @@ _handle_granular_controls_choice() {
     case "$choice" in
         1)
             toggle_flag_with_log INTERACTIVE_CONFIRM "Per-file confirmation"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         2)
             toggle_flag_with_log SHOW_PREVIEW "Preview mode"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         3)
             toggle_flag_with_log STEP_BY_STEP "Step-by-step mode"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         4)
@@ -1501,7 +1578,6 @@ _handle_granular_controls_choice() {
                 FILTER_BY_SIZE=false
                 log_success "Size filter disabled"
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         5)
@@ -1518,7 +1594,6 @@ _handle_granular_controls_choice() {
                 FILTER_BY_DATE=false
                 log_success "Date filter disabled"
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         6)
@@ -1536,12 +1611,10 @@ _handle_granular_controls_choice() {
                 FILTER_PATTERN=""
                 log_success "Pattern filter disabled"
             fi
-            read -p "Press Enter to continue..."
             return 0
             ;;
         7)
             toggle_flag_with_log ENABLE_UNDO "Undo system"
-            read -p "Press Enter to continue..."
             return 0
             ;;
         8)
@@ -1558,8 +1631,6 @@ _handle_granular_controls_choice() {
             else
                 echo "No undo history file found"
             fi
-            echo ""
-            read -p "Press Enter to continue..."
             return 0
             ;;
         9)
@@ -1606,10 +1677,6 @@ _handle_main_menu_choice() {
             handle_settings
             return 0
             ;;
-        7)
-            handle_reddit
-            return 0
-            ;;
         q|Q)
             echo ""
             echo "Goodbye!"
@@ -1621,55 +1688,6 @@ _handle_main_menu_choice() {
             return 0
             ;;
     esac
-}
-
-show_reddit_menu() {
-    show_header
-
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}REDDIT IMAGE DOWNLOADER${COLOR_RESET}"
-    echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Download Images from Subreddit${COLOR_RESET}"
-    echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
-    echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
-}
-
-_handle_reddit_choice() {
-    local choice="$1"
-    case "$choice" in
-        1)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Reddit Image Downloader${COLOR_RESET}"
-            echo ""
-            read -rp "Subreddit name (e.g. EarthPorn): " subreddit
-            if [[ -z "$subreddit" ]]; then
-                log_error "No subreddit specified"
-                read -rp "Press Enter to continue..."
-                return 0
-            fi
-
-            local default_dir="$HOME/Pictures/reddit/${subreddit}"
-            read -rp "Output directory [${default_dir}]: " output_dir
-            [[ -z "$output_dir" ]] && output_dir="$default_dir"
-
-            read -rp "Max images to download [200]: " max_images
-            [[ -z "$max_images" || ! "$max_images" =~ ^[0-9]+$ ]] && max_images=200
-
-            echo ""
-            start_operation "Reddit Download: r/${subreddit}"
-            download_subreddit_images "$subreddit" "$output_dir" "$max_images"
-            end_operation
-            read -rp "Press Enter to continue..."
-            return 0
-            ;;
-        b|B) return 1 ;;
-        *) return 2 ;;
-    esac
-}
-
-handle_reddit() {
-    run_menu_loop show_reddit_menu _handle_reddit_choice true
 }
 
 # Main interactive menu loop (simple number-based input)
