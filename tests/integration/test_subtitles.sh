@@ -48,6 +48,7 @@ while [[ $# -gt 0 ]]; do
         --output_dir)     output_dir="$2"; shift 2 ;;
         --output_format)  format="$2";     shift 2 ;;
         --model|--language|--device) shift 2 ;;
+        --fp16|--verbose) shift 2 ;;
         *) input_file="$1"; shift ;;
     esac
 done
@@ -195,6 +196,7 @@ while [[ \$# -gt 0 ]]; do
         --output_dir)    output_dir="\$2"; shift 2 ;;
         --output_format) format="\$2";     shift 2 ;;
         --model|--language|--device) shift 2 ;;
+        --fp16|--verbose) shift 2 ;;
         *) input_file="\$1"; shift ;;
     esac
 done

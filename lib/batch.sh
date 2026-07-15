@@ -96,6 +96,32 @@ batch_process_folders() {
 # BATCH WRAPPERS (for interactive menu)
 ################################################################################
 
+# Batch rename multiple folders (interactive)
+batch_rename_interactive() {
+    log_info "Batch Rename Multiple Folders"
+    echo ""
+    echo "Enter directories to rename (one per line, empty line to finish):"
+    echo ""
+
+    local -a folders
+    while true; do
+        read -p "Directory: " dir
+        [[ -z "$dir" ]] && break
+
+        dir=$(validate_directory "$dir")
+        if [[ $? -eq 0 ]]; then
+            folders+=("$dir")
+        fi
+    done
+
+    if [[ ${#folders[@]} -eq 0 ]]; then
+        log_warning "No directories specified"
+        return 1
+    fi
+
+    batch_process_folders "rename" "${folders[@]}"
+}
+
 # Batch flatten multiple folders (interactive)
 batch_flatten_interactive() {
     log_info "Batch Flatten Multiple Folders"

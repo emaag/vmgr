@@ -153,14 +153,27 @@ find_duplicates() {
 ################################################################################
 
 # Find duplicates in catalog database (cross-drive support)
-# Returns JSON array of duplicate groups
+# Returns JSON array of duplicate groups, or empty array if hashing was disabled.
 find_duplicates_in_catalog() {
     init_catalog_db
 
-    local catalog_json=$(cat "$CATALOG_DB")
+    local catalog_json
+    catalog_json=$(cat "$CATALOG_DB")
 
-    # Group by hash and filter only groups with more than 1 file
-    local duplicates=$(echo "$catalog_json" | jq -r '
+    # Warn if no entries have hashes — dedup requires CATALOG_INCLUDE_HASH=true at scan time
+    local hashed_count
+    hashed_count=$(echo "$catalog_json" | jq '[.videos[] | select(.hash != null and .hash != "")] | length')
+    if [[ "$hashed_count" -eq 0 ]]; then
+        local total
+        total=$(echo "$catalog_json" | jq '.videos | length')
+        if [[ "$total" -gt 0 ]]; then
+            echo "Warning: catalog has $total file(s) but no hashes. Set CATALOG_INCLUDE_HASH=true and re-scan to enable duplicate detection." >&2
+        fi
+        echo "[]"
+        return 0
+    fi
+
+    echo "$catalog_json" | jq '
         [.videos[] | select(.hash != null and .hash != "")] |
         group_by(.hash) |
         map(select(length > 1)) |
@@ -175,14 +188,10 @@ find_duplicates_in_catalog() {
                 relative_path: .relative_path,
                 media_type: .media_type,
                 file_size: .file_size,
-                dimensions: .dimensions,
-                resolution: .resolution,
                 last_scanned: .last_scanned
             })
         })
-    ')
-
-    echo "$duplicates"
+    '
 }
 
 # Find similar images by dimensions (potential duplicates without hash match)

@@ -111,7 +111,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     subtitles <dir>         Generate subtitles for videos
     workflow-new <dir>      New collection setup workflow
     workflow-clean <dir>    Deep clean workflow
-    batch                   Batch process multiple folders
+    batch                   Batch process multiple folders (interactive menu only)
     --organize              Organize files by subfolder names
     --undo-organize [id]    Undo organize operation (optional: operation ID)
     --list-undo             List available undo operations
@@ -370,9 +370,8 @@ parse_arguments() {
             workflow_deep_clean "$directory"
             ;;
         batch)
-            start_operation "Batch Processing"
-            batch_process_folders
-            end_operation
+            log_error "Batch processing requires the interactive menu (run without a command, then choose Batch)"
+            exit 1
             ;;
         organize)
             organize_by_subfolder_names "$ORGANIZE_DEFAULT_TARGET" "$ORGANIZE_DEFAULT_SEARCH"

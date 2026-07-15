@@ -321,11 +321,11 @@ show_granular_controls_menu() {
     echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
 }
 
-# Get directory input
+# Get directory input (fzf when available, typed fallback)
 get_directory_input() {
     echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Enter directory path: "
-    read -r dir
+    local dir
+    dir=$(pick_directory "Select target directory" "${TARGET_FOLDER:-.}") || return 1
 
     dir=$(validate_directory "$dir")
     if [[ $? -eq 0 ]]; then
@@ -480,7 +480,7 @@ _handle_batch_choice() {
     case "$choice" in
         1)
             start_operation "Batch Rename Multiple Folders"
-            batch_process_folders
+            batch_rename_interactive
             end_operation
             read -p "Press Enter to continue..."
             return 0
@@ -921,8 +921,9 @@ _handle_subtitles_choice() {
             clear
             echo -e "${COLOR_BRIGHT_CYAN}Edit Existing Subtitle${COLOR_RESET}"
             echo ""
-            echo -n "Enter subtitle file path: "
-            read -r subtitle_path
+            local subtitle_path
+            subtitle_path=$(pick_file "Select subtitle file" "." "*.srt") \
+                || { log_error "No file selected"; read -p "Press Enter to continue..."; return 0; }
 
             if [[ -f "$subtitle_path" ]]; then
                 edit_subtitle_interactive "$subtitle_path"
@@ -1220,13 +1221,12 @@ _handle_utilities_choice() {
             echo "  3. Move matching files into their respective subfolders"
             echo "  4. Skip files in 'full' folders or already in place"
             echo ""
-            echo -n "Enter target folder with subfolders (or . for current): "
-            read -r target_folder
-            target_folder="${target_folder:-.}"
+            local target_folder search_path
+            target_folder=$(pick_directory "Select target folder (with subfolders)" ".") \
+                || target_folder="."
 
-            echo -n "Enter search path (or . for current, or enter for target): "
-            read -r search_path
-            search_path="${search_path:-$target_folder}"
+            search_path=$(pick_directory "Select search path (where files live)" "$target_folder") \
+                || search_path="$target_folder"
 
             organize_by_subfolder_names "$target_folder" "$search_path"
 
@@ -1336,29 +1336,21 @@ _handle_organize_settings_choice() {
     case "$choice" in
         1)
             echo ""
-            echo -n "Enter default target folder path: "
-            read -r target_path
-            if [[ -d "$target_path" ]]; then
-                ORGANIZE_DEFAULT_TARGET="$target_path"
-                log_success "Default target set to: $target_path"
-            else
-                log_warning "Path does not exist, but setting anyway: $target_path"
-                ORGANIZE_DEFAULT_TARGET="$target_path"
-            fi
+            local target_path
+            target_path=$(pick_directory "Select default target folder" "${ORGANIZE_DEFAULT_TARGET:-.}") \
+                || { read -p "Press Enter to continue..."; return 0; }
+            ORGANIZE_DEFAULT_TARGET="$target_path"
+            log_success "Default target set to: $target_path"
             read -p "Press Enter to continue..."
             return 0
             ;;
         2)
             echo ""
-            echo -n "Enter default search path: "
-            read -r search_path
-            if [[ -d "$search_path" ]]; then
-                ORGANIZE_DEFAULT_SEARCH="$search_path"
-                log_success "Default search path set to: $search_path"
-            else
-                log_warning "Path does not exist, but setting anyway: $search_path"
-                ORGANIZE_DEFAULT_SEARCH="$search_path"
-            fi
+            local search_path
+            search_path=$(pick_directory "Select default search path" "${ORGANIZE_DEFAULT_SEARCH:-.}") \
+                || { read -p "Press Enter to continue..."; return 0; }
+            ORGANIZE_DEFAULT_SEARCH="$search_path"
+            log_success "Default search path set to: $search_path"
             read -p "Press Enter to continue..."
             return 0
             ;;
@@ -1650,8 +1642,9 @@ _handle_reddit_choice() {
             fi
 
             local default_dir="$HOME/Pictures/reddit/${subreddit}"
-            read -rp "Output directory [${default_dir}]: " output_dir
-            [[ -z "$output_dir" ]] && output_dir="$default_dir"
+            local output_dir
+            output_dir=$(pick_directory "Select output directory" "$(dirname "$default_dir")") \
+                || output_dir="$default_dir"
 
             read -rp "Max images to download [200]: " max_images
             [[ -z "$max_images" || ! "$max_images" =~ ^[0-9]+$ ]] && max_images=200

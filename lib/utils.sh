@@ -158,6 +158,85 @@ get_safe_filename() {
 
 
 ################################################################################
+# INTERACTIVE PICKERS (fzf when available, read fallback)
+################################################################################
+
+# Pick a directory interactively.
+# Usage: pick_directory [prompt] [start_dir]
+# Prints selected path to stdout; returns 1 if nothing selected.
+pick_directory() {
+    local prompt="${1:-Select directory}"
+    local start_dir="${2:-.}"
+    local result
+
+    local _fzf_bin; _fzf_bin=$(command -v fzf 2>/dev/null || echo "${HOME}/.fzf/bin/fzf")
+    if [[ -x "$_fzf_bin" ]]; then
+        local fzf_out
+        fzf_out=$(find "$start_dir" -maxdepth 6 -type d 2>/dev/null | "$_fzf_bin" \
+            --print-query \
+            --prompt="$prompt> " \
+            --preview='ls -la -- {} 2>/dev/null | head -20' \
+            --preview-window=right:40%:wrap \
+            --height=60% \
+            --border \
+            --ansi \
+            --no-multi \
+            < /dev/tty)
+        # --print-query: line 1 = typed query, line 2 = selected item (may be absent)
+        local query selected
+        query=$(printf '%s\n' "$fzf_out" | head -1)
+        selected=$(printf '%s\n' "$fzf_out" | tail -n +2 | head -1)
+        if [[ -n "$selected" ]]; then
+            result="$selected"
+        elif [[ -n "$query" && -d "$query" ]]; then
+            # User typed a valid absolute (or relative) path — use it directly
+            result="$query"
+        else
+            return 1
+        fi
+    else
+        echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} $prompt: " >&2
+        read -r result < /dev/tty
+    fi
+
+    if [[ -z "$result" ]]; then
+        return 1
+    fi
+    echo "$result"
+}
+
+# Pick a file interactively.
+# Usage: pick_file [prompt] [start_dir] [name_glob]
+# Prints selected path to stdout; returns 1 if nothing selected.
+pick_file() {
+    local prompt="${1:-Select file}"
+    local start_dir="${2:-.}"
+    local glob="${3:-*}"
+    local result
+
+    local _fzf_bin; _fzf_bin=$(command -v fzf 2>/dev/null || echo "${HOME}/.fzf/bin/fzf")
+    if [[ -x "$_fzf_bin" ]]; then
+        result=$(find "$start_dir" -maxdepth 6 -type f -name "$glob" 2>/dev/null | "$_fzf_bin" \
+            --prompt="$prompt> " \
+            --preview='head -20 -- {} 2>/dev/null' \
+            --preview-window=right:40%:wrap \
+            --height=60% \
+            --border \
+            --ansi \
+            --no-multi \
+            < /dev/tty)
+    else
+        echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} $prompt: " >&2
+        read -r result < /dev/tty
+    fi
+
+    if [[ -z "$result" ]]; then
+        return 1
+    fi
+    echo "$result"
+}
+
+################################################################################
 # MODULE INITIALIZATION
 ################################################################################
 

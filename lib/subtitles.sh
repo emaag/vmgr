@@ -62,13 +62,9 @@ check_whisper_installation() {
 
 # Get whisper command
 get_whisper_command() {
-    if command -v whisper &> /dev/null; then
-        echo "whisper"
-    elif command -v whisper.cpp &> /dev/null; then
-        echo "whisper.cpp"
-    else
-        echo ""
-    fi
+    command -v whisper 2>/dev/null \
+        || command -v whisper.cpp 2>/dev/null \
+        || echo ""
 }
 
 ################################################################################
@@ -158,7 +154,6 @@ _generate_single_subtitle() {
         "${lang_args[@]}" \
         --output_dir "$output_dir" \
         --device "$device" \
-        --verbose False \
         "${fp16_args[@]}" >/dev/null
     local rc=$?
 
@@ -336,26 +331,46 @@ generate_subtitles_in_directory() {
     return 0
 }
 
-# Interactively collect directories from the user and run subtitle generation on each.
+# Select multiple directories and run subtitle generation on each.
+# Uses fzf multi-select when available; falls back to one-per-line read loop.
 batch_generate_subtitles() {
     echo -e "${COLOR_BRIGHT_CYAN}Batch Subtitle Generation${COLOR_RESET}"
-    echo "Enter directories to process (one per line, empty line to start):"
+    echo ""
 
     local -a dirs=()
-    local dir
-    while true; do
-        echo -n "Directory: "
-        read -r dir
-        [[ -z "$dir" ]] && break
-        if [[ -d "$dir" ]]; then
-            dirs+=("$dir")
-        else
-            log_warning "Not found, skipping: $dir"
-        fi
-    done
+    local _fzf_bin
+    _fzf_bin=$(command -v fzf 2>/dev/null || echo "${HOME}/.fzf/bin/fzf")
+
+    if [[ -x "$_fzf_bin" ]]; then
+        echo -e "${COLOR_CYAN}Select directories with TAB, press ENTER to confirm:${COLOR_RESET}"
+        mapfile -t dirs < <(
+            find . -maxdepth 6 -type d 2>/dev/null | "$_fzf_bin" \
+                --multi \
+                --prompt="Batch dirs> " \
+                --preview='ls -la -- {} 2>/dev/null | head -20' \
+                --preview-window=right:40%:wrap \
+                --height=70% \
+                --border \
+                --bind='tab:toggle+down' \
+                < /dev/tty
+        )
+    else
+        echo "Enter directories to process (one per line, empty line to start):"
+        local dir
+        while true; do
+            echo -n "Directory: "
+            read -r dir
+            [[ -z "$dir" ]] && break
+            if [[ -d "$dir" ]]; then
+                dirs+=("$dir")
+            else
+                log_warning "Not found, skipping: $dir"
+            fi
+        done
+    fi
 
     if [[ ${#dirs[@]} -eq 0 ]]; then
-        log_warning "No directories specified"
+        log_warning "No directories selected"
         return 0
     fi
 
@@ -365,7 +380,7 @@ batch_generate_subtitles() {
     local i=0
     for dir in "${dirs[@]}"; do
         i=$(( i + 1 ))
-        log_info "[$i/$total_dirs] Processing: $dir"
+        log_info "[$i/$total_dirs] $dir"
         generate_subtitles_in_directory "$dir" \
             "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN"
     done
