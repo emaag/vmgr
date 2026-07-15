@@ -64,21 +64,28 @@ _reddit_get_access_token() {
 }
 
 # Fetch a subreddit listing page (JSON), authenticated if possible
-# Args: $1 - subreddit, $2 - "after" cursor (may be empty)
+# Args: $1 - subreddit, $2 - "after" cursor (may be empty), $3 - sort
+#       (hot/new/top/rising/controversial, default hot), $4 - time window
+#       for top/controversial (hour/day/week/month/year/all, may be empty)
 # Prints the response body to stdout
 _reddit_fetch_listing() {
     local subreddit="$1"
     local after="$2"
+    local sort="${3:-hot}"
+    local time_window="$4"
     local base_url query
 
     if [[ -n "$REDDIT_ACCESS_TOKEN" ]]; then
-        base_url="https://oauth.reddit.com/r/${subreddit}/hot.json"
+        base_url="https://oauth.reddit.com/r/${subreddit}/${sort}.json"
     else
-        base_url="https://www.reddit.com/r/${subreddit}/hot.json"
+        base_url="https://www.reddit.com/r/${subreddit}/${sort}.json"
     fi
 
     query="?limit=100&raw_json=1"
     [[ -n "$after" ]] && query+="&after=$after"
+    if [[ -n "$time_window" && ( "$sort" == "top" || "$sort" == "controversial" ) ]]; then
+        query+="&t=$time_window"
+    fi
 
     if [[ -n "$REDDIT_ACCESS_TOKEN" ]]; then
         curl -sf -A "$REDDIT_USER_AGENT" -H "Authorization: bearer $REDDIT_ACCESS_TOKEN" "${base_url}${query}" 2>/dev/null
@@ -94,7 +101,7 @@ _reddit_extract_media() {
     jq -c '
         .data.children[].data |
         . as $p |
-        ($p.media.reddit_video.fallback_url // $p.secure_media.reddit_video.fallback_url // empty) as $rv |
+        ($p.media.reddit_video.fallback_url // $p.secure_media.reddit_video.fallback_url // null) as $rv |
         if ($p.is_video == true) and ($rv != null and $rv != "") then
             {kind: "reddit_video", id: $p.id, url: ($rv | sub("\\?.*$"; ""))}
         elif ($p.url? // "" | test("\\.gifv$"; "i")) then
@@ -211,15 +218,34 @@ _reddit_download_reddit_video() {
 }
 
 # Download images and videos from a subreddit
-# Args: $1 - subreddit name, $2 - output directory, $3 - max items (default 200)
+# Args: $1 - subreddit name, $2 - output directory, $3 - max items (default 200),
+#       $4 - sort (hot/new/top/rising/controversial, default hot),
+#       $5 - time window for top/controversial (hour/day/week/month/year/all)
 download_subreddit_images() {
     local subreddit="$1"
     local output_dir="$2"
     local max_images="${3:-200}"
+    local sort="${4:-hot}"
+    local time_window="$5"
 
     if [[ -z "$subreddit" || -z "$output_dir" ]]; then
-        log_error "Usage: download_subreddit_images <subreddit> <output_dir> [max]"
+        log_error "Usage: download_subreddit_images <subreddit> <output_dir> [max] [sort] [time]"
         return 1
+    fi
+
+    if [[ ! "$sort" =~ ^(hot|new|top|rising|controversial)$ ]]; then
+        log_error "Invalid sort: $sort (must be hot, new, top, rising, controversial)"
+        return 1
+    fi
+
+    if [[ -n "$time_window" ]]; then
+        if [[ ! "$time_window" =~ ^(hour|day|week|month|year|all)$ ]]; then
+            log_error "Invalid time window: $time_window (must be hour, day, week, month, year, all)"
+            return 1
+        fi
+        if [[ "$sort" != "top" && "$sort" != "controversial" ]]; then
+            log_warning "Time window ($time_window) ignored — only applies to top/controversial sort"
+        fi
     fi
 
     if ! command -v curl &>/dev/null; then
@@ -246,7 +272,7 @@ download_subreddit_images() {
         log_warning "ffmpeg not found — Reddit-hosted videos will be saved without audio"
     fi
 
-    log_info "Downloading up to $max_images items from r/$subreddit"
+    log_info "Downloading up to $max_images items from r/$subreddit (sort: $sort${time_window:+, t=$time_window})"
     log_info "Output: $output_dir"
     log_verbose "Rate limit delay: ${REDDIT_RATE_LIMIT_DELAY}s between requests"
     echo ""
@@ -258,7 +284,7 @@ download_subreddit_images() {
 
     while [[ $downloaded -lt $max_images ]]; do
         local response
-        response=$(_reddit_fetch_listing "$subreddit" "$after")
+        response=$(_reddit_fetch_listing "$subreddit" "$after" "$sort" "$time_window")
         if [[ -z "$response" ]]; then
             log_error "Failed to fetch r/$subreddit — check subreddit name, network, and Reddit API credentials"
             return 1

@@ -117,6 +117,10 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     --list-undo             List available undo operations
     reddit <subreddit> <dir> [max]  Download images from a subreddit
 
+${COLOR_BOLD}REDDIT OPTIONS:${COLOR_RESET}
+    --sort <sort>           Listing sort: hot, new, top, rising, controversial (default: hot)
+    --time <window>         Time window for top/controversial: hour, day, week, month, year, all
+
 ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
     # Interactive menu
     $0
@@ -301,6 +305,30 @@ parse_arguments() {
                     shift
                 fi
                 ;;
+            --sort)
+                shift
+                if [[ -n "$1" ]]; then
+                    if [[ ! "$1" =~ ^(hot|new|top|rising|controversial)$ ]]; then
+                        log_error "Invalid --sort value: $1 (must be hot, new, top, rising, controversial)"
+                        exit 1
+                    fi
+                    REDDIT_SORT="$1"
+                    log_info "Reddit sort set to: $REDDIT_SORT"
+                    shift
+                fi
+                ;;
+            --time)
+                shift
+                if [[ -n "$1" ]]; then
+                    if [[ ! "$1" =~ ^(hour|day|week|month|year|all)$ ]]; then
+                        log_error "Invalid --time value: $1 (must be hour, day, week, month, year, all)"
+                        exit 1
+                    fi
+                    REDDIT_TIME="$1"
+                    log_info "Reddit time window set to: $REDDIT_TIME"
+                    shift
+                fi
+                ;;
             rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch)
                 command="$1"
                 shift
@@ -389,7 +417,7 @@ parse_arguments() {
                 exit 1
             fi
             start_operation "Reddit Image Download"
-            download_subreddit_images "$REDDIT_SUBREDDIT" "$directory" "${REDDIT_MAX_IMAGES:-200}"
+            download_subreddit_images "$REDDIT_SUBREDDIT" "$directory" "${REDDIT_MAX_IMAGES:-200}" "${REDDIT_SORT:-hot}" "${REDDIT_TIME:-}"
             end_operation
             ;;
     esac
