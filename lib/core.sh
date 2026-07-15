@@ -92,7 +92,7 @@ BATCH_SIZE=10 # Process files in batches
 PAUSE_BETWEEN_BATCHES=false # Pause between batches
 
 # Subtitle generation configuration
-WHISPER_MODEL="base"  # tiny, base, small, medium, large
+WHISPER_MODEL="medium"  # tiny, base, small, medium, large
 SUBTITLE_FORMAT="srt" # srt, vtt, txt, json
 SUBTITLE_LANGUAGE="auto" # auto or language code (en, es, fr, etc.)
 SUBTITLE_SUFFIX=".srt"
