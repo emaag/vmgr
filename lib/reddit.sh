@@ -109,3 +109,4 @@ download_subreddit_images() {
 }
 
 return 0
+
