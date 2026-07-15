@@ -4,13 +4,79 @@
 #
 # VIDEO MANAGER ULTIMATE - REDDIT MODULE
 #
-# Downloads images from a public subreddit using the Reddit JSON API.
+# Downloads images from a subreddit using the Reddit API.
+#
+# Reddit now blocks most unauthenticated requests to the public .json
+# endpoints, so this module authenticates via OAuth2 "app-only" (client
+# credentials) auth when credentials are available in ~/.vmgr-reddit.conf,
+# and falls back to the unauthenticated endpoint otherwise.
 #
 # Dependencies: core.sh, logging.sh
 # Module: reddit.sh
-# Version: 1.0.0
+# Version: 2.0.0
 #
 ################################################################################
+
+REDDIT_CONFIG_FILE="$HOME/.vmgr-reddit.conf"
+REDDIT_USER_AGENT="vmgr/2.0 (by /u/mosqua)"
+
+# Load Reddit API credentials from ~/.vmgr-reddit.conf, if present
+# Sets REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET
+# Returns: 0 if credentials were loaded, 1 otherwise
+_reddit_load_credentials() {
+    [[ -f "$REDDIT_CONFIG_FILE" ]] || return 1
+
+    local file_owner
+    file_owner=$(stat -c '%U' "$REDDIT_CONFIG_FILE" 2>/dev/null || stat -f '%Su' "$REDDIT_CONFIG_FILE" 2>/dev/null)
+    if [[ "$file_owner" != "$USER" ]]; then
+        log_warning "Reddit config not owned by current user ($file_owner) — refusing to load: $REDDIT_CONFIG_FILE"
+        return 1
+    fi
+
+    source "$REDDIT_CONFIG_FILE"
+    [[ -n "$REDDIT_CLIENT_ID" && -n "$REDDIT_CLIENT_SECRET" ]]
+}
+
+# Obtain an OAuth2 app-only access token
+# Sets REDDIT_ACCESS_TOKEN on success
+# Returns: 0 on success, 1 on failure
+_reddit_get_access_token() {
+    _reddit_load_credentials || return 1
+
+    local response
+    response=$(curl -sf -A "$REDDIT_USER_AGENT" \
+        -u "${REDDIT_CLIENT_ID}:${REDDIT_CLIENT_SECRET}" \
+        -d "grant_type=client_credentials" \
+        https://www.reddit.com/api/v1/access_token 2>/dev/null)
+    [[ -z "$response" ]] && return 1
+
+    REDDIT_ACCESS_TOKEN=$(echo "$response" | jq -r '.access_token // empty' 2>/dev/null)
+    [[ -n "$REDDIT_ACCESS_TOKEN" ]]
+}
+
+# Fetch a subreddit listing page (JSON), authenticated if possible
+# Args: $1 - subreddit, $2 - "after" cursor (may be empty)
+# Prints the response body to stdout
+_reddit_fetch_listing() {
+    local subreddit="$1"
+    local after="$2"
+    local base_url query
+
+    if [[ -n "$REDDIT_ACCESS_TOKEN" ]]; then
+        base_url="https://oauth.reddit.com/r/${subreddit}/hot.json"
+    else
+        base_url="https://www.reddit.com/r/${subreddit}/hot.json"
+    fi
+
+    query="?limit=100&raw_json=1"
+    [[ -n "$after" ]] && query+="&after=$after"
+
+    if [[ -n "$REDDIT_ACCESS_TOKEN" ]]; then
+        curl -sf -A "$REDDIT_USER_AGENT" -H "Authorization: bearer $REDDIT_ACCESS_TOKEN" "${base_url}${query}" 2>/dev/null
+    else
+        curl -sf -A "$REDDIT_USER_AGENT" "${base_url}${query}" 2>/dev/null
+    fi
+}
 
 # Download images from a subreddit
 # Args: $1 - subreddit name, $2 - output directory, $3 - max images (default 200)
@@ -36,6 +102,13 @@ download_subreddit_images() {
 
     mkdir -p "$output_dir" || { log_error "Cannot create output directory: $output_dir"; return 1; }
 
+    REDDIT_ACCESS_TOKEN=""
+    if _reddit_get_access_token; then
+        log_verbose "Authenticated with Reddit API"
+    else
+        log_warning "No valid Reddit API credentials — falling back to unauthenticated access (Reddit may block this)"
+    fi
+
     log_info "Downloading up to $max_images images from r/$subreddit"
     log_info "Output: $output_dir"
     echo ""
@@ -46,13 +119,10 @@ download_subreddit_images() {
     local after=""
 
     while [[ $downloaded -lt $max_images ]]; do
-        local url="https://www.reddit.com/r/${subreddit}/hot.json?limit=100&raw_json=1"
-        [[ -n "$after" ]] && url+="&after=$after"
-
         local response
-        response=$(curl -sf -A "vmgr/1.0" "$url" 2>/dev/null)
-        if [[ $? -ne 0 || -z "$response" ]]; then
-            log_error "Failed to fetch r/$subreddit — check subreddit name and network"
+        response=$(_reddit_fetch_listing "$subreddit" "$after")
+        if [[ -z "$response" ]]; then
+            log_error "Failed to fetch r/$subreddit — check subreddit name, network, and Reddit API credentials"
             return 1
         fi
 
@@ -85,7 +155,7 @@ download_subreddit_images() {
                 continue
             fi
 
-            if curl -sf -A "vmgr/1.0" -o "$dest" "$img_url" 2>/dev/null; then
+            if curl -sf -A "$REDDIT_USER_AGENT" -o "$dest" "$img_url" 2>/dev/null; then
                 ((downloaded++))
                 ((STATS[files_moved]++))
                 show_progress "$downloaded" "$max_images" "Downloading"
@@ -109,4 +179,3 @@ download_subreddit_images() {
 }
 
 return 0
-
