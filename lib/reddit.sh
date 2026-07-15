@@ -132,6 +132,8 @@ _reddit_download_item() {
     else
         filename=$(basename "$url" | sed 's/[?#].*//')
     fi
+    # Normalize .jpeg to .jpg for consistency with the rest of the library
+    filename=$(sed -E 's/\.jpeg$/.jpg/I' <<< "$filename")
     dest="$output_dir/$filename"
 
     if [[ -f "$dest" ]]; then
