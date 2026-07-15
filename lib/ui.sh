@@ -981,9 +981,8 @@ _handle_subtitles_choice() {
 }
 
 # Handle subtitle generation (using generic menu loop)
-# single_key=false: this menu has two-digit options (10, 11)
 handle_subtitles() {
-    run_menu_loop show_subtitle_menu _handle_subtitles_choice true false
+    run_menu_loop show_subtitle_menu _handle_subtitles_choice true
 }
 
 # Choice handler for catalog operations menu
