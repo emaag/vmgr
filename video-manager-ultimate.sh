@@ -440,7 +440,7 @@ startup_check() {
     if [[ "$first_run" == true ]]; then
         clear
         echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╔═══════════════════════════════════════════════════════════════╗${COLOR_RESET}"
-        echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}           ${COLOR_BOLD}${COLOR_BRIGHT_YELLOW}WELCOME TO VIDEO MANAGER ULTIMATE${COLOR_RESET}            ${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}               ${COLOR_BOLD}${COLOR_BRIGHT_YELLOW}WELCOME TO VIDEO MANAGER ULTIMATE${COLOR_RESET}               ${COLOR_BOLD}${COLOR_BRIGHT_CYAN}║${COLOR_RESET}"
         echo -e "${COLOR_BOLD}${COLOR_BRIGHT_CYAN}╚═══════════════════════════════════════════════════════════════╝${COLOR_RESET}"
         echo ""
         echo -e "${COLOR_WHITE}First-time setup detected!${COLOR_RESET}"
