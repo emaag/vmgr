@@ -202,8 +202,7 @@ download_subreddit_images() {
         mapfile -t urls < <(echo "$response" | _reddit_extract_image_urls)
 
         if [[ "${#urls[@]}" -eq 0 ]]; then
-            log_info "No more image posts found — done." >&2
-            break
+            log_verbose "No image posts on page ${page} — continuing to next page" >&2
         fi
 
         # ── Download each image ──────────────────────────────────────────────

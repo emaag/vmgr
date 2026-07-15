@@ -1643,8 +1643,8 @@ _handle_reddit_choice() {
 
             local default_dir="$HOME/Pictures/reddit/${subreddit}"
             local output_dir
-            output_dir=$(pick_directory "Select output directory" "$(dirname "$default_dir")") \
-                || output_dir="$default_dir"
+            read -rp "Output directory [${default_dir}]: " output_dir
+            [[ -z "$output_dir" ]] && output_dir="$default_dir"
 
             read -rp "Max images to download [200]: " max_images
             [[ -z "$max_images" || ! "$max_images" =~ ^[0-9]+$ ]] && max_images=200
