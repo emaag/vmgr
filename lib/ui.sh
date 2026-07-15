@@ -624,7 +624,9 @@ _handle_subtitles_choice() {
             echo "  [4] medium - Better accuracy"
             echo "  [5] large  - Best accuracy, slowest"
             echo -n "Choice [1-5]: "
-            read -r model_choice
+            local model_choice
+            read -rsn1 model_choice
+            echo "$model_choice"
 
             case "$model_choice" in
                 1) WHISPER_MODEL="tiny" ;;
@@ -641,7 +643,9 @@ _handle_subtitles_choice() {
             echo "  [3] txt  - Plain text"
             echo "  [4] json - JSON format"
             echo -n "Choice [1-4]: "
-            read -r format_choice
+            local format_choice
+            read -rsn1 format_choice
+            echo "$format_choice"
 
             case "$format_choice" in
                 1) SUBTITLE_FORMAT="srt" ;;
@@ -685,11 +689,13 @@ _handle_subtitles_choice() {
             echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
             echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
             echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
-            echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
-            echo -e "${COLOR_WHITE}[11]${COLOR_RESET} Configure Filters & Selection"
+            echo -e "${COLOR_WHITE}[M]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
+            echo -e "${COLOR_WHITE}[F]${COLOR_RESET} Configure Filters & Selection"
             echo ""
             echo -n "Select option (or Enter to skip): "
-            read -r adv_choice
+            local adv_choice
+            read -rsn1 adv_choice
+            echo "$adv_choice"
 
             case "$adv_choice" in
                 1)
@@ -776,7 +782,7 @@ _handle_subtitles_choice() {
                         log_error "Invalid depth. Must be 1-50"
                     fi
                     ;;
-                10)
+                m|M)
                     echo -n "Enter maximum files to process (1-10000): "
                     read -r max_files
                     if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
@@ -786,7 +792,7 @@ _handle_subtitles_choice() {
                         log_error "Invalid number. Must be 1-10000"
                     fi
                     ;;
-                11)
+                f|F)
                     # Filters & Selection submenu
                     clear
                     echo -e "${COLOR_BRIGHT_CYAN}Advanced Filters & Selection${COLOR_RESET}"
@@ -812,7 +818,9 @@ _handle_subtitles_choice() {
                     echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Reset All Filters to Default"
                     echo ""
                     echo -n "Select option: "
-                    read -r filter_choice
+                    local filter_choice
+                    read -rsn1 filter_choice
+                    echo "$filter_choice"
 
                     case "$filter_choice" in
                         1)
@@ -1147,7 +1155,9 @@ _handle_catalog_choice() {
             echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Set Offline Retention Days"
             echo ""
             echo -n "Select option (or Enter to skip): "
-            read -r setting_choice
+            local setting_choice
+            read -rsn1 setting_choice
+            echo "$setting_choice"
 
             case "$setting_choice" in
                 1)
