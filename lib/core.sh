@@ -140,7 +140,7 @@ CATALOG_IMAGES=true # Catalog image files
 CATALOG_AUDIO=true # Catalog audio files
 
 # Statistics tracking
-declare -A STATS
+declare -gA STATS
 STATS[files_processed]=0
 STATS[files_renamed]=0
 STATS[files_moved]=0

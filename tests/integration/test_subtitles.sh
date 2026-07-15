@@ -48,6 +48,7 @@ while [[ $# -gt 0 ]]; do
         --output_dir)     output_dir="$2"; shift 2 ;;
         --output_format)  format="$2";     shift 2 ;;
         --model|--language|--device) shift 2 ;;
+        --verbose|--fp16) shift 2 ;;
         *) input_file="$1"; shift ;;
     esac
 done
@@ -127,13 +128,16 @@ test_subtitles_skip_existing() {
     _setup
     _setup_mock_whisper
     touch "$TEST_TMPDIR/movie.mp4"
-    echo "ORIGINAL" > "$TEST_TMPDIR/movie.srt"
+    # Must look like a valid SRT (has a timestamp line) or _is_valid_subtitle
+    # treats it as an incomplete leftover and reprocesses it regardless of
+    # SUBTITLE_SKIP_EXISTING.
+    printf "1\n00:00:00,000 --> 00:00:02,000\nORIGINAL\n" > "$TEST_TMPDIR/movie.srt"
     SUBTITLE_SKIP_EXISTING=true
     generate_subtitles_in_directory "$TEST_TMPDIR" >/dev/null 2>&1
     _restore_path
     local content
     content=$(cat "$TEST_TMPDIR/movie.srt")
-    assert_equals "ORIGINAL" "$content" "skip existing: .srt content unchanged"
+    assert_contains "ORIGINAL" "$content" "skip existing: .srt content unchanged"
     assert_not_equals "0" "${STATS[files_skipped]}" \
         "skip existing: files_skipped stat incremented"
     _teardown
@@ -195,6 +199,7 @@ while [[ \$# -gt 0 ]]; do
         --output_dir)    output_dir="\$2"; shift 2 ;;
         --output_format) format="\$2";     shift 2 ;;
         --model|--language|--device) shift 2 ;;
+        --verbose|--fp16) shift 2 ;;
         *) input_file="\$1"; shift ;;
     esac
 done
