@@ -222,8 +222,17 @@ load_module() {
 
 # Generic menu loop handler
 # Reduces boilerplate for menu-based UI patterns
+# Wait for a single keypress before continuing — no Enter required.
+pause_for_user() {
+    echo -n "Press any key to continue..."
+    read -rsn1 _ 2>/dev/null
+    echo ""
+}
+
 # Args: $1 - menu display function, $2 - choice handler function
 #       $3 - reset_stats (true/false, default true)
+#       $4 - single_key (true/false, default true): read one keystroke with
+#            no Enter required. Set false for menus with two-digit options.
 # The handler function receives the choice and should return:
 #   0 = continue loop, 1 = break loop, 2 = invalid choice
 # Example: run_menu_loop show_settings_menu handle_settings_choice true
@@ -231,13 +240,20 @@ run_menu_loop() {
     local menu_func="$1"
     local handler_func="$2"
     local reset_stats="${3:-true}"
+    local single_key="${4:-true}"
 
     while true; do
         # Display the menu
         "$menu_func"
 
         # Read user choice
-        read -r choice
+        local choice
+        if [[ "$single_key" == true ]]; then
+            read -rsn1 choice
+            echo "$choice"
+        else
+            read -r choice
+        fi
 
         # Handle the choice
         "$handler_func" "$choice"
@@ -248,7 +264,7 @@ run_menu_loop() {
             1) break ;; # Exit loop
             2) # Invalid choice
                 [[ "$(type -t log_error)" == "function" ]] && log_error "Invalid option" || echo "Invalid option"
-                read -p "Press Enter to continue..."
+                pause_for_user
                 ;;
         esac
 

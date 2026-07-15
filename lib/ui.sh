@@ -346,7 +346,7 @@ _handle_single_operations_choice() {
                 start_operation "Rename Files (Bracket Notation)"
                 rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -355,7 +355,7 @@ _handle_single_operations_choice() {
                 start_operation "Remove Dashes"
                 remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -364,7 +364,7 @@ _handle_single_operations_choice() {
                 start_operation "Fix Bracket Spacing"
                 fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -373,14 +373,14 @@ _handle_single_operations_choice() {
                 start_operation "Flatten Directory"
                 flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
         5)
             if get_directory_input; then
                 workflow_deep_clean "$TARGET_FOLDER"
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -390,7 +390,7 @@ _handle_single_operations_choice() {
             ;;
         d|D)
             toggle_flag_with_log DRY_RUN "Dry run mode"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -413,7 +413,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert JPEG to JPG"
                 convert_jpeg_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -422,7 +422,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert PNG to JPG"
                 convert_png_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -431,7 +431,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert WebP to JPG"
                 convert_webp_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -440,7 +440,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert HEIC to JPG"
                 convert_heic_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -449,18 +449,18 @@ _handle_image_ops_choice() {
                 start_operation "Convert All Images to JPG"
                 convert_all_images_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
         r|R)
             toggle_flag_with_log IMAGE_RECURSIVE "Recursive mode"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         d|D)
             toggle_flag_with_log DRY_RUN "Dry run mode"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -482,21 +482,21 @@ _handle_batch_choice() {
             start_operation "Batch Rename Multiple Folders"
             batch_rename_interactive
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         2)
             start_operation "Batch Flatten Multiple Folders"
             batch_flatten_interactive
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
             start_operation "Batch Full Cleanup"
             batch_cleanup_interactive
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -517,14 +517,14 @@ _handle_workflow_choice() {
         1)
             if get_directory_input; then
                 workflow_new_collection "$TARGET_FOLDER"
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
         2)
             if get_directory_input; then
                 workflow_deep_clean "$TARGET_FOLDER"
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -547,7 +547,7 @@ _handle_duplicates_choice() {
                 start_operation "Find Duplicates (Report Only)"
                 find_duplicates "$TARGET_FOLDER" "report"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -563,7 +563,7 @@ _handle_duplicates_choice() {
                     log_warning "Operation cancelled"
                 fi
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -574,7 +574,7 @@ _handle_duplicates_choice() {
                 start_operation "Find Duplicates (Dry Run)"
                 find_duplicates "$TARGET_FOLDER" "delete"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             DRY_RUN="$old_dry_run"
             return 0
@@ -599,7 +599,7 @@ _handle_subtitles_choice() {
                 start_operation "Generate Subtitles"
                 generate_subtitles_in_directory "$TARGET_FOLDER" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN"
                 end_operation
-                read -p "Press Enter to continue..."
+                pause_for_user
             fi
             return 0
             ;;
@@ -607,7 +607,7 @@ _handle_subtitles_choice() {
             start_operation "Batch Subtitle Generation"
             batch_generate_subtitles
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
@@ -665,7 +665,7 @@ _handle_subtitles_choice() {
             log_info "Model: $WHISPER_MODEL"
             log_info "Format: $SUBTITLE_FORMAT"
             log_info "Language: $SUBTITLE_LANGUAGE"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         4)
@@ -910,10 +910,10 @@ _handle_subtitles_choice() {
                             log_success "All filters reset to default values"
                             ;;
                     esac
-                    read -p "Press Enter to continue..."
+                    pause_for_user
                     ;;
             esac
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         5)
@@ -923,14 +923,14 @@ _handle_subtitles_choice() {
             echo ""
             local subtitle_path
             subtitle_path=$(pick_file "Select subtitle file" "." "*.srt") \
-                || { log_error "No file selected"; read -p "Press Enter to continue..."; return 0; }
+                || { log_error "No file selected"; pause_for_user; return 0; }
 
             if [[ -f "$subtitle_path" ]]; then
                 edit_subtitle_interactive "$subtitle_path"
             else
                 log_error "File not found: $subtitle_path"
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         6)
@@ -964,7 +964,7 @@ _handle_subtitles_choice() {
                 echo "  # Add to PATH or create symlink"
                 echo ""
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -973,8 +973,9 @@ _handle_subtitles_choice() {
 }
 
 # Handle subtitle generation (using generic menu loop)
+# single_key=false: this menu has two-digit options (10, 11)
 handle_subtitles() {
-    run_menu_loop show_subtitle_menu _handle_subtitles_choice true
+    run_menu_loop show_subtitle_menu _handle_subtitles_choice true false
 }
 
 # Choice handler for catalog operations menu
@@ -996,7 +997,7 @@ _handle_catalog_choice() {
 
             if [[ -z "$mount_point" ]]; then
                 log_error "No mount point specified"
-                read -p "Press Enter to continue..."
+                pause_for_user
                 return 0
             fi
 
@@ -1008,7 +1009,7 @@ _handle_catalog_choice() {
             start_operation "Catalog Drive: $mount_point"
             catalog_drive "$mount_point" "$recursive"
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         2)
@@ -1017,7 +1018,7 @@ _handle_catalog_choice() {
             start_operation "List Cataloged Drives"
             list_cataloged_drives
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
@@ -1049,7 +1050,7 @@ _handle_catalog_choice() {
                 search_catalog "$search_term" "$media_filter"
                 end_operation
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         4)
@@ -1058,7 +1059,7 @@ _handle_catalog_choice() {
             start_operation "Find Duplicate Files"
             show_duplicates_report
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         5)
@@ -1078,7 +1079,7 @@ _handle_catalog_choice() {
 
             if [[ ${#mount_points[@]} -eq 0 ]]; then
                 log_warning "No mount points specified"
-                read -p "Press Enter to continue..."
+                pause_for_user
                 return 0
             fi
 
@@ -1093,7 +1094,7 @@ _handle_catalog_choice() {
                 catalog_drive "$mp" "$recursive"
             done
             end_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         6)
@@ -1120,7 +1121,7 @@ _handle_catalog_choice() {
             } > "$report_file"
 
             log_success "Report exported to: $report_file"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         7)
@@ -1185,7 +1186,7 @@ _handle_catalog_choice() {
                     fi
                     ;;
             esac
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -1199,7 +1200,7 @@ handle_catalog() {
     if ! command -v jq >/dev/null 2>&1; then
         log_error "jq is not installed. Please install it first:"
         echo "  sudo apt-get install jq"
-        read -p "Press Enter to continue..."
+        pause_for_user
         return 1
     fi
 
@@ -1231,21 +1232,21 @@ _handle_utilities_choice() {
             organize_by_subfolder_names "$target_folder" "$search_path"
 
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         2)
             clear
             list_undo_operations
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
             clear
             undo_organize_operation
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         4)
@@ -1254,7 +1255,7 @@ _handle_utilities_choice() {
             echo ""
             tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         5)
@@ -1265,7 +1266,7 @@ _handle_utilities_choice() {
             else
                 log_info "Log directory: $LOG_DIR"
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         6)
@@ -1288,7 +1289,7 @@ _handle_utilities_choice() {
             echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
 
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         7)
@@ -1317,7 +1318,7 @@ _handle_utilities_choice() {
             command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
             command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -1338,30 +1339,30 @@ _handle_organize_settings_choice() {
             echo ""
             local target_path
             target_path=$(pick_directory "Select default target folder" "${ORGANIZE_DEFAULT_TARGET:-.}") \
-                || { read -p "Press Enter to continue..."; return 0; }
+                || { pause_for_user; return 0; }
             ORGANIZE_DEFAULT_TARGET="$target_path"
             log_success "Default target set to: $target_path"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         2)
             echo ""
             local search_path
             search_path=$(pick_directory "Select default search path" "${ORGANIZE_DEFAULT_SEARCH:-.}") \
-                || { read -p "Press Enter to continue..."; return 0; }
+                || { pause_for_user; return 0; }
             ORGANIZE_DEFAULT_SEARCH="$search_path"
             log_success "Default search path set to: $search_path"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
             toggle_flag_with_log ORGANIZE_SHOW_PROGRESS "Progress display"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         4)
             toggle_flag_with_log ORGANIZE_LOG_OPERATIONS "Operation logging"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -1380,12 +1381,12 @@ _handle_settings_choice() {
     case "$choice" in
         1)
             toggle_flag_with_log DRY_RUN "Dry run mode"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         2)
             toggle_flag_with_log VERBOSE "Verbose output"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
@@ -1396,7 +1397,7 @@ _handle_settings_choice() {
                 echo "  ${SYMBOL_BULLET} .$ext"
             done
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         4)
@@ -1414,7 +1415,7 @@ _handle_settings_choice() {
             read -p "Enter profile name (default): " profile_name
             profile_name=${profile_name:-default}
             save_config "$profile_name"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         7)
@@ -1425,13 +1426,13 @@ _handle_settings_choice() {
             read -p "Enter profile name to load (default): " profile_name
             profile_name=${profile_name:-default}
             load_config "$profile_name"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         8)
             clear
             list_config_profiles
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         9)
@@ -1446,7 +1447,7 @@ _handle_settings_choice() {
                     delete_config_profile "$profile_name"
                 fi
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -1465,17 +1466,17 @@ _handle_granular_controls_choice() {
     case "$choice" in
         1)
             toggle_flag_with_log INTERACTIVE_CONFIRM "Per-file confirmation"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         2)
             toggle_flag_with_log SHOW_PREVIEW "Preview mode"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         3)
             toggle_flag_with_log STEP_BY_STEP "Step-by-step mode"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         4)
@@ -1493,7 +1494,7 @@ _handle_granular_controls_choice() {
                 FILTER_BY_SIZE=false
                 log_success "Size filter disabled"
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         5)
@@ -1510,7 +1511,7 @@ _handle_granular_controls_choice() {
                 FILTER_BY_DATE=false
                 log_success "Date filter disabled"
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         6)
@@ -1528,12 +1529,12 @@ _handle_granular_controls_choice() {
                 FILTER_PATTERN=""
                 log_success "Pattern filter disabled"
             fi
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         7)
             toggle_flag_with_log ENABLE_UNDO "Undo system"
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         8)
@@ -1551,13 +1552,13 @@ _handle_granular_controls_choice() {
                 echo "No undo history file found"
             fi
             echo ""
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         9)
             clear
             undo_last_operation
-            read -p "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -1637,7 +1638,7 @@ _handle_reddit_choice() {
             read -rp "Subreddit name (e.g. EarthPorn): " subreddit
             if [[ -z "$subreddit" ]]; then
                 log_error "No subreddit specified"
-                read -rp "Press Enter to continue..."
+                pause_for_user
                 return 0
             fi
 
@@ -1653,7 +1654,7 @@ _handle_reddit_choice() {
             start_operation "Reddit Download: r/${subreddit}"
             download_subreddit_images "$subreddit" "$output_dir" "$max_images"
             end_operation
-            read -rp "Press Enter to continue..."
+            pause_for_user
             return 0
             ;;
         b|B) return 1 ;;
@@ -1669,7 +1670,9 @@ handle_reddit() {
 interactive_menu() {
     while true; do
         show_main_menu
-        read -r choice
+        local choice
+        read -rsn1 choice
+        echo "$choice"
         _handle_main_menu_choice "$choice"
     done
 }
