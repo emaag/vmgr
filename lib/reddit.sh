@@ -233,6 +233,14 @@ download_subreddit_images() {
         return 1
     fi
 
+    # Normalize common ways of specifying a subreddit ("r/foo", "/r/foo/",
+    # a pasted reddit.com URL) into the bare name the Reddit API expects.
+    subreddit=$(sed -E 's#^https?://(www\.)?reddit\.com/##; s#^/+##; s#^[Rr]/##; s#/.*##' <<< "$subreddit")
+    if [[ -z "$subreddit" ]]; then
+        log_error "Invalid subreddit name"
+        return 1
+    fi
+
     if [[ ! "$sort" =~ ^(hot|new|top|rising|controversial)$ ]]; then
         log_error "Invalid sort: $sort (must be hot, new, top, rising, controversial)"
         return 1
