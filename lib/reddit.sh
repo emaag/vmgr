@@ -20,6 +20,10 @@
 REDDIT_CONFIG_FILE="$HOME/.vmgr-reddit.conf"
 REDDIT_USER_AGENT="vmgr/2.0 (by /u/mosqua)"
 
+# Seconds to wait between requests (image downloads and listing pages).
+# Override by setting REDDIT_RATE_LIMIT_DELAY in ~/.vmgr-reddit.conf.
+REDDIT_RATE_LIMIT_DELAY="${REDDIT_RATE_LIMIT_DELAY:-1}"
+
 # Load Reddit API credentials from ~/.vmgr-reddit.conf, if present
 # Sets REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET
 # Returns: 0 if credentials were loaded, 1 otherwise
@@ -111,6 +115,7 @@ download_subreddit_images() {
 
     log_info "Downloading up to $max_images images from r/$subreddit"
     log_info "Output: $output_dir"
+    log_verbose "Rate limit delay: ${REDDIT_RATE_LIMIT_DELAY}s between requests"
     echo ""
 
     local downloaded=0
@@ -165,11 +170,14 @@ download_subreddit_images() {
                 log_warning "Failed: $img_url"
                 rm -f "$dest"
             fi
+
+            sleep "$REDDIT_RATE_LIMIT_DELAY"
         done
 
         # Pagination
         after=$(echo "$response" | jq -r '.data.after // empty' 2>/dev/null)
         [[ -z "$after" ]] && break
+        sleep "$REDDIT_RATE_LIMIT_DELAY"
     done
 
     echo ""
