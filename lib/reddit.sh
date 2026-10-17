@@ -169,7 +169,7 @@ _reddit_find_audio_filename() {
     mpd=$(curl -sf -A "$REDDIT_USER_AGENT" "${video_dir}/DASHPlaylist.mpd" 2>/dev/null) || return 1
 
     echo "$mpd" | awk '/contentType="audio"/{p=1} p{print} /<\/AdaptationSet>/{if(p) exit}' | \
-        grep -oP '(?<=<BaseURL>)[^<]+' | tail -1
+        sed -n 's#.*<BaseURL>\([^<]*\)</BaseURL>.*#\1#p' | tail -1
 }
 
 # Download and mux a Reddit-hosted video (separate video/audio DASH streams)

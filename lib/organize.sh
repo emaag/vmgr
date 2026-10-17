@@ -160,7 +160,7 @@ undo_organize_operation() {
                 ((error_count++))
             fi
         fi
-    done < <(tac "$undo_log" | grep -v '^#')
+    done < <(grep -v '^#' "$undo_log" | awk '{ l[NR] = $0 } END { for (i = NR; i > 0; i--) print l[i] }')
 
     echo ""
 

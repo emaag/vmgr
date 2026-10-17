@@ -130,6 +130,21 @@ format_bytes() {
 }
 
 
+# Run a command with a time limit, using GNU timeout (or gtimeout on macOS
+# with coreutils). Runs the command unlimited if neither is installed.
+# Args: $1 - seconds, remaining args - command
+run_with_timeout() {
+    local seconds="$1"
+    shift
+    if command -v timeout &>/dev/null; then
+        timeout "$seconds" "$@"
+    elif command -v gtimeout &>/dev/null; then
+        gtimeout "$seconds" "$@"
+    else
+        "$@"
+    fi
+}
+
 # Platform-specific sed in-place editing
 # Handles the difference between GNU sed (-i) and BSD sed (-i '')
 # Args: $1 - file path, $2... - sed expressions

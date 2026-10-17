@@ -39,6 +39,7 @@ find_duplicates() {
     # Find all video files and calculate hashes
     local file_count=0
     while IFS= read -r -d '' file; do
+        is_video_file "$file" || continue
         ((file_count++))
         ((STATS[files_processed]++))
 
@@ -68,7 +69,7 @@ find_duplicates() {
         else
             hash_map[$hash]="$file"
         fi
-    done < <(find "$directory" -type f -print0 | grep -zE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    done < <(find "$directory" -type f -print0)
 
     echo -ne "\r\033[K" # Clear line
 

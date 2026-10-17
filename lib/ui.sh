@@ -1070,9 +1070,9 @@ _handle_subtitles_choice() {
                 echo ""
                 echo -e "${COLOR_WHITE}Testing whisper command...${COLOR_RESET}"
                 if [[ "$whisper_cmd" == "whisper" ]]; then
-                    timeout 30 whisper --help 2>&1 | head -n 10
+                    run_with_timeout 30 whisper --help 2>&1 | head -n 10
                 elif [[ "$whisper_cmd" == "whisper.cpp" ]]; then
-                    timeout 30 whisper.cpp --help 2>&1 | head -n 10
+                    run_with_timeout 30 whisper.cpp --help 2>&1 | head -n 10
                 fi
             else
                 log_error "Whisper is not installed!"

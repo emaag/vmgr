@@ -194,7 +194,7 @@ _generate_single_subtitle() {
 
     # timeout: kill whisper if it hangs (default 2 hours per file)
     # stdout suppressed (raw transcription text); stderr shown live for progress
-    timeout "${SUBTITLE_TIMEOUT:-7200}" \
+    run_with_timeout "${SUBTITLE_TIMEOUT:-7200}" \
         "$whisper_cmd" "$video_file" \
         --model "$model" \
         --output_format "$format" \
@@ -249,7 +249,7 @@ _generate_single_subtitle() {
 _is_valid_subtitle() {
     local file="$1"
     [[ -f "$file" && -s "$file" ]] || return 1
-    grep -qP '\d{2}:\d{2}:\d{2},\d{3} --> ' "$file" 2>/dev/null
+    grep -qE '[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} --> ' "$file" 2>/dev/null
 }
 
 # Generate subtitles for all videos in a directory using OpenAI Whisper.
