@@ -92,7 +92,7 @@ test_organize_creates_undo_log() {
     ORGANIZE_LOG_OPERATIONS=true
     organize_by_subfolder_names "$TEST_TMPDIR" "$TEST_TMPDIR" >/dev/null 2>&1
     local log_count
-    log_count=$(find "$UNDO_LOG_DIR" -name "organize-*.log" 2>/dev/null | wc -l)
+    log_count=$(find "$UNDO_LOG_DIR" -name "organize-*.log" 2>/dev/null | wc -l | tr -d ' ')
     assert_not_equals "0" "$log_count" \
         "organize: undo log file created"
     _teardown

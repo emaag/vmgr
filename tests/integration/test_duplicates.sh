@@ -33,7 +33,7 @@ test_no_duplicates_no_report_dir_created() {
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
     # Report dir only created when duplicates found
     local report_dirs
-    report_dirs=$(find "$TEST_TMPDIR" -name "_duplicate_report_*" -type d 2>/dev/null | wc -l)
+    report_dirs=$(find "$TEST_TMPDIR" -name "_duplicate_report_*" -type d 2>/dev/null | wc -l | tr -d ' ')
     assert_equals "0" "$report_dirs" "no_duplicates: no report dir created"
     _teardown
 }
@@ -45,7 +45,7 @@ test_duplicates_found_creates_report_dir() {
     _make_duplicates
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
     local report_dirs
-    report_dirs=$(find "$TEST_TMPDIR" -name "_duplicate_report_*" -type d 2>/dev/null | wc -l)
+    report_dirs=$(find "$TEST_TMPDIR" -name "_duplicate_report_*" -type d 2>/dev/null | wc -l | tr -d ' ')
     assert_not_equals "0" "$report_dirs" "duplicates: report directory created"
     _teardown
 }
@@ -55,7 +55,7 @@ test_duplicates_report_contains_txt_file() {
     _make_duplicates
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
     local txt_count
-    txt_count=$(find "$TEST_TMPDIR" -name "duplicates.txt" 2>/dev/null | wc -l)
+    txt_count=$(find "$TEST_TMPDIR" -name "duplicates.txt" 2>/dev/null | wc -l | tr -d ' ')
     assert_not_equals "0" "$txt_count" "duplicates: duplicates.txt report created"
     _teardown
 }
@@ -65,7 +65,7 @@ test_duplicates_report_contains_csv_file() {
     _make_duplicates
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
     local csv_count
-    csv_count=$(find "$TEST_TMPDIR" -name "duplicates.csv" 2>/dev/null | wc -l)
+    csv_count=$(find "$TEST_TMPDIR" -name "duplicates.csv" 2>/dev/null | wc -l | tr -d ' ')
     assert_not_equals "0" "$csv_count" "duplicates: duplicates.csv export created"
     _teardown
 }
@@ -100,7 +100,7 @@ test_duplicates_delete_removes_one_file() {
     _make_duplicates
     find_duplicates "$TEST_TMPDIR" delete >/dev/null 2>&1
     local mp4_count
-    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" -not -path "*_duplicate_report_*" | wc -l)
+    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" -not -path "*_duplicate_report_*" | wc -l | tr -d ' ')
     assert_equals "1" "$mp4_count" "duplicates delete: only one .mp4 remains"
     _teardown
 }
@@ -112,7 +112,7 @@ test_duplicates_delete_retains_original() {
     # The original (first hashed) should remain; either file surviving is acceptable.
     # Just confirm exactly one .mp4 remains at top level.
     local mp4_count
-    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" | wc -l)
+    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" | wc -l | tr -d ' ')
     assert_equals "1" "$mp4_count" "duplicates delete: exactly one file retained"
     _teardown
 }
@@ -124,7 +124,7 @@ test_duplicates_delete_dry_run_keeps_both_files() {
     find_duplicates "$TEST_TMPDIR" delete >/dev/null 2>&1
     DRY_RUN=false
     local mp4_count
-    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" | wc -l)
+    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" | wc -l | tr -d ' ')
     assert_equals "2" "$mp4_count" "duplicates delete dry-run: both files kept"
     _teardown
 }
