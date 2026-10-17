@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Directory browser rewrite** (`lib/browser.sh`, moved out of `ui.sh`): arrow-key navigation
+  (↑↓ move, →/Enter open, ←/Backspace up, PgUp/PgDn), in-place repainting instead of full-screen
+  clears, scrolling for long lists, and a two-column layout: folders on the left, a live preview
+  of the highlighted folder (its subfolders and videos) on the right. Narrow terminals (<70 cols) show one column.
+- Shortcuts: `1-9` jump, `~` home, `-` previous directory, `R` recent directories (persisted in
+  `~/.video-manager-recent-dirs`), `.` toggle hidden folders, `T` type a path with readline
+  Tab completion and history. The browser starts in the most recently used directory.
+- Enter now opens the highlighted folder; use `S` or Space to select the current one.
+- Falls back to a plain prompt when stdin/stdout is not a terminal.
+
+---
+
 ## [1.3.0] - 2025-12-23
 
 ### 🎉 Major Architectural Transformation

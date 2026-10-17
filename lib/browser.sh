@@ -1,0 +1,458 @@
+#!/usr/bin/env bash
+#
+# VIDEO MANAGER ULTIMATE - DIRECTORY BROWSER MODULE
+# Arrow-key directory picker with folder previews, recent directories, and
+# tab-completed path entry. Falls back to a plain prompt when not on a TTY.
+#
+# Dependencies: core.sh (colors), utils.sh (is_video_file, validate_directory)
+#
+
+BROWSER_RECENT_FILE="${BROWSER_RECENT_FILE:-$HOME/.video-manager-recent-dirs}"
+BROWSER_RECENT_MAX=10
+_BROWSER_REV=$'\033[7m'
+
+################################################################################
+# DATA HELPERS
+################################################################################
+
+# Print subdirectory names of $1 (one per line, case-insensitive sort).
+# $2 = 1 to include hidden directories.
+browser_list_subdirs() {
+    local dir="$1" show_hidden="${2:-0}" entry
+    local restore
+    restore="$(shopt -p nullglob dotglob)"
+    shopt -s nullglob
+    [[ "$show_hidden" == "1" ]] && shopt -s dotglob
+
+    for entry in "$dir"/*/; do
+        entry="${entry%/}"
+        echo "${entry##*/}"
+    done | LC_ALL=C sort -f
+
+    eval "$restore"
+}
+
+# Print the number of video files directly inside $1.
+browser_count_videos() {
+    local dir="$1" f n=0
+    local restore
+    restore="$(shopt -p nullglob)"
+    shopt -s nullglob
+
+    for f in "$dir"/*; do
+        if [[ -f "$f" ]] && is_video_file "$f"; then
+            n=$(( n + 1 ))
+        fi
+    done
+
+    eval "$restore"
+    echo "$n"
+}
+
+# Print names of video files directly inside $1 (one per line, sorted).
+browser_list_videos() {
+    local dir="$1" f
+    local restore
+    restore="$(shopt -p nullglob)"
+    shopt -s nullglob
+
+    for f in "$dir"/*; do
+        if [[ -f "$f" ]] && is_video_file "$f"; then
+            echo "${f##*/}"
+        fi
+    done | LC_ALL=C sort -f
+
+    eval "$restore"
+}
+
+# Print recent directories, most recent first, skipping ones that no longer exist.
+browser_recent_list() {
+    [[ -f "$BROWSER_RECENT_FILE" ]] || return 0
+    local d
+    while IFS= read -r d; do
+        [[ -n "$d" && -d "$d" ]] && echo "$d"
+    done < "$BROWSER_RECENT_FILE"
+    return 0
+}
+
+# Record $1 as the most recently used directory (deduplicated, capped).
+browser_recent_add() {
+    local dir="$1" tmp
+    [[ -n "$dir" ]] || return 0
+    tmp="$(mktemp 2>/dev/null)" || return 0
+    {
+        echo "$dir"
+        browser_recent_list | grep -Fxv -- "$dir" || true
+    } | head -n "$BROWSER_RECENT_MAX" > "$tmp"
+    mv "$tmp" "$BROWSER_RECENT_FILE" 2>/dev/null || rm -f "$tmp"
+    return 0
+}
+
+################################################################################
+# INTERACTIVE BROWSER
+################################################################################
+
+# Read one keypress into the variable named $1. Arrow keys and friends come
+# back as UP DOWN LEFT RIGHT PGUP PGDN ENTER ESC; anything else as the char.
+_browser_read_key() {
+    local _key _seq="" _extra
+    IFS= read -rsn1 _key || return 1
+
+    case "$_key" in
+        $'\033')
+            IFS= read -rsn2 -t 0.05 _seq || true
+            case "$_seq" in
+                '[A') _key=UP ;;
+                '[B') _key=DOWN ;;
+                '[C') _key=RIGHT ;;
+                '[D') _key=LEFT ;;
+                '[5'|'[6')
+                    IFS= read -rsn1 -t 0.05 _extra || true
+                    [[ "$_seq" == '[5' ]] && _key=PGUP || _key=PGDN
+                    ;;
+                '[1'|'[2'|'[3'|'[4')
+                    IFS= read -rsn1 -t 0.05 _extra || true
+                    _key=OTHER
+                    ;;
+                '') _key=ESC ;;
+                *) _key=OTHER ;;
+            esac
+            ;;
+        '') _key=ENTER ;;
+        $'\177'|$'\b') _key=LEFT ;;
+    esac
+
+    printf -v "$1" '%s' "$_key"
+}
+
+# Move the browser to directory $1. Relies on the caller's (dynamically
+# scoped) locals: current_dir, prev_dir, sel, top, reload.
+_browser_goto() {
+    local target
+    target="$(cd "$1" 2>/dev/null && pwd)" || return 1
+    [[ "$target" == "$current_dir" ]] && return 0
+    prev_dir="$current_dir"
+    current_dir="$target"
+    sel=0
+    top=0
+    reload=1
+}
+
+# Pick from recent directories; echoes the chosen path (nothing if cancelled).
+_browser_pick_recent() {
+    local -a recent=()
+    mapfile -t recent < <(browser_recent_list)
+
+    printf '\033[H\033[J' >&2
+    echo -e "${COLOR_BOLD}${COLOR_YELLOW}RECENT DIRECTORIES${COLOR_RESET}" >&2
+    echo "" >&2
+    if [[ ${#recent[@]} -eq 0 ]]; then
+        echo "  (none yet)" >&2
+    else
+        local i
+        for (( i = 0; i < ${#recent[@]} && i < 9; i++ )); do
+            echo -e "  ${COLOR_BRIGHT_GREEN}[$(( i + 1 ))]${COLOR_RESET} ${recent[$i]}" >&2
+        done
+    fi
+    echo "" >&2
+    echo -e "  Press a number to jump there, any other key to go back" >&2
+
+    local key
+    _browser_read_key key || return 0
+    if [[ "$key" =~ ^[1-9]$ ]] && (( key <= ${#recent[@]} )); then
+        echo "${recent[$(( key - 1 ))]}"
+    fi
+}
+
+# Pad $1 with spaces to $2 characters (printf widths count bytes, not characters).
+_browser_pad() {
+    local text="$1" n=$(( $2 - ${#1} ))
+    (( n > 0 )) && printf -v text '%s%*s' "$text" "$n" ""
+    echo "$text"
+}
+
+# Truncate $1 to $2 characters, ending in "…" when cut.
+_browser_fit() {
+    local text="$1" width="$2"
+    if (( ${#text} > width )); then
+        (( width < 1 )) && { echo ""; return; }
+        text="${text:0:width-1}…"
+    fi
+    echo "$text"
+}
+
+# Fill rtext/rkind (caller's locals) with the preview pane for directory $1:
+# a "Folders" section then a "Videos" section. kinds: h heading, d folder,
+# v video, m muted note, b blank.
+_browser_build_preview() {
+    local dir="$1" show_hidden="$2" name
+    local -a subs=() vids=()
+    rtext=(); rkind=()
+    mapfile -t subs < <(browser_list_subdirs "$dir" "$show_hidden")
+    mapfile -t vids < <(browser_list_videos "$dir")
+
+    if (( ${#subs[@]} == 0 && ${#vids[@]} == 0 )); then
+        rkind+=(m); rtext+=("(no folders or videos)")
+        return
+    fi
+    if (( ${#subs[@]} > 0 )); then
+        rkind+=(h); rtext+=("Folders (${#subs[@]})")
+        for name in "${subs[@]}"; do rkind+=(d); rtext+=("$name/"); done
+    fi
+    if (( ${#vids[@]} > 0 )); then
+        (( ${#subs[@]} > 0 )) && { rkind+=(b); rtext+=(""); }
+        rkind+=(h); rtext+=("Videos (${#vids[@]})")
+        for name in "${vids[@]}"; do rkind+=(v); rtext+=("$name"); done
+    fi
+}
+
+_browser_interactive() {
+    local current_dir="$1" prev_dir="" show_hidden=0
+    local -a dirs=()
+    local sel=0 top=0 reload=1 key msg="" n_videos=0 rows cols visible count i
+    local preview_path="" rtext=() rkind=()
+
+    printf '\033[2J'
+
+    while true; do
+        if (( reload )); then
+            mapfile -t dirs < <(browser_list_subdirs "$current_dir" "$show_hidden")
+            n_videos="$(browser_count_videos "$current_dir")"
+            reload=0
+            preview_path=""
+        fi
+
+        count=${#dirs[@]}
+        (( sel >= count )) && sel=$(( count > 0 ? count - 1 : 0 ))
+
+        rows="$(tput lines 2>/dev/null || echo 24)"
+        cols="$(tput cols 2>/dev/null || echo 80)"
+        visible=$(( rows - 11 ))
+        (( visible < 3 )) && visible=3
+        (( sel < top )) && top=$sel
+        (( sel >= top + visible )) && top=$(( sel - visible + 1 ))
+
+        # Pane widths: two columns when there is room, otherwise just the list
+        local two_col=0 lw rw
+        if (( cols >= 70 )); then
+            two_col=1
+            lw=$(( (cols - 3) * 2 / 5 ))
+            rw=$(( cols - 3 - lw - 1 ))
+        else
+            lw=$(( cols - 2 ))
+            rw=0
+        fi
+
+        # Preview pane follows the highlighted folder (cached until it changes)
+        if (( two_col )); then
+            local pp="$current_dir"
+            (( count > 0 )) && pp="$current_dir/${dirs[$sel]}"
+            if [[ "$pp" != "$preview_path" ]]; then
+                _browser_build_preview "$pp" "$show_hidden"
+                preview_path="$pp"
+            fi
+        fi
+
+        # ── Draw (repaint in place; no clear, so no flicker) ────────────────
+        local hidden_label="hidden: off"
+        (( show_hidden )) && hidden_label="hidden: on"
+        printf '\033[H'
+        printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_YELLOW}SELECT DIRECTORY${COLOR_RESET}"
+        printf '%s\033[K\n' "${COLOR_CYAN}Location:${COLOR_RESET} ${COLOR_WHITE}${current_dir}${COLOR_RESET}"
+        printf '%s\033[K\n' "${COLOR_CYAN}Here:${COLOR_RESET} ${count} folder(s), ${n_videos} video(s)  ${COLOR_CYAN}(${hidden_label})${COLOR_RESET}"
+
+        local head_l head_r
+        head_l="$(_browser_fit "FOLDERS" "$lw")"
+        if (( two_col )); then
+            if (( count > 0 )); then
+                head_r="$(_browser_fit "PREVIEW: ${dirs[$sel]}/" "$rw")"
+            else
+                head_r="$(_browser_fit "PREVIEW" "$rw")"
+            fi
+            printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}$(_browser_pad "$head_l" "$lw") │ ${head_r}${COLOR_RESET}"
+        else
+            printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}${head_l}${COLOR_RESET}"
+        fi
+
+        # Grid rows: [up-indicator] visible items [down-indicator]
+        local grid=$(( visible + 2 )) r idx ltxt lcell rcell rk rt
+        local rn=${#rtext[@]}
+        for (( r = 0; r < grid; r++ )); do
+            # left cell
+            ltxt=""; lcell=""
+            idx=$(( top + r - 1 ))
+            if (( r == 0 )); then
+                (( top > 0 )) && ltxt="  ↑ ${top} more"
+                lcell="${COLOR_CYAN}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+            elif (( r == grid - 1 )); then
+                (( top + visible < count )) && ltxt="  ↓ $(( count - top - visible )) more"
+                lcell="${COLOR_CYAN}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+            elif (( count == 0 )); then
+                (( r == 1 )) && ltxt="  (no subdirectories)"
+                lcell="${COLOR_CYAN}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+            elif (( idx < count )); then
+                local label="   "
+                (( idx - top < 9 )) && label="$(( idx - top + 1 ))."
+                if (( idx == sel )); then
+                    ltxt="$(_browser_fit "▸ ${label} ${dirs[$idx]}/" "$lw")"
+                    lcell="${COLOR_BOLD}${_BROWSER_REV}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+                else
+                    ltxt="$(_browser_fit "  ${label} ${dirs[$idx]}/" "$lw")"
+                    lcell="${COLOR_WHITE}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+                fi
+            else
+                lcell="$(_browser_pad "" "$lw")"
+            fi
+
+            # right cell
+            rcell=""
+            if (( two_col )); then
+                rk=""; rt=""
+                if (( rn > grid && r == grid - 1 )); then
+                    rk=m; rt="… $(( rn - grid + 1 )) more"
+                elif (( r < rn )); then
+                    rk="${rkind[$r]}"; rt="${rtext[$r]}"
+                fi
+                rt="$(_browser_fit "$rt" "$rw")"
+                case "$rk" in
+                    h) rcell="${COLOR_BOLD}${COLOR_YELLOW}${rt}${COLOR_RESET}" ;;
+                    d) rcell="${COLOR_CYAN}${rt}${COLOR_RESET}" ;;
+                    v) rcell="${COLOR_BRIGHT_GREEN}${rt}${COLOR_RESET}" ;;
+                    m) rcell="${COLOR_CYAN}${rt}${COLOR_RESET}" ;;
+                    *) rcell="$rt" ;;
+                esac
+                printf '%s │ %s\033[K\n' "$lcell" "$rcell"
+            else
+                printf '%s\033[K\n' "$lcell"
+            fi
+        done
+
+        printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→/Enter${COLOR_RESET} open  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} up  ${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} select here  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
+        printf '%s\033[K\n' "${COLOR_YELLOW}1-9${COLOR_RESET} jump  ${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path (Tab completes)  ${COLOR_YELLOW}.${COLOR_RESET} hidden"
+        printf '%s\033[K' "${COLOR_RED}${msg}${COLOR_RESET}"
+        printf '\033[J'
+        msg=""
+
+        # ── Input ───────────────────────────────────────────────────────────
+        _browser_read_key key || return 1
+
+        case "$key" in
+            UP|k)   (( sel > 0 )) && sel=$(( sel - 1 )) ;;
+            DOWN|j) (( sel < count - 1 )) && sel=$(( sel + 1 )) ;;
+            PGUP)   sel=$(( sel - visible )); (( sel < 0 )) && sel=0 ;;
+            PGDN)   sel=$(( sel + visible )); (( sel > count - 1 )) && sel=$(( count > 0 ? count - 1 : 0 )) ;;
+            RIGHT|l|ENTER)
+                if (( count > 0 )); then
+                    _browser_goto "$current_dir/${dirs[$sel]}" || msg="Cannot open ${dirs[$sel]}/"
+                elif [[ "$key" == ENTER ]]; then
+                    TARGET_FOLDER="$current_dir"
+                    browser_recent_add "$current_dir"
+                    return 0
+                fi
+                ;;
+            LEFT|h)
+                local parent
+                parent="$(dirname "$current_dir")"
+                if [[ "$parent" != "$current_dir" ]]; then
+                    local came_from="${current_dir##*/}"
+                    _browser_goto "$parent"
+                    # Re-highlight the folder we just left
+                    mapfile -t dirs < <(browser_list_subdirs "$current_dir" "$show_hidden")
+                    for (( i = 0; i < ${#dirs[@]}; i++ )); do
+                        [[ "${dirs[$i]}" == "$came_from" ]] && { sel=$i; break; }
+                    done
+                fi
+                ;;
+            s|S|' ')
+                TARGET_FOLDER="$current_dir"
+                browser_recent_add "$current_dir"
+                return 0
+                ;;
+            q|Q|c|C|ESC)
+                return 1
+                ;;
+            '.')
+                show_hidden=$(( 1 - show_hidden ))
+                sel=0; top=0; reload=1
+                ;;
+            '~')
+                _browser_goto "$HOME" || msg="Home directory not available"
+                ;;
+            '-')
+                if [[ -n "$prev_dir" ]]; then
+                    _browser_goto "$prev_dir" || msg="Previous directory is gone"
+                else
+                    msg="No previous directory yet"
+                fi
+                ;;
+            r|R)
+                local picked
+                picked="$(_browser_pick_recent)"
+                [[ -n "$picked" ]] && { _browser_goto "$picked" || msg="Directory not found: $picked"; }
+                printf '\033[2J'
+                ;;
+            t|T|/)
+                local typed validated
+                printf '\n\033[?25h'
+                IFS= read -e -r -p "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Path: " -i "$current_dir/" typed
+                printf '\033[?25l'
+                typed="${typed/#\~/$HOME}"
+                if [[ -n "$typed" ]]; then
+                    if validated="$(validate_directory "$typed" 2>/dev/null)" && _browser_goto "$validated"; then
+                        :
+                    else
+                        msg="Directory not found: $typed"
+                    fi
+                fi
+                printf '\033[2J'
+                ;;
+            [1-9])
+                if (( count > 0 && top + key - 1 < count )); then
+                    sel=$(( top + key - 1 ))
+                    _browser_goto "$current_dir/${dirs[$sel]}" || msg="Cannot open ${dirs[$sel]}/"
+                fi
+                ;;
+        esac
+    done
+}
+
+# Plain prompt for non-interactive terminals (pipes, CI, dumb terminals).
+_browser_simple() {
+    local current_dir="$1" typed validated
+    echo -n "Directory [${current_dir}]: "
+    IFS= read -r typed || return 1
+    if [[ -z "$typed" ]]; then
+        validated="$current_dir"
+    else
+        typed="${typed/#\~/$HOME}"
+        validated="$(validate_directory "$typed" 2>/dev/null)" || {
+            echo "Directory not found."
+            return 1
+        }
+    fi
+    TARGET_FOLDER="$validated"
+    browser_recent_add "$validated"
+    return 0
+}
+
+# Interactive directory browser. Sets TARGET_FOLDER and returns 0 on select,
+# returns 1 on cancel. Optional $1 = starting directory.
+browse_directory() {
+    local start="${1:-${TARGET_FOLDER:-}}"
+    [[ -z "$start" ]] && start="$(browser_recent_list | head -n1)"
+    [[ -z "$start" ]] && start="$HOME"
+
+    local current_dir
+    current_dir="$(cd "$start" 2>/dev/null && pwd)" || current_dir="$HOME"
+
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        _browser_simple "$current_dir"
+        return $?
+    fi
+
+    printf '\033[?25l'
+    _browser_interactive "$current_dir"
+    local rc=$?
+    printf '\033[?25h\033[2J\033[H'
+    return $rc
+}

@@ -68,6 +68,7 @@ load_module "subtitles.sh"
 load_module "catalog.sh"
 load_module "batch.sh"
 load_module "reddit.sh"
+load_module "browser.sh"
 load_module "ui.sh"
 
 # Initialize core module
