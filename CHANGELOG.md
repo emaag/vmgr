@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Reddit downloads without API credentials**: Reddit now returns HTTP 403 for unauthenticated `.json`
+  requests. Without `~/.vmgr-reddit.conf` the downloader now uses the public RSS feed instead
+  (images, gifs, direct video links, and `v.redd.it` videos resolved through the DASH manifest and muxed
+  with audio). With credentials it still uses the OAuth API.
+- HTTP 429 rate limiting is waited out using the `Retry-After` / `X-Ratelimit-Reset` headers (up to
+  `REDDIT_MAX_RETRIES` times, at most `REDDIT_MAX_WAIT` seconds each) instead of failing.
+- Failures now report the real HTTP status and a plain-language reason instead of a generic
+  "Failed to fetch" message.
+- A page with no downloadable media no longer ends the run while more pages remain.
+
 ### Changed
 - **Directory browser rewrite** (`lib/browser.sh`, moved out of `ui.sh`): arrow-key navigation
   (↑↓ move, →/Enter open, ←/Backspace up, PgUp/PgDn), in-place repainting instead of full-screen

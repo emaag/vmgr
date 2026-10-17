@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# Unit tests for lib/reddit.sh (offline):
+#   RSS media extraction, pagination cursor, 429 handling, status messages
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/helpers.sh"
+load_vmgr_core
+load_module_under_test "utils.sh"
+load_module_under_test "reddit.sh"
+
+# Real feeds are HTML-escaped inside <content>, with the post id after the content.
+_entry() { # id url
+    printf '<entry><content type="html">&lt;span&gt;&lt;a href=&quot;%s&quot;&gt;[link]&lt;/a&gt;&lt;/span&gt; &lt;span&gt;&lt;a href=&quot;https://www.reddit.com/r/x/comments/%s/t/&quot;&gt;[comments]&lt;/a&gt;&lt;/span&gt;</content><id>t3_%s</id></entry>' "$2" "$1" "$1"
+}
+
+# Image, v.redd.it video, gallery (skipped), gifv, mp4 with query, webm
+_feed() {
+    printf '<?xml version="1.0"?><feed><id>/r/x/hot.rss</id>'
+    _entry aaa111 "https://i.redd.it/pic.jpeg"
+    _entry bbb222 "https://v.redd.it/vid999"
+    _entry ccc333 "https://www.reddit.com/gallery/ccc333"
+    _entry ddd444 "https://i.imgur.com/clip.gifv"
+    _entry eee555 "https://example.com/a.mp4?x=1&amp;amp;y=2"
+    _entry fff666 "https://example.com/b.webm"
+    printf '</feed>'
+}
+
+test_rss_extract_kinds() {
+    local result
+    result=$(_feed | _reddit_extract_media_rss | jq -r '[.kind, .id] | join(":")' | tr '\n' ' ')
+    assert_equals "image:aaa111 vreddit:bbb222 gifv:ddd444 video:fff666 " "$result" "rss extract: kinds and ids (gallery and query-string link skipped)"
+}
+
+test_rss_extract_urls() {
+    local result
+    result=$(_feed | _reddit_extract_media_rss | jq -r 'select(.kind=="gifv" or .kind=="vreddit") | .url' | tr '\n' ' ')
+    assert_equals "https://v.redd.it/vid999 https://i.imgur.com/clip.mp4 " "$result" "rss extract: gifv rewritten to mp4, v.redd.it kept bare"
+}
+
+test_rss_extract_empty_feed() {
+    local result
+    result=$(printf '<feed></feed>' | _reddit_extract_media_rss | wc -l | tr -d ' ')
+    assert_equals "0" "$result" "rss extract: empty feed yields nothing"
+}
+
+test_rss_cursor_is_last_entry() {
+    local result
+    result=$(_feed | _reddit_next_cursor rss)
+    assert_equals "t3_fff666" "$result" "rss cursor: id of the last entry"
+}
+
+test_rss_cursor_empty_feed() {
+    local result
+    result=$(printf '<feed></feed>' | _reddit_next_cursor rss)
+    assert_equals "" "$result" "rss cursor: none for an empty feed"
+}
+
+test_json_cursor() {
+    local result
+    result=$(echo '{"data":{"after":"t3_zzz","children":[]}}' | _reddit_next_cursor json)
+    assert_equals "t3_zzz" "$result" "json cursor: data.after"
+}
+
+test_json_extract_still_works() {
+    local result
+    result=$(echo '{"data":{"children":[{"data":{"id":"p1","url":"https://i.redd.it/a.png"}}]}}' | _reddit_extract_media | jq -r .kind)
+    assert_equals "image" "$result" "json extract: image post"
+}
+
+# ── retry wait ───────────────────────────────────────────────────────────────
+
+test_retry_wait_uses_reset_header() {
+    local h; h="$(mktemp)"
+    printf 'HTTP/2 429\r\nx-ratelimit-reset: 38\r\n' > "$h"
+    assert_equals "40" "$(_reddit_retry_wait "$h")" "retry wait: x-ratelimit-reset + 2s"
+    rm -f "$h"
+}
+
+test_retry_wait_prefers_retry_after() {
+    local h; h="$(mktemp)"
+    printf 'HTTP/2 429\r\nRetry-After: 10\r\n' > "$h"
+    assert_equals "12" "$(_reddit_retry_wait "$h")" "retry wait: Retry-After header"
+    rm -f "$h"
+}
+
+test_retry_wait_default_and_clamp() {
+    local h d c; h="$(mktemp)"
+    printf 'HTTP/2 429\r\n' > "$h"
+    d="$(_reddit_retry_wait "$h")"
+    printf 'HTTP/2 429\r\nretry-after: 99999\r\n' > "$h"
+    c="$(_reddit_retry_wait "$h")"
+    assert_equals "30:$REDDIT_MAX_WAIT" "$d:$c" "retry wait: default 30s, capped at REDDIT_MAX_WAIT"
+    rm -f "$h"
+}
+
+# ── _reddit_request (fake curl pops one status code per call) ────────────────
+# The fake runs inside $(...), so its state lives in a file, not a variable.
+
+_FAKE_CODES=""
+
+sleep() { echo "$1" >> "$_FAKE_CODES.slept"; }
+
+curl() {
+    local hdr="" out="" a prev="" code
+    for a in "$@"; do
+        [[ "$prev" == "-D" ]] && hdr="$a"
+        [[ "$prev" == "-o" ]] && out="$a"
+        prev="$a"
+    done
+    code="$(head -1 "$_FAKE_CODES")"
+    tail -n +2 "$_FAKE_CODES" > "$_FAKE_CODES.next"; mv "$_FAKE_CODES.next" "$_FAKE_CODES"
+    [[ -n "$hdr" ]] && printf 'HTTP/2 %s\r\nx-ratelimit-reset: 3\r\n' "$code" > "$hdr"
+    [[ -n "$out" ]] && echo "body-$code" > "$out"
+    printf '%s' "$code"
+}
+
+_with_codes() {
+    _FAKE_CODES="$(mktemp)"
+    printf '%s\n' "$@" > "$_FAKE_CODES"
+    rm -f "$_FAKE_CODES.slept"
+}
+
+_sleep_count() {
+    if [[ -f "$_FAKE_CODES.slept" ]]; then wc -l < "$_FAKE_CODES.slept" | tr -d ' '; else echo 0; fi
+}
+
+test_request_ok() {
+    _with_codes 200
+    _reddit_request "https://example/x" ""
+    local rc=$?
+    assert_equals "0:200:body-200" "$rc:$REDDIT_HTTP_STATUS:$REDDIT_RESPONSE" "request: 200 succeeds and exposes body"
+    rm -f "$_FAKE_CODES" "$_FAKE_CODES.slept"
+}
+
+test_request_retries_429_then_succeeds() {
+    _with_codes 429 429 200
+    _reddit_request "https://example/x" ""
+    local rc=$?
+    assert_equals "0:200:2" "$rc:$REDDIT_HTTP_STATUS:$(_sleep_count)" "request: waits out two 429s then succeeds"
+    rm -f "$_FAKE_CODES" "$_FAKE_CODES.slept"
+}
+
+test_request_gives_up_after_max_retries() {
+    _with_codes 429 429 429 429 429
+    REDDIT_MAX_RETRIES=2
+    _reddit_request "https://example/x" ""
+    local rc=$?
+    REDDIT_MAX_RETRIES=3
+    assert_equals "1:429:2" "$rc:$REDDIT_HTTP_STATUS:$(_sleep_count)" "request: returns 429 after exhausting retries"
+    rm -f "$_FAKE_CODES" "$_FAKE_CODES.slept"
+}
+
+test_request_reports_403_without_retry() {
+    _with_codes 403
+    _reddit_request "https://example/x" ""
+    local rc=$?
+    assert_equals "1:403:0" "$rc:$REDDIT_HTTP_STATUS:$(_sleep_count)" "request: 403 reported immediately, no retry"
+    rm -f "$_FAKE_CODES" "$_FAKE_CODES.slept"
+}
+
+# ── status explanations ──────────────────────────────────────────────────────
+
+test_explain_status() {
+    assert_contains "credentials" "$(_reddit_explain_status 403 pics)" "explain: 403 mentions credentials"
+    assert_contains "nosuch" "$(_reddit_explain_status 404 nosuch)" "explain: 404 names the subreddit"
+    assert_contains "rate limiting" "$(_reddit_explain_status 429 pics)" "explain: 429 mentions rate limiting"
+    assert_contains "network" "$(_reddit_explain_status 000 pics)" "explain: 000 is a network error"
+}

@@ -6,10 +6,12 @@
 #
 # Downloads images and videos from a subreddit using the Reddit API.
 #
-# Reddit now blocks most unauthenticated requests to the public .json
-# endpoints, so this module authenticates via OAuth2 "app-only" (client
-# credentials) auth when credentials are available in ~/.vmgr-reddit.conf,
-# and falls back to the unauthenticated endpoint otherwise.
+# Reddit blocks unauthenticated requests to the public .json endpoints (HTTP
+# 403), so this module authenticates via OAuth2 "app-only" (client
+# credentials) auth when credentials are available in ~/.vmgr-reddit.conf.
+# Without credentials it falls back to the public RSS feed, which still works
+# but is heavily rate limited (roughly one request per minute); HTTP 429
+# responses are waited out using the Retry-After / X-Ratelimit-Reset headers.
 #
 # Handles direct image links, direct video links (mp4/webm), Imgur .gifv
 # (rewritten to its .mp4 counterpart), and Reddit-hosted video (v.redd.it),
@@ -28,6 +30,15 @@ REDDIT_USER_AGENT="vmgr/3.0 (by /u/mosqua)"
 # Seconds to wait between requests (downloads and listing pages).
 # Override by setting REDDIT_RATE_LIMIT_DELAY in ~/.vmgr-reddit.conf.
 REDDIT_RATE_LIMIT_DELAY="${REDDIT_RATE_LIMIT_DELAY:-1}"
+
+# How many times to wait out an HTTP 429 per request, and the longest single
+# wait (seconds). Set in ~/.vmgr-reddit.conf to override.
+REDDIT_MAX_RETRIES="${REDDIT_MAX_RETRIES:-3}"
+REDDIT_MAX_WAIT="${REDDIT_MAX_WAIT:-120}"
+
+# Set by _reddit_request / _reddit_fetch_listing (not usable from subshells)
+REDDIT_RESPONSE=""
+REDDIT_HTTP_STATUS=""
 
 # Load Reddit API credentials from ~/.vmgr-reddit.conf, if present
 # Sets REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET
@@ -63,11 +74,75 @@ _reddit_get_access_token() {
     [[ -n "$REDDIT_ACCESS_TOKEN" ]]
 }
 
-# Fetch a subreddit listing page (JSON), authenticated if possible
+# Work out how long to wait after a 429 from the response headers file $1.
+# Prints whole seconds, clamped to [5, REDDIT_MAX_WAIT]; 30 if no usable header.
+_reddit_retry_wait() {
+    local hdr_file="$1" secs
+    secs=$(grep -iE '^(retry-after|x-ratelimit-reset):' "$hdr_file" 2>/dev/null | head -1 | cut -d: -f2 | tr -dc '0-9.')
+    secs="${secs%%.*}"
+    if [[ -z "$secs" ]]; then
+        secs=30
+    else
+        secs=$(( secs + 2 ))
+    fi
+    (( secs < 5 )) && secs=5
+    (( secs > REDDIT_MAX_WAIT )) && secs=$REDDIT_MAX_WAIT
+    echo "$secs"
+}
+
+# Explain an HTTP status from Reddit in plain language.
+# Args: $1 - status code, $2 - subreddit
+_reddit_explain_status() {
+    case "$1" in
+        000) echo "network error (could not reach Reddit)" ;;
+        401) echo "Reddit rejected the API credentials — check ~/.vmgr-reddit.conf" ;;
+        403) echo "Reddit refused the request — r/$2 may be private or banned, or the request was blocked (add API credentials to ~/.vmgr-reddit.conf)" ;;
+        404) echo "r/$2 was not found" ;;
+        429) echo "Reddit is rate limiting requests — try again in a few minutes (API credentials raise the limit)" ;;
+        5??) echo "Reddit is having problems (server error)" ;;
+        *)   echo "unexpected response" ;;
+    esac
+}
+
+# GET $1 (optionally with bearer token $2), waiting out HTTP 429 responses.
+# Sets REDDIT_RESPONSE (body) and REDDIT_HTTP_STATUS. Returns 0 only for 200.
+# Must be called directly, not inside $(...), so the variables survive.
+_reddit_request() {
+    local url="$1" token="$2"
+    local hdr_file body_file code wait_secs attempt=0
+    local -a auth=()
+    [[ -n "$token" ]] && auth=(-H "Authorization: bearer $token")
+
+    hdr_file=$(mktemp) || return 1
+    body_file=$(mktemp) || { rm -f "$hdr_file"; return 1; }
+
+    while true; do
+        code=$(curl -s -D "$hdr_file" -o "$body_file" -w '%{http_code}' \
+            -A "$REDDIT_USER_AGENT" "${auth[@]}" --max-time 30 "$url" 2>/dev/null)
+        [[ "$code" =~ ^[0-9]{3}$ ]] || code=000
+
+        if [[ "$code" == "429" && $attempt -lt $REDDIT_MAX_RETRIES ]]; then
+            wait_secs=$(_reddit_retry_wait "$hdr_file")
+            log_warning "Rate limited by Reddit (HTTP 429) — waiting ${wait_secs}s before retrying"
+            sleep "$wait_secs"
+            attempt=$(( attempt + 1 ))
+            continue
+        fi
+        break
+    done
+
+    REDDIT_HTTP_STATUS="$code"
+    REDDIT_RESPONSE=$(cat "$body_file")
+    rm -f "$hdr_file" "$body_file"
+    [[ "$code" == "200" ]]
+}
+
+# Fetch a subreddit listing page: JSON via OAuth when we have a token,
+# otherwise the public RSS feed.
 # Args: $1 - subreddit, $2 - "after" cursor (may be empty), $3 - sort
 #       (hot/new/top/rising/controversial, default hot), $4 - time window
 #       for top/controversial (hour/day/week/month/year/all, may be empty)
-# Prints the response body to stdout
+# Sets REDDIT_RESPONSE / REDDIT_HTTP_STATUS; returns 0 on HTTP 200.
 _reddit_fetch_listing() {
     local subreddit="$1"
     local after="$2"
@@ -78,7 +153,7 @@ _reddit_fetch_listing() {
     if [[ -n "$REDDIT_ACCESS_TOKEN" ]]; then
         base_url="https://oauth.reddit.com/r/${subreddit}/${sort}.json"
     else
-        base_url="https://www.reddit.com/r/${subreddit}/${sort}.json"
+        base_url="https://www.reddit.com/r/${subreddit}/${sort}.rss"
     fi
 
     query="?limit=100&raw_json=1"
@@ -87,11 +162,7 @@ _reddit_fetch_listing() {
         query+="&t=$time_window"
     fi
 
-    if [[ -n "$REDDIT_ACCESS_TOKEN" ]]; then
-        curl -sf -A "$REDDIT_USER_AGENT" -H "Authorization: bearer $REDDIT_ACCESS_TOKEN" "${base_url}${query}" 2>/dev/null
-    else
-        curl -sf -A "$REDDIT_USER_AGENT" "${base_url}${query}" 2>/dev/null
-    fi
+    _reddit_request "${base_url}${query}" "$REDDIT_ACCESS_TOKEN"
 }
 
 # Extract downloadable media items from a listing response as NDJSON.
@@ -114,6 +185,57 @@ _reddit_extract_media() {
     ' 2>/dev/null
 }
 
+# Shared jq filter: classify a post URL into a media item. Expects an object
+# with .id and .url on its input; emits the item or nothing.
+# shellcheck disable=SC2016
+_REDDIT_CLASSIFY_JQ='
+    if (.url | test("^https?://v\\.redd\\.it/[A-Za-z0-9]+/?$")) then
+        {kind: "vreddit", id: .id, url: (.url | sub("/$"; ""))}
+    elif (.url | test("\\.gifv$"; "i")) then
+        {kind: "gifv", id: .id, url: (.url | sub("\\.gifv$"; ".mp4"; "i"))}
+    elif (.url | test("\\.(mp4|webm)$"; "i")) then
+        {kind: "video", id: .id, url: .url}
+    elif (.url | test("\\.(jpg|jpeg|png|gif|webp)$"; "i")) then
+        {kind: "image", id: .id, url: .url}
+    else empty end
+'
+
+# Extract downloadable media items from an RSS/Atom listing (stdin) as NDJSON,
+# in the same shape as _reddit_extract_media. The feed carries each post's
+# target link in a "[link]" anchor; v.redd.it posts come out as kind "vreddit"
+# (resolved to a concrete stream later, in _reddit_download_item).
+_reddit_extract_media_rss() {
+    local tab=$'\t'
+    sed 's#<entry>#\
+<entry>#g' | \
+        sed -nE "s#^<entry>.*&lt;span&gt;&lt;a href=&quot;([^ ]*)&quot;&gt;\\[link\\]&lt;.*<id>t3_([A-Za-z0-9]+)</id>.*#\\2${tab}\\1#p" | \
+        sed 's/&amp;amp;/\&/g; s/&amp;/\&/g' | \
+        jq -Rc "split(\"\\t\") | {id: .[0], url: .[1]} | ${_REDDIT_CLASSIFY_JQ}" 2>/dev/null
+}
+
+# Print the "after" cursor for the next page of a listing response (stdin).
+# Args: $1 - "json" or "rss"
+_reddit_next_cursor() {
+    if [[ "$1" == "rss" ]]; then
+        grep -oE '<id>t3_[A-Za-z0-9]+</id>' | tail -1 | sed -E 's#<id>(t3_[A-Za-z0-9]+)</id>#\1#'
+    else
+        jq -r '.data.after // empty' 2>/dev/null
+    fi
+}
+
+# Look up the best video filename for a v.redd.it video from its DASH manifest
+# (renditions are listed lowest to highest quality).
+# Args: $1 - video base directory URL (e.g. https://v.redd.it/<id>)
+# Prints the video filename (e.g. CMAF_720.mp4) if found, nothing otherwise
+_reddit_find_video_filename() {
+    local video_dir="$1"
+    local mpd
+    mpd=$(curl -sf -A "$REDDIT_USER_AGENT" "${video_dir}/DASHPlaylist.mpd" 2>/dev/null) || return 1
+
+    echo "$mpd" | awk '/contentType="video"/{p=1} p{print} /<\/AdaptationSet>/{if(p) exit}' | \
+        sed -n 's#.*<BaseURL>\([^<]*\)</BaseURL>.*#\1#p' | tail -1
+}
+
 # Download a single media item described by a JSON line from _reddit_extract_media
 # Args: $1 - JSON item, $2 - output directory
 # Returns: 0 on success, 1 on failure, 2 if skipped (already exists)
@@ -127,7 +249,7 @@ _reddit_download_item() {
     url=$(jq -r '.url' <<< "$item")
 
     local filename dest
-    if [[ "$kind" == "reddit_video" ]]; then
+    if [[ "$kind" == "reddit_video" || "$kind" == "vreddit" ]]; then
         filename="${id}.mp4"
     else
         filename=$(basename "$url" | sed 's/[?#].*//')
@@ -141,7 +263,16 @@ _reddit_download_item() {
         return 2
     fi
 
-    if [[ "$kind" == "reddit_video" ]]; then
+    if [[ "$kind" == "vreddit" ]]; then
+        # RSS gives only https://v.redd.it/<id>; pick the stream from the manifest
+        local video_file
+        video_file=$(_reddit_find_video_filename "$url")
+        if [[ -n "$video_file" ]]; then
+            _reddit_download_reddit_video "${url}/${video_file}" "$dest"
+        else
+            false
+        fi
+    elif [[ "$kind" == "reddit_video" ]]; then
         _reddit_download_reddit_video "$url" "$dest"
     else
         curl -sf -A "$REDDIT_USER_AGENT" -o "$dest" "$url" 2>/dev/null
@@ -272,10 +403,14 @@ download_subreddit_images() {
 
     REDDIT_ACCESS_TOKEN=""
     REDDIT_WARNED_NO_FFMPEG=false
+    local feed_format=rss
     if _reddit_get_access_token; then
+        feed_format=json
         log_verbose "Authenticated with Reddit API"
+    elif [[ -f "$REDDIT_CONFIG_FILE" ]]; then
+        log_warning "Reddit API authentication failed — using the public RSS feed instead (slower, rate limited). Check the credentials in $REDDIT_CONFIG_FILE"
     else
-        log_warning "No valid Reddit API credentials — falling back to unauthenticated access (Reddit may block this)"
+        log_warning "No Reddit API credentials ($REDDIT_CONFIG_FILE) — using the public RSS feed (slower, rate limited)"
     fi
 
     if ! command -v ffmpeg &>/dev/null; then
@@ -293,17 +428,23 @@ download_subreddit_images() {
     local after=""
 
     while [[ $downloaded -lt $max_images ]]; do
-        local response
-        response=$(_reddit_fetch_listing "$subreddit" "$after" "$sort" "$time_window")
-        if [[ -z "$response" ]]; then
-            log_error "Failed to fetch r/$subreddit — check subreddit name, network, and Reddit API credentials"
+        if ! _reddit_fetch_listing "$subreddit" "$after" "$sort" "$time_window"; then
+            log_error "Failed to fetch r/$subreddit (HTTP ${REDDIT_HTTP_STATUS}): $(_reddit_explain_status "$REDDIT_HTTP_STATUS" "$subreddit")"
             return 1
         fi
+        local response="$REDDIT_RESPONSE"
 
-        local items
-        mapfile -t items < <(echo "$response" | _reddit_extract_media)
+        local items=()
+        if [[ "$feed_format" == "rss" ]]; then
+            mapfile -t items < <(echo "$response" | _reddit_extract_media_rss)
+        else
+            mapfile -t items < <(echo "$response" | _reddit_extract_media)
+        fi
 
-        if [[ ${#items[@]} -eq 0 ]]; then
+        # Pagination cursor (also tells us whether this was the last page)
+        after=$(echo "$response" | _reddit_next_cursor "$feed_format")
+
+        if [[ ${#items[@]} -eq 0 && -z "$after" ]]; then
             log_info "No more image/video posts found"
             break
         fi
@@ -330,8 +471,6 @@ download_subreddit_images() {
             sleep "$REDDIT_RATE_LIMIT_DELAY"
         done
 
-        # Pagination
-        after=$(echo "$response" | jq -r '.data.after // empty' 2>/dev/null)
         [[ -z "$after" ]] && break
         sleep "$REDDIT_RATE_LIMIT_DELAY"
     done
