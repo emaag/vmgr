@@ -27,7 +27,7 @@ _feed() {
 test_rss_extract_kinds() {
     local result
     result=$(_feed | _reddit_extract_media_rss | jq -r '[.kind, .id] | join(":")' | tr '\n' ' ')
-    assert_equals "image:aaa111 vreddit:bbb222 gifv:ddd444 video:fff666 " "$result" "rss extract: kinds and ids (gallery and query-string link skipped)"
+    assert_equals "image:aaa111 vreddit:bbb222 gallery:ccc333 gifv:ddd444 video:fff666 " "$result" "rss extract: kinds and ids (query-string link skipped)"
 }
 
 test_rss_extract_urls() {
@@ -64,6 +64,52 @@ test_json_extract_still_works() {
     local result
     result=$(echo '{"data":{"children":[{"data":{"id":"p1","url":"https://i.redd.it/a.png"}}]}}' | _reddit_extract_media | jq -r .kind)
     assert_equals "image" "$result" "json extract: image post"
+}
+
+# ── galleries ────────────────────────────────────────────────────────────────
+
+_gallery_json() {
+    cat <<'J'
+{"data":{"children":[
+ {"data":{"id":"g1","url":"https://www.reddit.com/gallery/g1","is_gallery":true,
+  "gallery_data":{"items":[{"media_id":"aaa"},{"media_id":"bbb"},{"media_id":"ccc"},{"media_id":"ddd"}]},
+  "media_metadata":{
+    "aaa":{"status":"valid","m":"image/jpg"},
+    "bbb":{"status":"valid","m":"image/png"},
+    "ccc":{"status":"failed","m":"image/jpg"},
+    "ddd":{"status":"valid","m":"image/gif"}}}},
+ {"data":{"id":"x1","url":"https://www.reddit.com/gallery/x1","is_gallery":false}},
+ {"data":{"id":"cp1","url":"https://www.reddit.com/gallery/orig","crosspost_parent_list":[
+  {"is_gallery":true,"gallery_data":{"items":[{"media_id":"zzz"}]},"media_metadata":{"zzz":{"status":"valid","m":"image/webp"}}}]}}
+]}}
+J
+}
+
+test_json_gallery_expands_to_images() {
+    local result
+    result=$(_gallery_json | _reddit_extract_media | jq -r '[.kind, .id, .url] | join(" ")' | tr '\n' ',')
+    assert_equals "image g1 https://i.redd.it/aaa.jpg,image g1 https://i.redd.it/bbb.png,image g1 https://i.redd.it/ddd.gif,image cp1 https://i.redd.it/zzz.webp," "$result" "json gallery: valid images only, mime to extension, crosspost handled"
+}
+
+test_json_gallery_without_metadata() {
+    local result
+    result=$(echo '{"data":{"children":[{"data":{"id":"g2","url":"https://www.reddit.com/gallery/g2","is_gallery":true}}]}}' | _reddit_extract_media | wc -l | tr -d ' ')
+    assert_equals "0" "$result" "json gallery: no gallery_data yields nothing"
+}
+
+test_rss_gallery_kind() {
+    local result
+    result=$( { printf '<feed>'; _entry g3 "https://www.reddit.com/gallery/g3"; printf '</feed>'; } | _reddit_extract_media_rss | jq -r .kind)
+    assert_equals "gallery" "$result" "rss gallery: classified as gallery"
+}
+
+test_download_item_gallery_unsupported() {
+    local d; d="$(mktemp -d)"
+    _reddit_download_item '{"kind":"gallery","id":"g3","url":"https://www.reddit.com/gallery/g3"}' "$d"
+    local rc=$?
+    local n; n=$(find "$d" -type f | wc -l | tr -d ' ')
+    assert_equals "3:0" "$rc:$n" "download_item: gallery returns 3 and writes nothing"
+    rm -rf "$d"
 }
 
 # ── retry wait ───────────────────────────────────────────────────────────────

@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Failures now report the real HTTP status and a plain-language reason instead of a generic
   "Failed to fetch" message.
 - A page with no downloadable media no longer ends the run while more pages remain.
+- **Reddit galleries**: with API credentials every valid image in a gallery (including crossposted
+  galleries) is downloaded from its original `i.redd.it` file. The RSS feed does not list gallery
+  images, so without credentials galleries are skipped and a summary says how many.
+
+### Documentation
+- User guide and quick reference now cover the directory browser keys and the Reddit downloader
+  (credentials, RSS fallback, galleries).
 
 ### Changed
 - **Directory browser rewrite** (`lib/browser.sh`, moved out of `ui.sh`): arrow-key navigation

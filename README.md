@@ -6,7 +6,7 @@
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-196%2F196%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-200%2F200%20passing-success.svg)](tests/)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
@@ -19,7 +19,7 @@
 | All core functionality preserved from previous versions | ✅ Shipped |
 | Improved tab completion for all commands | ✅ Shipped |
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
-| 196-test automated suite (full integration coverage) | ✅ Shipped |
+| 200-test automated suite (full integration coverage) | ✅ Shipped |
 
 [See the changelog →](CHANGELOG.md)
 

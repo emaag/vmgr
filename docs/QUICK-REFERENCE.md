@@ -134,6 +134,34 @@ Main Menu
 
 ---
 
+## 📂 Directory Browser Keys
+
+```
+↑ ↓  move        → / Enter  open folder      ← / Backspace  up one level
+S / Space  SELECT this directory             Q / Esc  cancel
+1-9  jump to numbered folder                 ~  home        -  previous directory
+R  recent directories                        T  type a path (Tab completes)
+.  show/hide hidden folders                  F  refresh listing
+```
+
+Left column = folders, right column = preview of the highlighted folder (subfolders + videos).
+
+---
+
+## ⬇️ Reddit Downloader
+
+```bash
+# r/name, name, or a pasted URL all work; max defaults to 200
+vmgr reddit EarthPorn ~/Pictures/earthporn 100
+vmgr reddit pics ~/Pictures/pics 50 --sort top --time week
+```
+
+- Without `~/.vmgr-reddit.conf` it uses the public RSS feed: slower (~1 request/min) and **galleries are skipped**.
+- With API credentials (`REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`) galleries are downloaded too.
+- Install `ffmpeg` to merge Reddit video and audio. See the User Guide for credential setup.
+
+---
+
 ## 📊 After Operation
 
 ### View Statistics

@@ -181,6 +181,16 @@ _reddit_extract_media() {
             {kind: "video", id: $p.id, url: $p.url}
         elif ($p.url? // "" | test("\\.(jpg|jpeg|png|gif|webp)$"; "i")) then
             {kind: "image", id: $p.id, url: $p.url}
+        elif (($p.crosspost_parent_list[0]? // $p) | .is_gallery == true) then
+            # Galleries (and crossposts of them): one item per valid image, taken
+            # from the original i.redd.it file named by media_id + mime type
+            ($p.crosspost_parent_list[0]? // $p) as $g |
+            $g.gallery_data.items[]? |
+            .media_id as $m |
+            ($g.media_metadata[$m]? // null) as $md |
+            select($md != null and ($md.status // "valid") == "valid") |
+            (($md.m // "image/jpg") | sub("^image/"; "") | if . == "jpeg" then "jpg" else . end) as $ext |
+            {kind: "image", id: $p.id, url: ("https://i.redd.it/" + $m + "." + $ext)}
         else empty end
     ' 2>/dev/null
 }
@@ -197,6 +207,8 @@ _REDDIT_CLASSIFY_JQ='
         {kind: "video", id: .id, url: .url}
     elif (.url | test("\\.(jpg|jpeg|png|gif|webp)$"; "i")) then
         {kind: "image", id: .id, url: .url}
+    elif (.url | test("^https?://(www\\.)?reddit\\.com/gallery/")) then
+        {kind: "gallery", id: .id, url: .url}
     else empty end
 '
 
@@ -238,7 +250,8 @@ _reddit_find_video_filename() {
 
 # Download a single media item described by a JSON line from _reddit_extract_media
 # Args: $1 - JSON item, $2 - output directory
-# Returns: 0 on success, 1 on failure, 2 if skipped (already exists)
+# Returns: 0 on success, 1 on failure, 2 if skipped (already exists),
+#          3 if unsupported without API credentials (gallery from the RSS feed)
 _reddit_download_item() {
     local item="$1"
     local output_dir="$2"
@@ -247,6 +260,9 @@ _reddit_download_item() {
     kind=$(jq -r '.kind' <<< "$item")
     id=$(jq -r '.id' <<< "$item")
     url=$(jq -r '.url' <<< "$item")
+
+    # The RSS feed does not list a gallery's images; they need the API
+    [[ "$kind" == "gallery" ]] && return 3
 
     local filename dest
     if [[ "$kind" == "reddit_video" || "$kind" == "vreddit" ]]; then
@@ -425,6 +441,7 @@ download_subreddit_images() {
     local downloaded=0
     local skipped=0
     local failed=0
+    local galleries=0
     local after=""
 
     while [[ $downloaded -lt $max_images ]]; do
@@ -463,6 +480,10 @@ download_subreddit_images() {
                     ((skipped++))
                     ((STATS[files_skipped]++))
                     ;;
+                3)
+                    ((galleries++))
+                    continue
+                    ;;
                 *)
                     ((failed++))
                     ;;
@@ -478,6 +499,7 @@ download_subreddit_images() {
     echo ""
     log_success "Downloaded $downloaded items from r/$subreddit"
     [[ $skipped -gt 0 ]] && log_info "Skipped $skipped (already existed)"
+    [[ $galleries -gt 0 ]] && log_warning "Skipped $galleries gallery post(s) — galleries need Reddit API credentials ($REDDIT_CONFIG_FILE)"
     [[ $failed -gt 0 ]] && log_warning "$failed downloads failed"
 }
 

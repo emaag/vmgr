@@ -578,6 +578,95 @@ Log Directory:   /home/user/.video-manager-logs
 
 ---
 
+### Choosing a Directory (Directory Browser)
+
+Whenever a menu asks which folder to work on, you get a two-column browser: folders on the left, and a
+live preview of the highlighted folder (its subfolders and videos) on the right.
+
+```
+Location: /home/you/Videos
+Here: 3 folder(s), 1 video(s)  (hidden: off)
+FOLDERS                      │ PREVIEW: alpha/
+                             │ Folders (2)
+▸ 1. alpha/                  │ inner/
+  2. beta/                   │ second/
+  3. gamma/                  │
+                             │ Videos (2)
+                             │ a.mkv
+                             │ b.mkv
+```
+
+| Key | Action |
+|-----|--------|
+| `↑` `↓` (or `k` `j`) | Move the highlight; `PgUp` / `PgDn` page through long lists |
+| `→` / `Enter` (or `l`) | Open the highlighted folder (on a folder with no subfolders, `Enter` selects it) |
+| `←` / `Backspace` (or `h`) | Go up one level, keeping the folder you came from highlighted |
+| `S` / `Space` | **Select the current directory** and continue |
+| `Q` / `Esc` / `C` | Cancel |
+| `1`-`9` | Jump straight into the numbered folder on screen |
+| `~` | Go to your home directory |
+| `-` | Go back to the previous directory |
+| `R` | Pick from recently used directories (numbered `1`-`9`) |
+| `T` or `/` | Type a path; Tab completes and the arrow keys recall history |
+| `.` | Show or hide hidden folders |
+| `F` | Refresh (listings are cached and re-checked automatically; this forces a re-scan) |
+
+**Good to know**
+- It starts in the directory you used last. Recent directories are stored in `~/.video-manager-recent-dirs`
+  (10 entries; folders that no longer exist are dropped).
+- Terminals narrower than 70 columns show a single list without the preview.
+- When input is piped (not a terminal) it falls back to a plain `Directory [default]:` prompt.
+
+---
+
+### Reddit Downloader
+
+Main menu option **[7]**, or from the command line:
+
+```bash
+./video-manager-ultimate.sh reddit EarthPorn ~/Pictures/earthporn 100
+./video-manager-ultimate.sh reddit pics ~/Pictures/pics 50 --sort top --time week
+```
+
+The subreddit can be given as `EarthPorn`, `r/EarthPorn`, `/r/EarthPorn/` or a pasted reddit.com URL.
+`--sort` is one of `hot`, `new`, `top`, `rising`, `controversial`; `--time` (`hour`, `day`, `week`,
+`month`, `year`, `all`) applies to `top` and `controversial`. The limit counts files, so a gallery of
+10 images counts as 10.
+
+**What it downloads:** images (`.jpg` / `.png` / `.gif` / `.webp`, `.jpeg` is saved as `.jpg`), direct
+`.mp4` / `.webm` links, Imgur `.gifv` (saved as `.mp4`), and Reddit-hosted videos (`v.redd.it`). Reddit
+videos are stored as separate video and audio streams, so install `ffmpeg` to have them merged; without
+it they are saved without sound. Files that already exist are skipped. Requires `curl` and `jq`.
+
+**With or without API credentials**
+
+| | With credentials | Without credentials |
+|---|---|---|
+| Source | Reddit OAuth API | Public RSS feed |
+| Speed | Normal | About one request per minute (Reddit rate limits it; the downloader waits and retries) |
+| Galleries | All images downloaded | **Skipped** (the feed does not list a gallery's images); a summary tells you how many |
+| Images / videos | Yes | Yes |
+
+To use the API, create a "script" app at <https://www.reddit.com/prefs/apps> (redirect URI can be
+`http://localhost:8080`), then create `~/.vmgr-reddit.conf` owned by you:
+
+```bash
+cat > ~/.vmgr-reddit.conf <<'EOF'
+REDDIT_CLIENT_ID="your_client_id"          # shown under the app name
+REDDIT_CLIENT_SECRET="your_client_secret"
+# Optional tuning:
+# REDDIT_RATE_LIMIT_DELAY=1   # seconds between downloads
+# REDDIT_MAX_RETRIES=3        # times to wait out an HTTP 429
+# REDDIT_MAX_WAIT=120         # longest single wait, in seconds
+EOF
+chmod 600 ~/.vmgr-reddit.conf
+```
+
+Errors report Reddit's real HTTP status (for example 403 for a private or banned subreddit, 404 for a
+subreddit that does not exist, 429 for rate limiting).
+
+---
+
 ## Command Line Reference
 
 ### Basic Syntax
