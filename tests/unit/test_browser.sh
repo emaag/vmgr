@@ -124,3 +124,79 @@ test_list_videos() {
     assert_equals "a.mp4,b.MKV," "$result" "list_videos: only videos, sorted"
     rm -rf "$d"
 }
+
+# ── listing cache ────────────────────────────────────────────────────────────
+
+# touch -t pins the mtime to the past so a later change is always detectable
+_mk_cached_tree() {
+    local d; d="$(mktemp -d)"
+    mkdir "$d/one" "$d/two"; touch "$d/v.mp4"
+    touch -t 200001010000 "$d"
+    echo "$d"
+}
+
+test_cache_entries_content() {
+    local d; d="$(_mk_cached_tree)"
+    browser_cache_clear
+    browser_dir_entries "$d" 0
+    assert_equals "one,two|v.mp4" "$(IFS=,; echo "${BROWSER_SUBS[*]}")|${BROWSER_VIDS[*]}" "cache: entries returned"
+    rm -rf "$d"
+}
+
+test_cache_hit_on_second_call() {
+    local d; d="$(_mk_cached_tree)"
+    browser_cache_clear; BROWSER_CACHE_HITS=0; BROWSER_CACHE_MISSES=0
+    browser_dir_entries "$d" 0
+    browser_dir_entries "$d" 0
+    assert_equals "1:1" "$BROWSER_CACHE_HITS:$BROWSER_CACHE_MISSES" "cache: second call is a hit"
+    rm -rf "$d"
+}
+
+test_cache_invalidated_when_dir_changes() {
+    local d; d="$(_mk_cached_tree)"
+    browser_cache_clear
+    browser_dir_entries "$d" 0
+    mkdir "$d/three"
+    browser_dir_entries "$d" 0
+    assert_equals "3" "${#BROWSER_SUBS[@]}" "cache: new folder seen after dir mtime changes"
+    rm -rf "$d"
+}
+
+test_cache_hidden_flag_is_separate_key() {
+    local d; d="$(_mk_cached_tree)"
+    mkdir "$d/.dot"; touch -t 200001010000 "$d"
+    browser_cache_clear
+    browser_dir_entries "$d" 0; local plain=${#BROWSER_SUBS[@]}
+    browser_dir_entries "$d" 1; local all=${#BROWSER_SUBS[@]}
+    assert_equals "2:3" "$plain:$all" "cache: hidden and non-hidden listings cached separately"
+    rm -rf "$d"
+}
+
+test_cache_clear_forces_rescan() {
+    local d; d="$(_mk_cached_tree)"
+    browser_cache_clear; BROWSER_CACHE_MISSES=0
+    browser_dir_entries "$d" 0
+    browser_cache_clear
+    browser_dir_entries "$d" 0
+    assert_equals "2" "$BROWSER_CACHE_MISSES" "cache: clear forces a re-scan"
+    rm -rf "$d"
+}
+
+test_cache_empty_dir() {
+    local d; d="$(mktemp -d)"
+    browser_cache_clear
+    browser_dir_entries "$d" 0
+    assert_equals "0:0" "${#BROWSER_SUBS[@]}:${#BROWSER_VIDS[@]}" "cache: empty dir yields empty arrays"
+    rm -rf "$d"
+}
+
+test_cache_bounded() {
+    local base i; base="$(mktemp -d)"
+    browser_cache_clear
+    BROWSER_CACHE_MAX=5
+    for i in 1 2 3 4 5 6 7 8; do mkdir "$base/d$i"; browser_dir_entries "$base/d$i" 0; done
+    local n=${#BROWSER_CACHE_MTIME[@]}
+    BROWSER_CACHE_MAX=200
+    assert_equals "1" "$(( n <= 5 ? 1 : 0 ))" "cache: size stays within BROWSER_CACHE_MAX"
+    rm -rf "$base"
+}

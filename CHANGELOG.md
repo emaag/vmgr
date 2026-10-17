@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shortcuts: `1-9` jump, `~` home, `-` previous directory, `R` recent directories (persisted in
   `~/.video-manager-recent-dirs`), `.` toggle hidden folders, `T` type a path with readline
   Tab completion and history. The browser starts in the most recently used directory.
+- Directory listings are cached per folder (validated by the folder's mtime), so revisiting a folder
+  or moving over it no longer re-scans the disk. Press `F` to force a refresh.
 - Enter now opens the highlighted folder; use `S` or Space to select the current one.
 - Falls back to a plain prompt when stdin/stdout is not a terminal.
 

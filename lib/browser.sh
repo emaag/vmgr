@@ -89,6 +89,62 @@ browser_recent_add() {
 }
 
 ################################################################################
+# LISTING CACHE
+################################################################################
+# Directory listings are cached per (directory, hidden-flag) and validated
+# against the directory's mtime, so revisiting a folder or moving the cursor
+# over it costs one stat instead of a re-scan. Entries are filled in the
+# current shell (never inside $(...)) so the cache survives between calls.
+
+BROWSER_CACHE_MAX=200
+declare -gA BROWSER_CACHE_MTIME=()
+declare -gA BROWSER_CACHE_SUBS=()
+declare -gA BROWSER_CACHE_VIDS=()
+BROWSER_CACHE_HITS=0
+BROWSER_CACHE_MISSES=0
+BROWSER_SUBS=()
+BROWSER_VIDS=()
+
+# Drop every cached listing (used by the browser's refresh key).
+browser_cache_clear() {
+    BROWSER_CACHE_MTIME=()
+    BROWSER_CACHE_SUBS=()
+    BROWSER_CACHE_VIDS=()
+}
+
+# Print $1's modification time in epoch seconds (GNU stat, then BSD stat).
+_browser_mtime() {
+    stat -L -c %Y "$1" 2>/dev/null || stat -L -f %m "$1" 2>/dev/null
+}
+
+# Fill BROWSER_SUBS (subfolder names) and BROWSER_VIDS (video file names) for
+# directory $1; $2 = 1 to include hidden folders. Served from cache when the
+# directory's mtime is unchanged.
+browser_dir_entries() {
+    local dir="$1" hidden="${2:-0}" key mtime
+    key="$dir|$hidden"
+    mtime="$(_browser_mtime "$dir")"
+
+    if [[ -n "$mtime" && "${BROWSER_CACHE_MTIME[$key]-}" == "$mtime" ]]; then
+        BROWSER_CACHE_HITS=$(( BROWSER_CACHE_HITS + 1 ))
+    else
+        BROWSER_CACHE_MISSES=$(( BROWSER_CACHE_MISSES + 1 ))
+        if (( ${#BROWSER_CACHE_MTIME[@]} >= BROWSER_CACHE_MAX )); then
+            browser_cache_clear
+        fi
+        BROWSER_CACHE_SUBS[$key]="$(browser_list_subdirs "$dir" "$hidden")"
+        BROWSER_CACHE_VIDS[$key]="$(browser_list_videos "$dir")"
+        # No mtime (stat failed) means never trust the entry on the next call
+        BROWSER_CACHE_MTIME[$key]="$mtime"
+    fi
+
+    BROWSER_SUBS=(); BROWSER_VIDS=()
+    [[ -n "${BROWSER_CACHE_SUBS[$key]}" ]] && mapfile -t BROWSER_SUBS <<< "${BROWSER_CACHE_SUBS[$key]}"
+    [[ -n "${BROWSER_CACHE_VIDS[$key]}" ]] && mapfile -t BROWSER_VIDS <<< "${BROWSER_CACHE_VIDS[$key]}"
+    return 0
+}
+
+################################################################################
 # INTERACTIVE BROWSER
 ################################################################################
 
@@ -186,10 +242,11 @@ _browser_fit() {
 # v video, m muted note, b blank.
 _browser_build_preview() {
     local dir="$1" show_hidden="$2" name
-    local -a subs=() vids=()
+    local -a subs vids
     rtext=(); rkind=()
-    mapfile -t subs < <(browser_list_subdirs "$dir" "$show_hidden")
-    mapfile -t vids < <(browser_list_videos "$dir")
+    browser_dir_entries "$dir" "$show_hidden"
+    subs=("${BROWSER_SUBS[@]}")
+    vids=("${BROWSER_VIDS[@]}")
 
     if (( ${#subs[@]} == 0 && ${#vids[@]} == 0 )); then
         rkind+=(m); rtext+=("(no folders or videos)")
@@ -216,8 +273,9 @@ _browser_interactive() {
 
     while true; do
         if (( reload )); then
-            mapfile -t dirs < <(browser_list_subdirs "$current_dir" "$show_hidden")
-            n_videos="$(browser_count_videos "$current_dir")"
+            browser_dir_entries "$current_dir" "$show_hidden"
+            dirs=("${BROWSER_SUBS[@]}")
+            n_videos=${#BROWSER_VIDS[@]}
             reload=0
             preview_path=""
         fi
@@ -328,7 +386,7 @@ _browser_interactive() {
         done
 
         printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→/Enter${COLOR_RESET} open  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} up  ${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} select here  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
-        printf '%s\033[K\n' "${COLOR_YELLOW}1-9${COLOR_RESET} jump  ${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path (Tab completes)  ${COLOR_YELLOW}.${COLOR_RESET} hidden"
+        printf '%s\033[K\n' "${COLOR_YELLOW}1-9${COLOR_RESET} jump  ${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path (Tab completes)  ${COLOR_YELLOW}.${COLOR_RESET} hidden  ${COLOR_YELLOW}F${COLOR_RESET} refresh"
         printf '%s\033[K' "${COLOR_RED}${msg}${COLOR_RESET}"
         printf '\033[J'
         msg=""
@@ -357,7 +415,8 @@ _browser_interactive() {
                     local came_from="${current_dir##*/}"
                     _browser_goto "$parent"
                     # Re-highlight the folder we just left
-                    mapfile -t dirs < <(browser_list_subdirs "$current_dir" "$show_hidden")
+                    browser_dir_entries "$current_dir" "$show_hidden"
+                    dirs=("${BROWSER_SUBS[@]}")
                     for (( i = 0; i < ${#dirs[@]}; i++ )); do
                         [[ "${dirs[$i]}" == "$came_from" ]] && { sel=$i; break; }
                     done
@@ -370,6 +429,11 @@ _browser_interactive() {
                 ;;
             q|Q|c|C|ESC)
                 return 1
+                ;;
+            f|F)
+                browser_cache_clear
+                reload=1; preview_path=""
+                msg="Refreshed"
                 ;;
             '.')
                 show_hidden=$(( 1 - show_hidden ))
