@@ -9,108 +9,55 @@ on:
 
 jobs:
   test:
-    name: Test Modules
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up Bash
-      run: |
-        bash --version
-
-    - name: Make scripts executable
-      run: |
-        chmod +x video-manager-ultimate.sh
-        chmod +x test-modules.sh
-        chmod +x test-comprehensive.sh
-        chmod +x lib/*.sh
-
-    - name: Run module tests
-      run: |
-        ./test-modules.sh
-
-    - name: Run comprehensive tests
-      run: |
-        ./test-comprehensive.sh
-
-    - name: Test version command
-      run: |
-        ./video-manager-ultimate.sh --version
-
-    - name: Test help command
-      run: |
-        ./video-manager-ultimate.sh --help
-
-    - name: Test dry-run mode
-      run: |
-        mkdir -p /tmp/test-vmgr
-        touch "/tmp/test-vmgr/test.mp4"
-        ./video-manager-ultimate.sh --dry-run rename /tmp/test-vmgr
-        rm -rf /tmp/test-vmgr
-
-  shellcheck:
-    name: ShellCheck Linting
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Install ShellCheck
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y shellcheck
-
-    - name: Run ShellCheck on main script
-      run: |
-        shellcheck -x video-manager-ultimate.sh || true
-
-    - name: Run ShellCheck on modules
-      run: |
-        shellcheck -x lib/*.sh || true
-
-    - name: Run ShellCheck on test scripts
-      run: |
-        shellcheck test-modules.sh || true
-        shellcheck test-comprehensive.sh || true
-
-    - name: Run ShellCheck on completion
-      run: |
-        shellcheck vmgr-completion.bash || true
-
-  compatibility:
-    name: Cross-Platform Compatibility
+    name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Set up Bash
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y jq
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
       run: |
-        bash --version
+        # Stock macOS bash is 3.2; the scripts need bash 4+ (associative arrays)
+        brew install bash jq coreutils
+        echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+        echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
 
-    - name: Make scripts executable
-      run: |
-        chmod +x video-manager-ultimate.sh
-        chmod +x test-modules.sh
-        chmod +x test-comprehensive.sh
-        chmod +x lib/*.sh
+    - name: Run test suite
+      run: bash tests/run_tests.sh
 
-    - name: Run module tests
-      run: |
-        ./test-modules.sh
-
-    - name: Run comprehensive tests
-      run: |
-        ./test-comprehensive.sh
-
-    - name: Test commands
+    - name: Test version and help
       run: |
         ./video-manager-ultimate.sh --version
         ./video-manager-ultimate.sh --help
+
+    - name: Test dry-run mode leaves files untouched
+      run: |
+        dir="$(mktemp -d)"
+        touch "$dir/foo - bar.mp4"
+        ./video-manager-ultimate.sh --dry-run rename "$dir"
+        ./video-manager-ultimate.sh --dry-run cleanup "$dir"
+        test -f "$dir/foo - bar.mp4"
+        rm -rf "$dir"
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run ShellCheck (errors fail the build)
+      run: |
+        sudo apt-get update && sudo apt-get install -y shellcheck
+        shellcheck -x -S error video-manager-ultimate.sh install.sh lib/*.sh tests/*.sh tests/*/*.sh vmgr-completion.bash
