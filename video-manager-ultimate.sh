@@ -26,6 +26,17 @@
 #
 ################################################################################
 
+# Require bash 4+ (associative arrays, ${var,,}, mapfile). Checked before
+# loading any module, using only syntax that bash 3.2 can parse.
+if [ -z "${BASH_VERSINFO:-}" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "ERROR: Video Manager requires bash 4.0 or newer (found ${BASH_VERSION:-unknown})." >&2
+    if [ "$(uname -s)" = "Darwin" ]; then
+        echo "macOS ships bash 3.2. Install a newer one with: brew install bash" >&2
+        echo "Then make sure it comes first in your PATH." >&2
+    fi
+    exit 1
+fi
+
 # Get script directory for module loading (resolve symlinks)
 SCRIPT_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SCRIPT_SOURCE" ]]; do
