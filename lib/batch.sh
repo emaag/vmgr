@@ -51,14 +51,14 @@ batch_process_folders() {
         # Execute operation based on type
         case "$operation" in
             "rename")
-                if rename_files_in_directory "$folder" false; then
+                if rename_files_in_directory "$folder" "$DRY_RUN"; then
                     ((success++))
                 else
                     ((failed++))
                 fi
                 ;;
             "flatten")
-                if flatten_directory "$folder" false; then
+                if flatten_directory "$folder" "$DRY_RUN"; then
                     ((success++))
                 else
                     ((failed++))
@@ -96,22 +96,24 @@ batch_process_folders() {
 # BATCH WRAPPERS (for interactive menu)
 ################################################################################
 
-# Batch flatten multiple folders (interactive)
-batch_flatten_interactive() {
-    log_info "Batch Flatten Multiple Folders"
+# Prompt for directories, then run a batch operation on them
+# Args: $1 - operation (rename|flatten|cleanup|duplicates), $2 - prompt title
+_batch_interactive() {
+    local operation="$1"
+    local title="$2"
+
+    log_info "$title"
     echo ""
-    echo "Enter directories to flatten (one per line, empty line to finish):"
+    echo "Enter directories (one per line, empty line to finish):"
     echo ""
 
     local -a folders
+    local dir
     while true; do
-        read -p "Directory: " dir
+        read -r -p "Directory: " dir
         [[ -z "$dir" ]] && break
 
-        dir=$(validate_directory "$dir")
-        if [[ $? -eq 0 ]]; then
-            folders+=("$dir")
-        fi
+        dir=$(validate_directory "$dir") && folders+=("$dir")
     done
 
     if [[ ${#folders[@]} -eq 0 ]]; then
@@ -119,34 +121,12 @@ batch_flatten_interactive() {
         return 1
     fi
 
-    batch_process_folders "flatten" "${folders[@]}"
+    batch_process_folders "$operation" "${folders[@]}"
 }
 
-# Batch cleanup multiple folders (interactive)
-batch_cleanup_interactive() {
-    log_info "Batch Full Cleanup (Multiple Folders)"
-    echo ""
-    echo "Enter directories to clean (one per line, empty line to finish):"
-    echo ""
-
-    local -a folders
-    while true; do
-        read -p "Directory: " dir
-        [[ -z "$dir" ]] && break
-
-        dir=$(validate_directory "$dir")
-        if [[ $? -eq 0 ]]; then
-            folders+=("$dir")
-        fi
-    done
-
-    if [[ ${#folders[@]} -eq 0 ]]; then
-        log_warning "No directories specified"
-        return 1
-    fi
-
-    batch_process_folders "cleanup" "${folders[@]}"
-}
+batch_rename_interactive()  { _batch_interactive "rename"  "Batch Rename Multiple Folders"; }
+batch_flatten_interactive() { _batch_interactive "flatten" "Batch Flatten Multiple Folders"; }
+batch_cleanup_interactive() { _batch_interactive "cleanup" "Batch Full Cleanup (Multiple Folders)"; }
 
 ################################################################################
 # WORKFLOWS
@@ -160,9 +140,9 @@ workflow_new_collection() {
     log_info "This will: flatten → rename → deduplicate"
 
     echo ""
-    flatten_directory "$directory" false
+    flatten_directory "$directory" "$DRY_RUN"
     echo ""
-    rename_files_in_directory "$directory" false
+    rename_files_in_directory "$directory" "$DRY_RUN"
     echo ""
     find_duplicates "$directory" "report"
 
@@ -177,7 +157,7 @@ workflow_deep_clean() {
     log_info "This will: rename → deduplicate"
 
     echo ""
-    rename_files_in_directory "$directory" false
+    rename_files_in_directory "$directory" "$DRY_RUN"
     echo ""
     find_duplicates "$directory" "report"
 

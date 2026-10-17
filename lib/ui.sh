@@ -634,7 +634,7 @@ _handle_batch_choice() {
     case "$choice" in
         1)
             start_operation "Batch Rename Multiple Folders"
-            batch_process_folders
+            batch_rename_interactive
             end_operation
             read -p "Press Enter to continue..."
             return 0

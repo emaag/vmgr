@@ -399,7 +399,7 @@ parse_arguments() {
             ;;
         batch)
             start_operation "Batch Processing"
-            batch_process_folders
+            batch_rename_interactive
             end_operation
             ;;
         organize)
