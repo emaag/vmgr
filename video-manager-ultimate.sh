@@ -469,7 +469,7 @@ startup_check() {
         echo -e "${COLOR_YELLOW}${SYMBOL_STAR} Quick Tips:${COLOR_RESET}"
         echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Try ${COLOR_WHITE}Dry Run${COLOR_RESET} mode first to preview changes"
         echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Check ${COLOR_WHITE}System Information${COLOR_RESET} in Utilities menu"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} View ${COLOR_WHITE}CROSS-PLATFORM.md${COLOR_RESET} for setup help"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} View ${COLOR_WHITE}docs/CROSS-PLATFORM.md${COLOR_RESET} for setup help"
         echo ""
         read -p "Press Enter to continue..."
     fi

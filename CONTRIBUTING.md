@@ -155,7 +155,6 @@ If modifying or adding modules:
 1. **One module = One responsibility**
 2. **Document dependencies** in module header
 3. **Add to test suite**
-4. **Update MODULARIZATION-PROGRESS.md** if needed
 
 ---
 

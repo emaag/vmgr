@@ -34,7 +34,7 @@ which find sed awk grep
 
 You have three files:
 - `video-manager-ultimate.sh` - The main script (48 KB)
-- `VIDEO-MANAGER-BASH-GUIDE.md` - Complete user guide (28 KB)
+- `USER-GUIDE.md` - Complete user guide (28 KB)
 - `QUICK-REFERENCE.md` - Quick reference card (7.4 KB)
 
 ```bash
@@ -49,7 +49,7 @@ chmod +x ~/bin/vmgr
 
 # Move documentation to a safe place
 mkdir -p ~/Documents/VideoManager
-cp VIDEO-MANAGER-BASH-GUIDE.md ~/Documents/VideoManager/
+cp USER-GUIDE.md ~/Documents/VideoManager/
 cp QUICK-REFERENCE.md ~/Documents/VideoManager/
 ```
 
@@ -330,7 +330,7 @@ This will:
 ## 📖 Documentation Quick Links
 
 ### Complete User Guide
-- Location: `~/Documents/VideoManager/VIDEO-MANAGER-BASH-GUIDE.md`
+- Location: `~/Documents/VideoManager/USER-GUIDE.md`
 - 28 KB, ~100 pages equivalent
 - Comprehensive reference for all features
 
@@ -583,7 +583,7 @@ vmgr --version
 ```
 
 ### Documentation
-- Full Guide: `~/Documents/VideoManager/VIDEO-MANAGER-BASH-GUIDE.md`
+- Full Guide: `~/Documents/VideoManager/USER-GUIDE.md`
 - Quick Ref: `~/Documents/VideoManager/QUICK-REFERENCE.md`
 
 ### Logs

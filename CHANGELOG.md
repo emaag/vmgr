@@ -34,7 +34,7 @@ This release represents a **complete refactoring** of the video manager from a m
 
 - **Comprehensive Test Suite** - `test-modules.sh` with 26 tests (100% pass rate)
 - **Enhanced Tab Completion** - Updated for all commands including organize operations
-- **Improved Documentation** - Added MODULARIZATION-PROGRESS.md tracking the journey
+- **Improved Documentation** - Added modularization progress tracking
 
 ### Changed
 
@@ -143,7 +143,5 @@ For users upgrading from v1.2.0:
 
 ## Links
 
-- [Modularization Progress Report](MODULARIZATION-PROGRESS.md)
-- [Modularization Plan](MODULARIZATION-PLAN.md)
-- [Installation Guide](INSTALLATION-GUIDE.md)
-- [Tab Completion Guide](TAB-COMPLETION.md)
+- [Installation Guide](docs/INSTALLATION-GUIDE.md)
+- [Tab Completion Guide](docs/TAB-COMPLETION.md)

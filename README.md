@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
 [![Tests](https://img.shields.io/badge/tests-158%2F158%20passing-success.svg)](tests/)
-[![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](MODULARIZATION-PROGRESS.md)
+[![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
 ### Status at a glance — v1.3.0: Modular Architecture + Subtitle Generation
@@ -21,7 +21,7 @@
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
 | 158-test automated suite (full integration coverage) | ✅ Shipped |
 
-[Read about the modularization journey →](MODULARIZATION-PROGRESS.md)
+[See the changelog →](CHANGELOG.md)
 
 ## Table of Contents
 
@@ -205,12 +205,14 @@ Or use command-line flags:
 
 ## Documentation
 
-- **README.md** — this file (overview and quick reference)
-- **INSTALLATION-GUIDE.md** — setup instructions and troubleshooting
-- **VIDEO-MANAGER-BASH-GUIDE.md** — complete feature documentation
-- **QUICK-REFERENCE.md** — command cheat sheet
-- **ADVANCED-FEATURES-v1.2.md** — advanced configuration guide
-- **SUBTITLE-FEATURE-GUIDE.md** — subtitle generation guide
+- **README.md** — This file (overview and quick reference)
+- **docs/INSTALLATION-GUIDE.md** — Setup instructions and troubleshooting
+- **docs/USER-GUIDE.md** — Complete feature documentation
+- **docs/QUICK-REFERENCE.md** — Command cheat sheet
+- **docs/SUBTITLE-FEATURE-GUIDE.md** — Subtitle generation guide
+- **docs/CROSS-PLATFORM.md** — Platform-specific setup
+- **docs/TAB-COMPLETION.md** — Shell tab completion
+- **CHANGELOG.md** / **CONTRIBUTING.md**
 
 ## Architectural Decisions
 

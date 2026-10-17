@@ -397,7 +397,7 @@ ffmpeg -v error -i "file.mp4" -f null - 2>&1
 ---
 
 **Need More Help?**
-- Full guide: `VIDEO-MANAGER-BASH-GUIDE.md`
+- Full guide: `USER-GUIDE.md`
 - Interactive menu: `vmgr` (then navigate to Utilities)
 - Logs: `~/.video-manager-logs/`
 
