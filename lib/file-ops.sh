@@ -61,7 +61,7 @@ remove_dashes() {
 # Fix spacing after brackets
 fix_bracket_spacing() {
     local filename="$1"
-    echo "$filename" | sed -E 's/\](\S)/] \1/g'
+    echo "$filename" | sed -E 's/\]([^[:space:]])/] \1/g'
 }
 
 # Full cleanup pipeline
