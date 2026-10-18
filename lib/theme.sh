@@ -368,6 +368,18 @@ ui_ask() {
     IFS= read -r "$1" || printf -v "$1" '%s' ""
 }
 
+# ui_ask_secret VAR TEXT: like ui_ask, but nothing is echoed while typing (for
+# secrets). Falls back to a plain read when stdin is not a terminal.
+ui_ask_secret() {
+    printf '  %s%s%s %s ' "$UI_ACCENT" "$UI_PROMPT" "$COLOR_RESET" "$2"
+    if [[ -t 0 ]]; then
+        IFS= read -rs "$1" || printf -v "$1" '%s' ""
+        printf '\n'
+    else
+        IFS= read -r "$1" || printf -v "$1" '%s' ""
+    fi
+}
+
 # ui_confirm QUESTION [DEFAULT]: single-keypress yes/no. DEFAULT is y or n
 # (n if omitted) and is what Enter picks; Esc means no. Sets REPLY to y or n and
 # returns 0 for yes. Reads a whole line when stdin is not a terminal.

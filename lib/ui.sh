@@ -1594,6 +1594,11 @@ show_reddit_menu() {
 
     ui_title "REDDIT IMAGE DOWNLOADER"
     ui_item 1 "Download Images from Subreddit"
+    if reddit_api_configured; then
+        ui_item 2 "Reddit API Setup" "API login saved: galleries, full speed"
+    else
+        ui_item 2 "Reddit API Setup" "Not set up: no galleries, slow"
+    fi
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
@@ -1602,8 +1607,16 @@ show_reddit_menu() {
 _handle_reddit_choice() {
     local choice="$1"
     case "$choice" in
+        2)
+            reddit_setup_interactive
+            ui_pause
+            return 0
+            ;;
         1)
             show_screen "Reddit Image Downloader"
+            if ! reddit_api_configured; then
+                printf '  %sTip: Reddit API Setup (option 2) unlocks galleries and removes the one-request-a-minute limit.%s\n\n' "$UI_DIM" "$COLOR_RESET"
+            fi
             ui_ask subreddit "Subreddit name (e.g. EarthPorn)"
             if [[ -z "$subreddit" ]]; then
                 log_error "No subreddit specified"

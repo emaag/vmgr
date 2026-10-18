@@ -693,8 +693,20 @@ it they are saved without sound. Files that already exist are skipped. Requires 
 | Galleries | All images downloaded | **Skipped** (the feed does not list a gallery's images); a summary tells you how many |
 | Images / videos | Yes | Yes |
 
-To use the API, create a "script" app at <https://www.reddit.com/prefs/apps> (redirect URI can be
-`http://localhost:8080`), then create `~/.vmgr-reddit.conf` owned by you:
+**Setting up the API (guided).** Reddit menu **[2] Reddit API Setup**, or `vmgr reddit-setup`:
+
+1. It shows the three steps: open <https://www.reddit.com/prefs/apps> (it can open the page for you), click "create another app...",
+   choose type **script** with redirect URI `http://localhost:8080`.
+2. Paste the **client ID** (the short text under the app name) and the **secret** (typed hidden, never shown or logged).
+3. It **checks the login with a real request to Reddit before saving anything**. If Reddit rejects it, it says what to look at and
+   lets you try again; nothing is written. When it works, `~/.vmgr-reddit.conf` is created readable only by you (mode 600), and
+   galleries and normal speed apply from the next download.
+
+When credentials are already saved the same screen can **test** them, **replace** them or **delete** them. Other settings in the
+file (`REDDIT_RATE_LIMIT_DELAY`, `REDDIT_MAX_RETRIES`, `REDDIT_MAX_WAIT`) are kept. The credentials are handed to `curl` on stdin,
+so they never show up in the process list. The Reddit menu shows whether a login is saved, and a download without one reminds you.
+
+To do it by hand instead, create `~/.vmgr-reddit.conf` owned by you:
 
 ```bash
 cat > ~/.vmgr-reddit.conf <<'EOF'

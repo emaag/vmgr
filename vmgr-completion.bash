@@ -9,7 +9,7 @@ _vmgr_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Main commands
-    local commands="rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch catalog catalog-list catalog-search catalog-duplicates catalog-report"
+    local commands="rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch catalog catalog-list catalog-search catalog-duplicates catalog-report reddit-setup"
 
     # Special commands (prefixed with --)
     local special_commands="--organize --undo-organize --list-undo"

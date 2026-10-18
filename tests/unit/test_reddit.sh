@@ -327,3 +327,159 @@ test_a_redirect_means_the_subreddit_does_not_exist() {
     assert_contains "was not found" "$msg" "explain 302: not found"
     assert_contains "redirected to its search page" "$msg" "explain 302: says what Reddit did"
 }
+
+# ── API setup (offline: a fake curl plays Reddit's token endpoint) ────────────
+
+GOOD_ID="goodClientId1234"; GOOD_SECRET="goodSecretValue1234567890"
+
+# Records its arguments and the stdin config, then answers by credentials.
+_fake_token_curl() {
+    unset -f curl
+    curl() {
+        local out="" want_code=false stdin_cfg
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                -o) out="$2"; shift 2 ;;
+                -w) want_code=true; shift 2 ;;
+                -K) stdin_cfg="$(cat)"; shift 2 ;;
+                *) echo "$1" >> "$TEST_TMPDIR/curl_args"; shift ;;
+            esac
+        done
+        echo "$stdin_cfg" > "$TEST_TMPDIR/curl_stdin"
+        local code=401 body='{"error":401}'
+        case "$stdin_cfg" in
+            *"$GOOD_ID:$GOOD_SECRET"*) code=200; body='{"access_token":"tok123"}' ;;
+            *neterr*) code=000; body='' ;;
+            *server500*) code=500; body='' ;;
+        esac
+        [[ -n "$out" ]] && printf '%s' "$body" > "$out"
+        if $want_code; then printf '%s' "$code"; else [[ "$code" == 200 ]] && printf '%s' "$body"; fi
+        [[ "$code" == 200 || -n "$out" ]]
+    }
+}
+_cfg_setup() {
+    _SAVED_CURL="$(declare -f curl 2>/dev/null)"   # other tests in this file define their own fake curl
+    TEST_TMPDIR="$(mktemp -d)"
+    REDDIT_CONFIG_FILE="$TEST_TMPDIR/.vmgr-reddit.conf"
+    USER="${USER:-$(id -un)}"
+}
+_cfg_teardown() {
+    unset -f curl
+    [[ -n "${_SAVED_CURL:-}" ]] && eval "$_SAVED_CURL"
+    _SAVED_CURL=""
+    [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPDIR"
+    source "$LIB_DIR/reddit.sh"
+    source "$LIB_DIR/logging.sh"
+    stub_logging
+}
+
+test_client_id_and_secret_shapes() {
+    _reddit_valid_client_id "abcDEF123_-xyz" && _reddit_valid_client_secret "abcDEF123_-xyz0123456789"
+    assert_equals "0" "$?" "shape: plausible id and secret are accepted"
+    local bad
+    for bad in 'short' 'has space1234' 'semi;colon1234' 'quo"te1234567' '$(rm)12345678' ''; do
+        _reddit_valid_client_id "$bad"
+        assert_not_equals "0" "$?" "shape: id '$bad' is refused"
+    done
+    _reddit_valid_client_secret "tooshort"
+    assert_not_equals "0" "$?" "shape: a short secret is refused"
+}
+
+test_api_configured_looks_at_the_file() {
+    _cfg_setup
+    reddit_api_configured; assert_not_equals "0" "$?" "configured: no file"
+    echo 'REDDIT_CLIENT_ID="x"' > "$REDDIT_CONFIG_FILE"
+    reddit_api_configured; assert_not_equals "0" "$?" "configured: only an id is not enough"
+    printf 'REDDIT_CLIENT_ID="x"\nREDDIT_CLIENT_SECRET="y"\n' > "$REDDIT_CONFIG_FILE"
+    reddit_api_configured; assert_equals "0" "$?" "configured: id and secret present"
+    _cfg_teardown
+}
+
+test_credentials_test_reports_each_outcome() {
+    _cfg_setup; _fake_token_curl
+    assert_equals "ok" "$(_reddit_test_credentials "$GOOD_ID" "$GOOD_SECRET")" "test: good credentials"
+    assert_equals "rejected" "$(_reddit_test_credentials "wrongClientId999" "wrongSecret0123456789")" "test: wrong credentials"
+    assert_equals "network" "$(_reddit_test_credentials "neterr" "neterrneterrneterr")" "test: no connection"
+    assert_equals "error:500" "$(_reddit_test_credentials "server500" "server500server500")" "test: unexpected status"
+    _cfg_teardown
+}
+
+test_the_secret_never_appears_on_the_curl_command_line() {
+    _cfg_setup; _fake_token_curl
+    : > "$TEST_TMPDIR/curl_args"
+    _reddit_test_credentials "$GOOD_ID" "$GOOD_SECRET" >/dev/null
+    local args; args="$(cat "$TEST_TMPDIR/curl_args")"
+    [[ "$args" != *"$GOOD_SECRET"* && "$args" != *"$GOOD_ID"* ]]
+    assert_equals "0" "$?" "test: neither id nor secret is a curl argument"
+    assert_contains "user = " "$(cat "$TEST_TMPDIR/curl_stdin")" "test: the credentials travel on stdin"
+    # the real token request used by downloads is covered the same way
+    printf 'REDDIT_CLIENT_ID="%s"\nREDDIT_CLIENT_SECRET="%s"\n' "$GOOD_ID" "$GOOD_SECRET" > "$REDDIT_CONFIG_FILE"
+    : > "$TEST_TMPDIR/curl_args"; REDDIT_ACCESS_TOKEN=""
+    _reddit_get_access_token
+    assert_equals "tok123" "$REDDIT_ACCESS_TOKEN" "token: still obtained with credentials on stdin"
+    args="$(cat "$TEST_TMPDIR/curl_args")"
+    [[ "$args" != *"$GOOD_SECRET"* ]]
+    assert_equals "0" "$?" "token: the secret is not a curl argument"
+    _cfg_teardown
+}
+
+test_write_credentials_creates_a_private_file() {
+    _cfg_setup
+    _reddit_write_credentials "$GOOD_ID" "$GOOD_SECRET"
+    assert_equals "0" "$?" "write: succeeds"
+    assert_contains "REDDIT_CLIENT_ID=\"$GOOD_ID\"" "$(cat "$REDDIT_CONFIG_FILE")" "write: the id is saved"
+    assert_contains "REDDIT_CLIENT_SECRET=\"$GOOD_SECRET\"" "$(cat "$REDDIT_CONFIG_FILE")" "write: the secret is saved"
+    local mode; mode="$(stat -c '%a' "$REDDIT_CONFIG_FILE" 2>/dev/null || stat -f '%Lp' "$REDDIT_CONFIG_FILE")"
+    assert_equals "600" "$mode" "write: readable only by the owner"
+    assert_equals "0" "$(ls "$TEST_TMPDIR" | grep -c 'conf\.')" "write: no temp file is left behind"
+    _cfg_teardown
+}
+
+test_write_credentials_keeps_other_settings_and_replaces_old_credentials() {
+    _cfg_setup
+    printf 'REDDIT_CLIENT_ID="old"\nREDDIT_CLIENT_SECRET="old"\nREDDIT_RATE_LIMIT_DELAY=3\n' > "$REDDIT_CONFIG_FILE"
+    _reddit_write_credentials "$GOOD_ID" "$GOOD_SECRET"
+    local text; text="$(cat "$REDDIT_CONFIG_FILE")"
+    assert_contains "REDDIT_RATE_LIMIT_DELAY=3" "$text" "write: other settings are kept"
+    assert_equals "1" "$(grep -c '^REDDIT_CLIENT_ID=' "$REDDIT_CONFIG_FILE")" "write: one id line, the old one is replaced"
+    assert_equals "1" "$(grep -c "$GOOD_ID" "$REDDIT_CONFIG_FILE")" "write: it is the new id"
+    _cfg_teardown
+}
+
+test_write_credentials_refuses_anything_that_could_be_shell_code() {
+    _cfg_setup
+    local rc=0
+    _reddit_write_credentials 'abc"; touch /tmp/pwned; "' "$GOOD_SECRET" || rc=$?
+    assert_not_equals "0" "$rc" "write: an id with shell syntax is refused"
+    assert_file_not_exists "$REDDIT_CONFIG_FILE" "write: nothing is written for a refused value"
+    _cfg_teardown
+}
+
+test_remove_credentials() {
+    _cfg_setup
+    printf 'REDDIT_CLIENT_ID="a"\nREDDIT_CLIENT_SECRET="b"\nREDDIT_RATE_LIMIT_DELAY=3\n' > "$REDDIT_CONFIG_FILE"
+    _reddit_remove_credentials
+    assert_file_exists "$REDDIT_CONFIG_FILE" "remove: the file stays while it has other settings"
+    assert_equals "0" "$(grep -c 'CLIENT' "$REDDIT_CONFIG_FILE")" "remove: the credentials are gone"
+    assert_contains "REDDIT_RATE_LIMIT_DELAY=3" "$(cat "$REDDIT_CONFIG_FILE")" "remove: the other setting survives"
+    printf 'REDDIT_CLIENT_ID="a"\nREDDIT_CLIENT_SECRET="b"\n# note\n' > "$REDDIT_CONFIG_FILE"
+    _reddit_remove_credentials
+    assert_file_not_exists "$REDDIT_CONFIG_FILE" "remove: an otherwise empty file is deleted"
+    _cfg_teardown
+}
+
+test_explain_test_messages() {
+    assert_contains "client ID is the short text" "$(_reddit_explain_test rejected)" "explain: rejected tells you where to look"
+    assert_contains "Could not reach Reddit" "$(_reddit_explain_test network)" "explain: network"
+    assert_contains "500" "$(_reddit_explain_test error:500)" "explain: other status"
+}
+
+test_setup_needs_a_terminal() {
+    _cfg_setup
+    log_error() { echo "ERROR: $*"; }
+    local out rc=0
+    out="$(reddit_setup_interactive 2>&1 < /dev/null)" || rc=$?
+    assert_equals "1" "$rc" "setup: refuses to run without a terminal"
+    assert_contains "needs a terminal" "$out" "setup: says why and how to do it by hand"
+    _cfg_teardown
+}

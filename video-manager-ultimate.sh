@@ -135,6 +135,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     catalog-duplicates      Find duplicate files across all cataloged drives
     catalog-report [file]   Write a text report of the catalog
     reddit <subreddit> <dir> [max]  Download images from a subreddit
+    reddit-setup            Guided setup of Reddit API credentials (galleries, full speed)
 
 ${COLOR_BOLD}REDDIT OPTIONS:${COLOR_RESET}
     --sort <sort>           Listing sort: hot, new, top, rising, controversial (default: hot)
@@ -320,6 +321,10 @@ parse_arguments() {
                 command="empty-trash"
                 shift
                 ;;
+            reddit-setup)
+                command="reddit-setup"
+                shift
+                ;;
             catalog-list|catalog-duplicates)
                 command="$1"
                 shift
@@ -398,7 +403,7 @@ parse_arguments() {
     fi
 
     # Validate directory for commands that need it
-    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "catalog-list" && "$command" != "catalog-search" && "$command" != "catalog-duplicates" && "$command" != "catalog-report" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
+    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "reddit-setup" && "$command" != "catalog-list" && "$command" != "catalog-search" && "$command" != "catalog-duplicates" && "$command" != "catalog-report" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
             show_usage
@@ -457,6 +462,9 @@ parse_arguments() {
             ;;
         empty-trash)
             empty_trash
+            ;;
+        reddit-setup)
+            reddit_setup_interactive
             ;;
         catalog)
             start_operation "Catalog: $(basename "$directory")"

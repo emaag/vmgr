@@ -159,7 +159,8 @@ vmgr reddit pics ~/Pictures/pics 50 --sort top --time week
 ```
 
 - Without `~/.vmgr-reddit.conf` it uses the public RSS feed: slower (~1 request/min) and **galleries are skipped**.
-- With API credentials (`REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`) galleries are downloaded too.
+- With API credentials galleries are downloaded too and the rate limit goes away. Set them up with `vmgr reddit-setup`
+  (Reddit menu > 2): it guides you, checks the login with Reddit, and saves `~/.vmgr-reddit.conf` privately.
 - Install `ffmpeg` to merge Reddit video and audio. See the User Guide for credential setup.
 
 ---

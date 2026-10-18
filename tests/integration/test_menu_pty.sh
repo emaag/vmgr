@@ -16,6 +16,8 @@ pid, fd = pty.fork()
 if pid == 0:
     os.environ['TERM'] = 'xterm-256color'
     os.environ['COLUMNS'] = '100'
+    if os.environ.get('DRV_PATH'):
+        os.environ['PATH'] = os.environ['DRV_PATH'] + ':' + os.environ['PATH']
     os.execvp('bash', ['bash', script, '-i'])
 
 def drain(timeout):
@@ -31,7 +33,8 @@ def drain(timeout):
     return out.decode(errors='replace')
 
 log = drain(2.0)
-for k in re.findall(rb'\x1b\[[A-D]|.', keys, re.S):
+# Arrow sequences and short keys go one at a time; long typed text in one write
+for k in re.findall(rb'\x1b\[[A-D]|[^\x1b\r]{8,}|.', keys, re.S):
     os.write(fd, k)
     time.sleep(0.4)
     log += drain(0.3)
@@ -121,5 +124,78 @@ test_pty_batch_accept_renames() {
     mkdir "$TEST_TMPDIR/vids"; touch "$TEST_TMPDIR/vids/studio one.mp4"
     DRV_FIND='Results' _drive "171t$TEST_TMPDIR/vids\\r\\ry" >/dev/null
     assert_file_exists "$TEST_TMPDIR/vids/[Studio] one.mp4" "batch: accepting the confirm renames the files"
+    _teardown
+}
+
+# ── Reddit API setup ──────────────────────────────────────────────────────────
+
+_setup_reddit_stub() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/bin"
+    cat > "$TEST_TMPDIR/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+out=""; want=false; cfg=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o) out="$2"; shift 2 ;;
+        -w) want=true; shift 2 ;;
+        -K) cfg="$(cat)"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+code=401; body='{"error":401}'
+case "$cfg" in *"goodClientId1234:goodSecretValue1234567890"*) code=200; body='{"access_token":"tok"}' ;; esac
+[[ -n "$out" ]] && printf '%s' "$body" > "$out"
+$want && printf '%s' "$code"
+exit 0
+STUB
+    chmod +x "$TEST_TMPDIR/bin/curl"
+    CONF="$TEST_TMPDIR/.vmgr-reddit.conf"
+}
+
+test_pty_reddit_menu_shows_the_api_status() {
+    _setup_reddit_stub
+    assert_equals "1" "$(DRV_FIND='Not set up: no galleries' DRV_PATH="$TEST_TMPDIR/bin" _drive '7')" "reddit menu: says the API is not set up"
+    printf 'REDDIT_CLIENT_ID="x"\nREDDIT_CLIENT_SECRET="y"\n' > "$CONF"
+    assert_equals "1" "$(DRV_FIND='API login saved' DRV_PATH="$TEST_TMPDIR/bin" _drive '7')" "reddit menu: says a login is saved"
+    _teardown
+}
+
+test_pty_reddit_setup_saves_working_credentials() {
+    _setup_reddit_stub
+    local seen
+    seen="$(DRV_FIND='Reddit login works' DRV_PATH="$TEST_TMPDIR/bin" _drive '72ngoodClientId1234\rgoodSecretValue1234567890\r')"
+    assert_equals "1" "$seen" "reddit setup: reports the login works"
+    assert_file_exists "$CONF" "reddit setup: the credentials file is written"
+    assert_contains 'REDDIT_CLIENT_ID="goodClientId1234"' "$(cat "$CONF")" "reddit setup: the id is saved"
+    assert_contains 'REDDIT_CLIENT_SECRET="goodSecretValue1234567890"' "$(cat "$CONF")" "reddit setup: the secret is saved"
+    local mode; mode="$(stat -c '%a' "$CONF" 2>/dev/null || stat -f '%Lp' "$CONF")"
+    assert_equals "600" "$mode" "reddit setup: the file is private"
+    _teardown
+}
+
+test_pty_reddit_setup_does_not_echo_the_secret() {
+    _setup_reddit_stub
+    local shown
+    shown="$(DRV_FIND='goodSecretValue1234567890' DRV_PATH="$TEST_TMPDIR/bin" _drive '72ngoodClientId1234\rgoodSecretValue1234567890\r')"
+    assert_equals "0" "$shown" "reddit setup: the secret never appears on the screen"
+    _teardown
+}
+
+test_pty_reddit_setup_rejected_credentials_are_not_saved() {
+    _setup_reddit_stub
+    local seen
+    seen="$(DRV_FIND='Reddit rejected these credentials' DRV_PATH="$TEST_TMPDIR/bin" _drive '72nwrongClientId999\rwrongSecretValue0123456789\rn')"
+    assert_equals "1" "$seen" "reddit setup: explains a rejected login"
+    assert_file_not_exists "$CONF" "reddit setup: rejected credentials are not written"
+    _teardown
+}
+
+test_pty_reddit_setup_can_test_and_delete_saved_credentials() {
+    _setup_reddit_stub
+    printf 'REDDIT_CLIENT_ID="goodClientId1234"\nREDDIT_CLIENT_SECRET="goodSecretValue1234567890"\n' > "$CONF"
+    assert_equals "1" "$(DRV_FIND='The saved credentials work' DRV_PATH="$TEST_TMPDIR/bin" _drive '72t')" "reddit setup: tests the saved login"
+    DRV_PATH="$TEST_TMPDIR/bin" _drive '72dy' >/dev/null
+    assert_file_not_exists "$CONF" "reddit setup: delete removes the credentials"
     _teardown
 }

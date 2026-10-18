@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Reddit API Setup** (Reddit menu > 2, or `vmgr reddit-setup`): a guided screen for the credentials that unlock galleries and
+  full-speed downloads. It shows the steps for creating a "script" app (and can open the page), takes the client ID and the secret
+  (typed hidden, never echoed or logged), **checks the login with a real token request before saving**, explains a rejection and
+  lets you retry, and writes `~/.vmgr-reddit.conf` readable only by you, keeping any other settings in it. With a login already
+  saved it can test, replace or delete it. The Reddit menu shows whether a login is saved, and the download screen and the
+  "galleries skipped" message point to the setup.
+
+### Changed
+- The Reddit token request passes the credentials to `curl` on stdin instead of `-u`, so they no longer appear in the process list.
+
 ### Fixed
 - **Reddit downloader left empty folders and unclear failures.** The output folder is now created when the first file is about to be
   saved, so a failed request (HTTP 404 for a missing, banned, private or quarantined subreddit; Reddit's 302 redirect for one that

@@ -63,15 +63,212 @@ _reddit_load_credentials() {
 _reddit_get_access_token() {
     _reddit_load_credentials || return 1
 
+    # The credentials go to curl on stdin (-K -), not as -u, so they never appear
+    # in the process list.
     local response
-    response=$(curl -sf -A "$REDDIT_USER_AGENT" \
-        -u "${REDDIT_CLIENT_ID}:${REDDIT_CLIENT_SECRET}" \
+    response=$(printf 'user = "%s:%s"\n' "$REDDIT_CLIENT_ID" "$REDDIT_CLIENT_SECRET" | curl -sf -K - -A "$REDDIT_USER_AGENT" \
         -d "grant_type=client_credentials" \
         https://www.reddit.com/api/v1/access_token 2>/dev/null)
     [[ -z "$response" ]] && return 1
 
     REDDIT_ACCESS_TOKEN=$(echo "$response" | jq -r '.access_token // empty' 2>/dev/null)
     [[ -n "$REDDIT_ACCESS_TOKEN" ]]
+}
+
+################################################################################
+# API SETUP
+################################################################################
+
+# Reddit client IDs are about 14-22 characters and secrets about 26-30, both
+# from [A-Za-z0-9_-]. The ranges are loose; Reddit has the final say.
+_reddit_valid_client_id()     { [[ "$1" =~ ^[A-Za-z0-9_-]{10,40}$ ]]; }
+_reddit_valid_client_secret() { [[ "$1" =~ ^[A-Za-z0-9_-]{16,60}$ ]]; }
+
+# Are credentials saved? (Looks at the file only; does not test them.)
+reddit_api_configured() {
+    [[ -f "$REDDIT_CONFIG_FILE" ]] \
+        && grep -qE '^[[:space:]]*REDDIT_CLIENT_ID=' "$REDDIT_CONFIG_FILE" \
+        && grep -qE '^[[:space:]]*REDDIT_CLIENT_SECRET=' "$REDDIT_CONFIG_FILE"
+}
+
+# Ask Reddit for a token with the given credentials. Prints one word:
+#   ok | rejected | network | error:<http status>
+_reddit_test_credentials() {
+    local id="$1" secret="$2" body code
+    body="$(mktemp)" || { echo "error:tmp"; return 1; }
+    code="$(printf 'user = "%s:%s"\n' "$id" "$secret" | curl -s -K - -m 20 -o "$body" -w '%{http_code}' \
+        -A "$REDDIT_USER_AGENT" -d "grant_type=client_credentials" \
+        https://www.reddit.com/api/v1/access_token 2>/dev/null)"
+    case "$code" in
+        200)
+            if [[ -n "$(jq -r '.access_token // empty' "$body" 2>/dev/null)" ]]; then echo ok; else echo rejected; fi ;;
+        401|403) echo rejected ;;
+        000|"")  echo network ;;
+        *)       echo "error:$code" ;;
+    esac
+    rm -f "$body"
+}
+
+# Save the credentials to ~/.vmgr-reddit.conf (mode 600), keeping any other
+# settings already in the file. Both values are checked first, so nothing that
+# could be shell code ever reaches a file that is later sourced.
+_reddit_write_credentials() {
+    local id="$1" secret="$2" file="$REDDIT_CONFIG_FILE" tmp
+    _reddit_valid_client_id "$id" && _reddit_valid_client_secret "$secret" || return 1
+    tmp="$(umask 077; mktemp "${file}.XXXXXX")" || return 1
+    if [[ -f "$file" ]]; then
+        grep -vE '^[[:space:]]*(REDDIT_CLIENT_ID|REDDIT_CLIENT_SECRET)=' "$file" > "$tmp"
+    else
+        cat > "$tmp" <<'CONF'
+# Reddit API credentials for vmgr (written by Reddit > Reddit API Setup).
+# Optional tuning:
+# REDDIT_RATE_LIMIT_DELAY=1   # seconds between downloads
+# REDDIT_MAX_RETRIES=3        # times to wait out an HTTP 429
+# REDDIT_MAX_WAIT=120         # longest single wait, in seconds
+CONF
+    fi
+    printf 'REDDIT_CLIENT_ID="%s"\nREDDIT_CLIENT_SECRET="%s"\n' "$id" "$secret" >> "$tmp"
+    chmod 600 "$tmp" && mv -f "$tmp" "$file"
+}
+
+# Remove the saved credentials (other settings stay; an otherwise empty file goes).
+_reddit_remove_credentials() {
+    local file="$REDDIT_CONFIG_FILE" tmp
+    [[ -f "$file" ]] || return 0
+    tmp="$(umask 077; mktemp "${file}.XXXXXX")" || return 1
+    grep -vE '^[[:space:]]*(REDDIT_CLIENT_ID|REDDIT_CLIENT_SECRET)=' "$file" > "$tmp"
+    if grep -qvE '^[[:space:]]*(#|$)' "$tmp"; then
+        chmod 600 "$tmp" && mv -f "$tmp" "$file"
+    else
+        rm -f -- "$tmp" "$file"
+    fi
+}
+
+# Best-effort: open a URL in the user's browser. Returns 1 if nothing worked.
+_reddit_open_url() {
+    local url="$1" opener
+    for opener in wslview xdg-open open; do
+        if command -v "$opener" >/dev/null 2>&1; then
+            "$opener" "$url" >/dev/null 2>&1 &
+            return 0
+        fi
+    done
+    if command -v explorer.exe >/dev/null 2>&1; then
+        explorer.exe "$url" >/dev/null 2>&1 &
+        return 0
+    fi
+    return 1
+}
+
+# Explain a failed credential test in plain language.
+_reddit_explain_test() {
+    case "$1" in
+        rejected) echo "Reddit rejected these credentials. Check that the client ID is the short text under the app name, the secret is the long one labelled \"secret\", and the app type is \"script\"." ;;
+        network)  echo "Could not reach Reddit, so the credentials could not be checked." ;;
+        *)        echo "Reddit answered with an unexpected status (${1#error:})." ;;
+    esac
+}
+
+# Interactive setup: guide the user through creating a Reddit app, check the
+# credentials with a real token request, and save them only if they work.
+# Returns 0 if credentials are saved (or already were), 1 otherwise.
+reddit_setup_interactive() {
+    local apps_url="https://www.reddit.com/prefs/apps"
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        log_error "Reddit API setup needs a terminal. Create the app at $apps_url and put REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET in $REDDIT_CONFIG_FILE"
+        return 1
+    fi
+    for tool in curl jq; do
+        command -v "$tool" >/dev/null 2>&1 || { log_error "$tool is required for Reddit downloads"; return 1; }
+    done
+
+    show_screen "Reddit API Setup"
+    ui_section "Status"
+    if reddit_api_configured; then
+        ui_kv "Credentials" "saved in $REDDIT_CONFIG_FILE"
+        ui_kv "Downloads" "API: galleries included, normal speed"
+        echo ""
+        ui_item T "Test the saved login"
+        ui_item R "Replace the credentials"
+        ui_item D "Delete the credentials"
+        ui_prompt "Choose"
+        local choice
+        ui_read_choice choice
+        case "$choice" in
+            t|T)
+                local saved_id saved_secret result
+                saved_id="$(grep -E '^[[:space:]]*REDDIT_CLIENT_ID=' "$REDDIT_CONFIG_FILE" | tail -n 1 | sed -E 's/^[^=]*=//; s/^["'\'']//; s/["'\'']?[[:space:]]*$//')"
+                saved_secret="$(grep -E '^[[:space:]]*REDDIT_CLIENT_SECRET=' "$REDDIT_CONFIG_FILE" | tail -n 1 | sed -E 's/^[^=]*=//; s/^["'\'']//; s/["'\'']?[[:space:]]*$//')"
+                result="$(_reddit_test_credentials "$saved_id" "$saved_secret")"
+                if [[ "$result" == ok ]]; then
+                    log_success "The saved credentials work"
+                    return 0
+                fi
+                log_error "$(_reddit_explain_test "$result")"
+                return 1
+                ;;
+            d|D)
+                if ui_confirm "Delete the saved Reddit credentials?"; then
+                    _reddit_remove_credentials && log_success "Credentials deleted; downloads use the public feed again"
+                fi
+                return 0
+                ;;
+            r|R) ;;
+            *) return 0 ;;
+        esac
+        echo ""
+    else
+        ui_kv "Credentials" "not set up"
+        ui_kv "Downloads" "public feed: slower, and galleries are skipped"
+        echo ""
+        printf '  %sWith the Reddit API, galleries are downloaded and requests are not rate limited to about one a minute.%s\n' "$UI_DIM" "$COLOR_RESET"
+        echo ""
+    fi
+
+    ui_section "Create a Reddit app (about two minutes)"
+    printf '  1. Open %s (logged in) and click "create another app..."\n' "$apps_url"
+    printf '  2. Name: anything (for example vmgr).  Type: script.  Redirect URI: http://localhost:8080\n'
+    printf '  3. After saving: the CLIENT ID is the short text under the app name,\n'
+    printf '     and the SECRET is the long value labelled "secret".\n'
+    echo ""
+    if ui_confirm "Open that page in your browser now?" y; then
+        _reddit_open_url "$apps_url" || echo "  (could not open a browser; go to $apps_url yourself)"
+    fi
+
+    local id secret result
+    while true; do
+        echo ""
+        ui_ask id "Client ID"
+        [[ -z "$id" ]] && { log_info "Setup cancelled"; return 1; }
+        if ! _reddit_valid_client_id "$id"; then
+            log_error "That does not look like a client ID (letters, numbers, _ and -; 10 or more characters)"
+            continue
+        fi
+        ui_ask_secret secret "Client secret (hidden)"
+        if ! _reddit_valid_client_secret "$secret"; then
+            log_error "That does not look like a client secret (letters, numbers, _ and -; 16 or more characters)"
+            continue
+        fi
+
+        log_info "Checking the login with Reddit..."
+        result="$(_reddit_test_credentials "$id" "$secret")"
+        if [[ "$result" == ok ]]; then
+            if _reddit_write_credentials "$id" "$secret"; then
+                log_success "Reddit login works and is saved to $REDDIT_CONFIG_FILE (readable only by you)"
+                log_info "Galleries are now downloaded and the one-request-a-minute limit is gone."
+                return 0
+            fi
+            log_error "Could not write $REDDIT_CONFIG_FILE"
+            return 1
+        fi
+
+        log_error "$(_reddit_explain_test "$result")"
+        if [[ "$result" == network ]]; then
+            ui_confirm "Save them anyway, without checking?" n && _reddit_write_credentials "$id" "$secret" && { log_success "Saved to $REDDIT_CONFIG_FILE"; return 0; }
+            return 1
+        fi
+        ui_confirm "Try again?" y || return 1
+    done
 }
 
 # Work out how long to wait after a 429 from the response headers file $1.
@@ -530,7 +727,7 @@ download_subreddit_images() {
     if [[ $downloaded -eq 0 && $skipped -eq 0 ]]; then
         # Nothing was saved: say why, and do not leave an empty folder we made
         log_warning "Nothing was downloaded from r/$subreddit"
-        [[ $galleries -gt 0 ]] && log_info "  $galleries gallery post(s) were skipped; galleries need Reddit API credentials ($REDDIT_CONFIG_FILE)"
+        [[ $galleries -gt 0 ]] && log_info "  $galleries gallery post(s) were skipped; galleries need Reddit API credentials (Reddit > Reddit API Setup)"
         [[ $failed -gt 0 ]] && log_info "  $failed download(s) failed"
         [[ $galleries -eq 0 && $failed -eq 0 ]] && log_info "  No image or video posts were found (text posts and links to other sites are not downloaded)"
         $made_dir && rmdir "$output_dir" 2>/dev/null
@@ -539,7 +736,7 @@ download_subreddit_images() {
 
     log_success "Downloaded $downloaded items from r/$subreddit"
     [[ $skipped -gt 0 ]] && log_info "Skipped $skipped (already existed)"
-    [[ $galleries -gt 0 ]] && log_warning "Skipped $galleries gallery post(s) — galleries need Reddit API credentials ($REDDIT_CONFIG_FILE)"
+    [[ $galleries -gt 0 ]] && log_warning "Skipped $galleries gallery post(s) — galleries need Reddit API credentials (Reddit > Reddit API Setup)"
     [[ $failed -gt 0 ]] && log_warning "$failed downloads failed"
     return 0
 }
