@@ -382,6 +382,7 @@ _handle_single_operations_choice() {
                         ui_confirm "Apply these changes?" || true
                         _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Rename Files" "$TARGET_FOLDER"; then
+                            local DRY_RUN=false
                             start_operation "Rename Files (Apply)"
                             rename_files_in_directory "$TARGET_FOLDER" false
                             end_operation
@@ -402,6 +403,7 @@ _handle_single_operations_choice() {
                         ui_confirm "Apply these changes?" || true
                         _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Remove Dashes" "$TARGET_FOLDER"; then
+                            local DRY_RUN=false
                             start_operation "Remove Dashes (Apply)"
                             remove_dashes_in_directory "$TARGET_FOLDER" false
                             end_operation
@@ -422,6 +424,7 @@ _handle_single_operations_choice() {
                         ui_confirm "Apply these changes?" || true
                         _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Fix Bracket Spacing" "$TARGET_FOLDER"; then
+                            local DRY_RUN=false
                             start_operation "Fix Bracket Spacing (Apply)"
                             fix_bracket_spacing_in_directory "$TARGET_FOLDER" false
                             end_operation
@@ -442,6 +445,7 @@ _handle_single_operations_choice() {
                         ui_confirm "Apply these changes?" || true
                         _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Flatten Directory" "$TARGET_FOLDER" "deep"; then
+                            local DRY_RUN=false
                             start_operation "Flatten Directory (Apply)"
                             flatten_directory "$TARGET_FOLDER" false
                             end_operation

@@ -57,12 +57,19 @@ log_message() {
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE" 2>/dev/null
 }
 
+# Wipe a live ui_progress line before printing, so messages do not land on it.
+_clear_progress_line() {
+    [[ "${UI_PROGRESS_ACTIVE:-0}" == 1 ]] && ui_progress_clear
+    return 0
+}
+
 # Verbose console output with logging
 # Args: $* - message
 # Note: Output goes to stderr to avoid polluting stdout (used for return values)
 log_verbose() {
     local message="$*"
     if [[ "$VERBOSE" == true ]]; then
+        _clear_progress_line
         echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message" >&2
     fi
     log_message "INFO" "$message"
@@ -72,6 +79,7 @@ log_verbose() {
 # Args: $* - message
 log_success() {
     local message="$*"
+    _clear_progress_line
     echo -e "${COLOR_BRIGHT_GREEN}${SYMBOL_CHECK}${COLOR_RESET} $message" >&2
     log_message "SUCCESS" "$message"
 }
@@ -80,6 +88,7 @@ log_success() {
 # Args: $* - message
 log_error() {
     local message="$*"
+    _clear_progress_line
     echo -e "${COLOR_BRIGHT_RED}${SYMBOL_CROSS}${COLOR_RESET} $message" >&2
     log_message "ERROR" "$message"
     ((STATS[errors]++))
@@ -89,6 +98,7 @@ log_error() {
 # Args: $* - message
 log_warning() {
     local message="$*"
+    _clear_progress_line
     echo -e "${COLOR_BRIGHT_YELLOW}${SYMBOL_WARN}${COLOR_RESET} $message" >&2
     log_message "WARN" "$message"
 }
@@ -97,6 +107,7 @@ log_warning() {
 # Args: $* - message
 log_info() {
     local message="$*"
+    _clear_progress_line
     echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message" >&2
     log_message "INFO" "$message"
 }
@@ -107,6 +118,8 @@ log_info() {
 start_operation() {
     CURRENT_OPERATION="$1"
     START_TIME=$(date +%s)
+    # Each operation reports its own numbers, not a running total
+    [[ "$(type -t reset_statistics)" == "function" ]] && reset_statistics
 
     if [[ "$(type -t ui_operation_start)" == "function" ]]; then
         ui_operation_start "$CURRENT_OPERATION"

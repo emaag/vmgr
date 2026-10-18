@@ -47,3 +47,31 @@ test_show_progress_completes_with_newline_on_tty_only() {
     local out; out="$(show_progress 10 10 "Working")"
     assert_equals "" "$out" "show_progress: silent when not on a terminal"
 }
+
+test_start_operation_resets_statistics() {
+    STATS[files_processed]=9; STATS[errors]=2
+    DRY_RUN=false
+    start_operation "Fresh" >/dev/null 2>&1
+    assert_equals "0:0" "${STATS[files_processed]}:${STATS[errors]}" "start_operation: each operation starts from zero"
+}
+
+test_dry_run_card_title() {
+    COLUMNS=100
+    reset_statistics
+    CURRENT_OPERATION="Op"; START_TIME=$(date +%s)
+    assert_contains "Dry run complete" "$(DRY_RUN=true end_operation 2>&1 | _strip)" "end_operation: dry runs say so in the title"
+}
+
+test_messages_wipe_a_live_progress_line() {
+    local flag
+    UI_PROGRESS_ACTIVE=1
+    log_info "hello" >/dev/null 2>&1
+    assert_equals "0" "$UI_PROGRESS_ACTIVE" "log_info: clears the progress flag"
+    UI_PROGRESS_ACTIVE=1; VERBOSE=true
+    log_verbose "hello" >/dev/null 2>&1
+    assert_equals "0" "$UI_PROGRESS_ACTIVE" "log_verbose: clears the progress flag when it prints"
+    UI_PROGRESS_ACTIVE=1; VERBOSE=false
+    log_verbose "hello" >/dev/null 2>&1
+    assert_equals "1" "$UI_PROGRESS_ACTIVE" "log_verbose: leaves the bar alone when it prints nothing"
+    UI_PROGRESS_ACTIVE=0
+}

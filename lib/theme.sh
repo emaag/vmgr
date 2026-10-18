@@ -56,6 +56,7 @@ else
 fi
 
 UI_MAX_WIDTH=64
+UI_PROGRESS_ACTIVE=0
 UI_LABEL_WIDTH=26
 
 # ── Geometry ─────────────────────────────────────────────────────────────────
@@ -201,6 +202,7 @@ ui_progress() {
     local current="$1" total="$2" label="${3:-Processing}" detail="${4:-}" pct width filled bar_on bar_off
     (( total > 0 )) || return 0
     (( current > total )) && current=$total
+    UI_PROGRESS_ACTIVE=1
     _ui_measure
     pct=$(( current * 100 / total ))
     width=$(( UI_W - 36 ))
@@ -216,7 +218,11 @@ ui_progress() {
         "$pct" "$UI_DIM" "$current" "$total" "$detail" "$COLOR_RESET"
 }
 
-ui_progress_clear() { [[ -t 1 ]] && printf '\r\033[K'; return 0; }
+ui_progress_clear() {
+    UI_PROGRESS_ACTIVE=0
+    [[ -t 1 ]] && printf '\r\033[K'
+    return 0
+}
 
 # ui_file_header NAME INDEX TOTAL ETA INFO: header for one item in a long batch.
 #   ▶ name.mp4  [3/10]  ETA 2m5s
@@ -277,6 +283,8 @@ ui_summary_card() {
     shift 3
     if (( errors > 0 )); then
         title="${UI_WARN_MARK} Done with ${errors} error(s)"
+    elif [[ "${DRY_RUN:-false}" == true ]]; then
+        title="${SYMBOL_CHECK} Dry run complete"
     else
         title="${SYMBOL_CHECK} Complete"
     fi

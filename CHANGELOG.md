@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Each operation now reports its own statistics: `start_operation` resets the counters, so an Apply step no longer
+  inherits the dry run's numbers. The Apply step also runs with dry run off, so its banner and card no longer say dry run.
+- Log messages wipe a live progress bar first, so a stale `Processing ███ 66%` row no longer stays on screen.
+- The summary card says "Dry run complete" for dry runs.
 - Info screens (Supported Extensions, System Information, Last 50 Log Entries, Undo History, Whisper check, catalog
   and filter settings, ...) returned straight to a menu that cleared the screen; they now wait for a key.
 - **Browser paths**: going into a folder from `/` produced `//mnt/...`; leading `//` is now collapsed.
