@@ -546,12 +546,36 @@ _browser_simple() {
     return 0
 }
 
+# Where the Windows user profiles live when running under WSL (overridable for tests).
+BROWSER_WIN_USERS_DIR="${BROWSER_WIN_USERS_DIR:-/mnt/c/Users}"
+
+# Best folder to open the browser in when nothing was asked for: the most recent
+# directory, then a Videos / Movies folder, then (under WSL) a Windows user's
+# Videos folder, then home.
+browser_default_start() {
+    local d c
+    d="$(browser_recent_list | head -n1)"
+    if [[ -n "$d" && -d "$d" ]]; then echo "$d"; return; fi
+
+    for c in "$HOME/Videos" "$HOME/Movies"; do
+        if [[ -d "$c" ]]; then echo "$c"; return; fi
+    done
+
+    if [[ -d "$BROWSER_WIN_USERS_DIR" ]]; then
+        for c in "$BROWSER_WIN_USERS_DIR/${USER:-}/Videos" "$BROWSER_WIN_USERS_DIR"/*/Videos; do
+            case "$c" in */Public/*|*/Default*/*|*"/All Users/"*) continue ;; esac
+            if [[ -d "$c" ]]; then echo "$c"; return; fi
+        done
+    fi
+
+    echo "$HOME"
+}
+
 # Interactive directory browser. Sets TARGET_FOLDER and returns 0 on select,
 # returns 1 on cancel. Optional $1 = starting directory.
 browse_directory() {
     local start="${1:-${TARGET_FOLDER:-}}"
-    [[ -z "$start" ]] && start="$(browser_recent_list | head -n1)"
-    [[ -z "$start" ]] && start="$HOME"
+    [[ -z "$start" ]] && start="$(browser_default_start)"
 
     local current_dir
     current_dir="$(cd "$start" 2>/dev/null && pwd)" || current_dir="$HOME"

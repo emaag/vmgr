@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- The directory browser's first-run starting folder is `~/Videos`, `~/Movies` or your Windows `Videos` folder under WSL (before
+  falling back to home); once you have used it, it starts in your most recent folder.
+- The last old-style screens (subtitle filters, catalog settings and search, organize settings, filename test, whisper
+  install help) use the themed `ui_kv`, `ui_section`, `ui_item` and toggle rows.
 - **Undo for renames and flattens**: Rename Files, Remove Dashes, Fix Bracket Spacing, Flatten and their batch versions now
   record every change in an undo log (one per operation; a batch is one operation) and print how many changes were recorded.
   Utilities > Undo Last Operation (and the granular-controls entry, which called a function that did not exist) puts them back,

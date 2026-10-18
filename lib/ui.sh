@@ -149,13 +149,13 @@ show_subtitle_menu() {
 
     ui_title "SUBTITLE GENERATION"
     ui_section "Current Settings"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Model: ${COLOR_WHITE}$WHISPER_MODEL${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Format: ${COLOR_WHITE}$SUBTITLE_FORMAT${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Language: ${COLOR_WHITE}$SUBTITLE_LANGUAGE${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Parallel Jobs: ${COLOR_WHITE}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} GPU Acceleration: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Batch Optimization: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Recursive Scan: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}${SYMBOL_CHECK} ON${COLOR_RESET} ${COLOR_CYAN}(depth: $SUBTITLE_MIN_DEPTH-$SUBTITLE_MAX_DEPTH)${COLOR_RESET}" || echo "${COLOR_RED}${SYMBOL_CROSS} OFF${COLOR_RESET}")"
+    ui_kv "Model" "$WHISPER_MODEL"
+    ui_kv "Format" "$SUBTITLE_FORMAT"
+    ui_kv "Language" "$SUBTITLE_LANGUAGE"
+    ui_kv "Parallel Jobs" "$SUBTITLE_PARALLEL_JOBS"
+    print_toggle_setting "GPU Acceleration" "$SUBTITLE_USE_GPU"
+    print_toggle_setting "Batch Optimization" "$SUBTITLE_OPTIMIZE_BATCH"
+    print_toggle_setting "Recursive Scan" "$SUBTITLE_RECURSIVE"
 
     # Count active filters
     local active_filters=0
@@ -166,7 +166,7 @@ show_subtitle_menu() {
     [[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && ((active_filters++))
 
     if [[ $active_filters -gt 0 ]]; then
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Active Filters: ${COLOR_YELLOW}$active_filters${COLOR_RESET}"
+        ui_kv "Active Filters" "$active_filters"
     fi
     echo ""
     ui_item 1 "Generate Subtitles" "Single Directory"
@@ -197,8 +197,8 @@ show_catalog_menu() {
         local drive_count=$(cat "$CATALOG_DRIVES_DB" 2>/dev/null | jq '.drives | length' 2>/dev/null || echo "0")
         local video_count=$(cat "$CATALOG_DB" 2>/dev/null | jq '.videos | length' 2>/dev/null || echo "0")
         ui_section "Catalog Status"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Cataloged Drives: ${COLOR_WHITE}$drive_count${COLOR_RESET}"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Total Media Files: ${COLOR_WHITE}$video_count${COLOR_RESET}"
+        ui_kv "Cataloged Drives" "$drive_count"
+        ui_kv "Total Media Files" "$video_count"
         echo ""
     fi
 
@@ -237,7 +237,7 @@ show_settings_menu() {
     ui_section "Current Configuration"
     print_toggle_setting "Dry Run Mode" "$DRY_RUN"
     print_toggle_setting "Verbose Output" "$VERBOSE"
-    echo -e "  ${COLOR_CYAN}Log Directory:        ${COLOR_RESET} ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
+    ui_kv "Log Directory" "$LOG_DIR"
     echo ""
     ui_item 1 "Toggle Dry Run Mode"
     ui_item 2 "Toggle Verbose Output"
@@ -260,8 +260,8 @@ show_organize_settings_menu() {
 
     ui_title "ORGANIZE SETTINGS"
     ui_section "Current Settings"
-    echo -e "  ${COLOR_CYAN}Default Target:       ${COLOR_RESET} ${COLOR_WHITE}$ORGANIZE_DEFAULT_TARGET${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}Default Search:       ${COLOR_RESET} ${COLOR_WHITE}$ORGANIZE_DEFAULT_SEARCH${COLOR_RESET}"
+    ui_kv "Default Target" "$ORGANIZE_DEFAULT_TARGET"
+    ui_kv "Default Search" "$ORGANIZE_DEFAULT_SEARCH"
     print_toggle_setting "Show Progress" "$ORGANIZE_SHOW_PROGRESS"
     print_toggle_setting "Log Operations" "$ORGANIZE_LOG_OPERATIONS"
     echo ""
@@ -301,8 +301,7 @@ show_granular_controls_menu() {
     ui_section "Processing"
     print_toggle_setting "Undo System" "$ENABLE_UNDO"
 
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "Batch Size:"
-    echo -e "${COLOR_WHITE}$BATCH_SIZE files${COLOR_RESET}"
+    ui_kv "Batch size" "$BATCH_SIZE files"
 
     echo ""
     ui_section "Options"
@@ -351,7 +350,7 @@ confirm_destructive_op() {
     fi
 
     if [[ "${count:-0}" -gt 0 ]]; then
-        echo -e "${COLOR_CYAN}Sample:${COLOR_RESET}"
+        ui_section "Sample"
         if [[ "$depth_mode" == "deep" ]]; then
             find "$directory" -mindepth 2 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null | head -5 | while IFS= read -r f; do
                 echo -e "  $(basename "$f")"
@@ -747,7 +746,7 @@ _handle_subtitle_advanced() {
     ui_item_toggle 6 "Toggle Interactive Editing" "$SUBTITLE_INTERACTIVE_EDIT"
     ui_item_toggle 7 "Toggle Auto-Edit" "$SUBTITLE_AUTO_EDIT"
     echo ""
-    echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
+    ui_section "Recursive Scanning"
     ui_item_toggle 8 "Toggle Recursive Mode" "$SUBTITLE_RECURSIVE"
     ui_item 9 "Set Max Depth" "now: $SUBTITLE_MAX_DEPTH"
     ui_item 10 "Set Max Files" "now: $SUBTITLE_MAX_FILES"
@@ -829,15 +828,15 @@ _handle_subtitle_advanced() {
         11)
             # Filters & Selection submenu
             show_screen "Advanced Filters & Selection"
-            echo -e "${COLOR_YELLOW}Current Filters:${COLOR_RESET}"
-            echo -e "  Min Size: ${COLOR_CYAN}${SUBTITLE_MIN_SIZE_MB}${COLOR_RESET} MB"
-            echo -e "  Max Size: ${COLOR_CYAN}${SUBTITLE_MAX_SIZE_MB}${COLOR_RESET} MB (0=unlimited)"
-            echo -e "  Modified: ${COLOR_CYAN}${SUBTITLE_MODIFIED_DAYS}${COLOR_RESET} days (0=all)"
-            echo -e "  Skip Existing: $([[ "$SUBTITLE_SKIP_EXISTING" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-            echo -e "  Show Dir Stats: $([[ "$SUBTITLE_SHOW_DIR_STATS" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-            echo -e "  Interactive Select: $([[ "$SUBTITLE_INTERACTIVE_SELECT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}")"
-            echo -e "  Min Depth: ${COLOR_CYAN}${SUBTITLE_MIN_DEPTH}${COLOR_RESET}"
-            echo -e "  Skip Patterns: ${COLOR_CYAN}${#SUBTITLE_SKIP_PATTERNS[@]}${COLOR_RESET} patterns"
+            ui_section "Current Filters"
+            ui_kv "Min Size" "${SUBTITLE_MIN_SIZE_MB} MB"
+            ui_kv "Max Size" "${SUBTITLE_MAX_SIZE_MB} MB (0=unlimited)"
+            ui_kv "Modified" "${SUBTITLE_MODIFIED_DAYS} days (0=all)"
+            print_toggle_setting "Skip Existing" "$SUBTITLE_SKIP_EXISTING"
+            print_toggle_setting "Show Dir Stats" "$SUBTITLE_SHOW_DIR_STATS"
+            print_toggle_setting "Interactive Select" "$SUBTITLE_INTERACTIVE_SELECT"
+            ui_kv "Min Depth" "${SUBTITLE_MIN_DEPTH}"
+            ui_kv "Skip Patterns" "${#SUBTITLE_SKIP_PATTERNS[@]} patterns"
             echo ""
             ui_item 1 "Set Minimum File Size (MB)"
             ui_item 2 "Set Maximum File Size (MB)"
@@ -912,9 +911,9 @@ _handle_subtitle_advanced() {
                     ;;
                 8)
                     echo ""
-                    echo -e "${COLOR_CYAN}Current Skip Patterns:${COLOR_RESET}"
+                    ui_section "Current Skip Patterns"
                     for i in "${!SUBTITLE_SKIP_PATTERNS[@]}"; do
-                        echo "  [$i] ${SUBTITLE_SKIP_PATTERNS[$i]}"
+                        printf '  %s%2d%s  %s\n' "$UI_ACCENT" "$i" "$COLOR_RESET" "${SUBTITLE_SKIP_PATTERNS[$i]}"
                     done
                     echo ""
                     echo "Common patterns: .* (hidden), _* (underscore), tmp, temp, Trash"
@@ -1005,12 +1004,12 @@ _handle_subtitles_choice() {
             else
                 log_error "Whisper is not installed!"
                 echo ""
-                echo -e "${COLOR_YELLOW}Installation Instructions:${COLOR_RESET}"
+                ui_section "Installation Instructions"
                 echo ""
-                echo -e "${COLOR_WHITE}Option 1 - OpenAI Whisper (Python):${COLOR_RESET}"
+                ui_section "Option 1 - OpenAI Whisper (Python)"
                 echo "  pip install -U openai-whisper"
                 echo ""
-                echo -e "${COLOR_WHITE}Option 2 - whisper.cpp (C++, faster):${COLOR_RESET}"
+                ui_section "Option 2 - whisper.cpp (C++, faster)"
                 echo "  git clone https://github.com/ggerganov/whisper.cpp"
                 echo "  cd whisper.cpp && make"
                 echo "  # Add to PATH or create symlink"
@@ -1072,13 +1071,13 @@ _handle_catalog_choice() {
         3)
             # Search catalog
             show_screen "Search Catalog"
-            echo -e "${COLOR_WHITE}Filter by media type:${COLOR_RESET}"
-            echo "  [1] All media"
-            echo "  [2] Videos only"
-            echo "  [3] Images only"
-            echo "  [4] Audio only"
-            echo ""
-            ui_ask filter_choice "Choose filter [1-4]"
+            ui_section "Filter by media type"
+            ui_item 1 "All media"
+            ui_item 2 "Videos only"
+            ui_item 3 "Images only"
+            ui_item 4 "Audio only"
+            ui_prompt "Filter"
+            ui_read_choice filter_choice
 
             local media_filter="all"
             case "$filter_choice" in
@@ -1168,15 +1167,15 @@ _handle_catalog_choice() {
         7)
             # Catalog settings
             show_screen "Catalog Settings"
-            echo -e "${COLOR_WHITE}Media Types to Catalog:${COLOR_RESET}"
-            echo -e "  Videos: $([[ "$CATALOG_VIDEOS" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
-            echo -e "  Images: $([[ "$CATALOG_IMAGES" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
-            echo -e "  Audio:  $([[ "$CATALOG_AUDIO" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
+            ui_section "Media Types to Catalog"
+            print_toggle_setting "Videos" "$CATALOG_VIDEOS"
+            print_toggle_setting "Images" "$CATALOG_IMAGES"
+            print_toggle_setting "Audio" "$CATALOG_AUDIO"
             echo ""
-            echo -e "${COLOR_WHITE}Other Settings:${COLOR_RESET}"
-            echo -e "  Include Metadata: $([[ "$CATALOG_INCLUDE_METADATA" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
-            echo -e "  Include Hash: $([[ "$CATALOG_INCLUDE_HASH" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
-            echo -e "  Offline Retention: ${COLOR_CYAN}$CATALOG_OFFLINE_RETENTION${COLOR_RESET} days"
+            ui_section "Other Settings"
+            print_toggle_setting "Include Metadata" "$CATALOG_INCLUDE_METADATA"
+            print_toggle_setting "Include Hash" "$CATALOG_INCLUDE_HASH"
+            ui_kv "Offline Retention" "$CATALOG_OFFLINE_RETENTION days"
             echo ""
             ui_item 1 "Toggle Video Cataloging"
             ui_item 2 "Toggle Image Cataloging"
@@ -1304,25 +1303,25 @@ _handle_utilities_choice() {
             ui_ask test_file "Enter filename to test"
 
             echo ""
-            echo -e "${COLOR_WHITE}Original:${COLOR_RESET} $test_file"
+            ui_kv "Original" "$test_file"
 
             local result=$(remove_dashes "$test_file")
-            echo -e "${COLOR_WHITE}After dash removal:${COLOR_RESET} $result"
+            ui_kv "After dash removal" "$result"
 
             result=$(apply_bracket_notation "$result")
-            echo -e "${COLOR_WHITE}After bracket notation:${COLOR_RESET} $result"
+            ui_kv "After bracket notation" "$result"
 
             result=$(fix_bracket_spacing "$result")
-            echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
+            ui_kv "Final result" "$result"
             ui_pause
             return 0
             ;;
         7)
             show_screen "System Information"
             echo -e "${COLOR_BOLD}${COLOR_WHITE}Environment:${COLOR_RESET}"
-            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Script Version: ${COLOR_WHITE}$SCRIPT_VERSION${COLOR_RESET}"
-            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Platform: ${COLOR_WHITE}$OS_TYPE${COLOR_RESET}"
-            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Bash Version: ${COLOR_WHITE}$BASH_VERSION${COLOR_RESET}"
+            ui_kv "Script Version" "$SCRIPT_VERSION"
+            ui_kv "Platform" "$OS_TYPE"
+            ui_kv "Bash Version" "$BASH_VERSION"
             echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} OS: ${COLOR_WHITE}$(uname -s)${COLOR_RESET}"
             echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Kernel: ${COLOR_WHITE}$(uname -r)${COLOR_RESET}"
             echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hostname: ${COLOR_WHITE}$(hostname)${COLOR_RESET}"
@@ -1330,7 +1329,7 @@ _handle_utilities_choice() {
             echo ""
             echo -e "${COLOR_BOLD}${COLOR_WHITE}Directories:${COLOR_RESET}"
             echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Working: ${COLOR_WHITE}$(pwd)${COLOR_RESET}"
-            echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Logs: ${COLOR_WHITE}$LOG_DIR${COLOR_RESET}"
+            ui_kv "Logs" "$LOG_DIR"
             echo ""
             echo -e "${COLOR_BOLD}${COLOR_WHITE}Available Tools:${COLOR_RESET}"
             command -v jq &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} jq" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} jq"

@@ -135,6 +135,11 @@ ui_section() {
     printf '  %s%s%s\n' "$UI_DIM" "$1" "$COLOR_RESET"
 }
 
+# ui_kv LABEL VALUE: a "label  value" line, label dimmed in a fixed column.
+ui_kv() {
+    printf '  %s%-22s%s %s%s%s\n' "$UI_DIM" "$1" "$COLOR_RESET" "$COLOR_WHITE" "$2" "$COLOR_RESET"
+}
+
 # ui_item KEY LABEL [DESC] [KIND]
 # One selectable row. KIND: default | toggle | back. The key is drawn as a
 # colored chip, or as [K] when colors are off.

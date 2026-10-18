@@ -611,7 +611,7 @@ FOLDERS                      │ PREVIEW: alpha/
 | `F` | Refresh (listings are cached and re-checked automatically; this forces a re-scan) |
 
 **Good to know**
-- It starts in the directory you used last. Recent directories are stored in `~/.video-manager-recent-dirs`
+- It starts in the directory you used last; on a first run it tries `~/Videos`, `~/Movies`, your Windows `Videos` folder (under WSL), then your home. Recent directories are stored in `~/.video-manager-recent-dirs`
   (10 entries; folders that no longer exist are dropped).
 - Symlinks and Windows junctions are not listed; use `T` to type a path into one.
 - Terminals narrower than 70 columns show a single list without the preview.

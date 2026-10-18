@@ -231,3 +231,33 @@ test_list_subdirs_skips_symlinks() {
     assert_equals "real," "$result" "list_subdirs: symlinked dirs are skipped"
     rm -rf "$d"
 }
+
+test_default_start_prefers_recent_then_videos_then_home() {
+    local home recent_file saved_home="$HOME" saved_recent="$BROWSER_RECENT_FILE" saved_win="$BROWSER_WIN_USERS_DIR"
+    home="$(mktemp -d)"; recent_file="$home/recent"
+    HOME="$home"; BROWSER_RECENT_FILE="$recent_file"; BROWSER_WIN_USERS_DIR="$home/none"
+
+    assert_equals "$home" "$(browser_default_start)" "default start: home when there is nothing better"
+
+    mkdir "$home/Videos"
+    assert_equals "$home/Videos" "$(browser_default_start)" "default start: ~/Videos beats home"
+
+    mkdir "$home/work"; echo "$home/work" > "$recent_file"
+    assert_equals "$home/work" "$(browser_default_start)" "default start: the most recent directory wins"
+
+    rmdir "$home/work"
+    assert_equals "$home/Videos" "$(browser_default_start)" "default start: a recent directory that is gone is ignored"
+
+    HOME="$saved_home"; BROWSER_RECENT_FILE="$saved_recent"; BROWSER_WIN_USERS_DIR="$saved_win"
+    rm -rf "$home"
+}
+
+test_default_start_finds_a_wsl_windows_videos_folder() {
+    local home win saved_home="$HOME" saved_recent="$BROWSER_RECENT_FILE" saved_win="$BROWSER_WIN_USERS_DIR" saved_user="${USER:-}"
+    home="$(mktemp -d)"; win="$(mktemp -d)"
+    mkdir -p "$win/eric/Videos" "$win/Public/Videos"
+    HOME="$home"; BROWSER_RECENT_FILE="$home/recent"; BROWSER_WIN_USERS_DIR="$win"; USER=nobody
+    assert_equals "$win/eric/Videos" "$(browser_default_start)" "default start: a Windows user's Videos folder under WSL"
+    HOME="$saved_home"; BROWSER_RECENT_FILE="$saved_recent"; BROWSER_WIN_USERS_DIR="$saved_win"; USER="$saved_user"
+    rm -rf "$home" "$win"
+}
