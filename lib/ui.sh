@@ -330,10 +330,11 @@ confirm_destructive_op() {
 
     local count
     if [[ "$depth_mode" == "deep" ]]; then
-        count=$(find "$directory" -mindepth 2 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || echo 0)
+        count=$(find "$directory" -mindepth 2 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
     else
-        count=$(find "$directory" -maxdepth 1 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || echo 0)
+        count=$(find "$directory" -maxdepth 1 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
     fi
+    count=${count:-0}
 
     echo ""
     echo -e "${COLOR_YELLOW}${op_label}${COLOR_RESET} will affect ${COLOR_BOLD}${count}${COLOR_RESET} file(s) in:"
