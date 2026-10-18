@@ -170,6 +170,7 @@ _print_summary_card() {
     local space_mb=$(( ${STATS[space_saved]:-0} / 1024 / 1024 ))
     [[ ${STATS[files_processed]:-0}       -gt 0 ]] && rows+=("Files processed" "${STATS[files_processed]}")
     [[ ${STATS[files_renamed]:-0}         -gt 0 ]] && rows+=("Files renamed" "${STATS[files_renamed]}")
+    [[ ${STATS[files_previewed]:-0}       -gt 0 ]] && rows+=("Would rename" "${STATS[files_previewed]}")
     [[ ${STATS[files_moved]:-0}           -gt 0 ]] && rows+=("Files moved" "${STATS[files_moved]}")
     [[ ${STATS[files_skipped]:-0}         -gt 0 ]] && rows+=("Files skipped" "${STATS[files_skipped]}")
     [[ ${STATS[subtitles_generated]:-0}   -gt 0 ]] && rows+=("Subtitles generated" "${STATS[subtitles_generated]}")

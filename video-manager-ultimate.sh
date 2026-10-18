@@ -415,9 +415,7 @@ parse_arguments() {
             workflow_deep_clean "$directory"
             ;;
         batch)
-            start_operation "Batch Processing"
             batch_rename_interactive
-            end_operation
             ;;
         organize)
             organize_by_subfolder_names "$ORGANIZE_DEFAULT_TARGET" "$ORGANIZE_DEFAULT_SEARCH"

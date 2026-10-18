@@ -166,6 +166,7 @@ declare -gA STATS
 STATS[files_processed]=0
 STATS[files_renamed]=0
 STATS[files_moved]=0
+STATS[files_previewed]=0
 STATS[files_skipped]=0
 STATS[errors]=0
 STATS[duplicates_found]=0
@@ -342,6 +343,7 @@ reset_statistics() {
     STATS[files_processed]=0
     STATS[files_renamed]=0
     STATS[files_moved]=0
+    STATS[files_previewed]=0
     STATS[files_skipped]=0
     STATS[errors]=0
     STATS[duplicates_found]=0

@@ -342,41 +342,28 @@ Processing: [15 files] Current: movie.mp4...
 
 ### 6. Batch Processing
 
-Process multiple directories in a single session with accumulated statistics.
+Run one operation over several folders in a single session. Reach it from **File Operations > [7] Batch
+Processing**, or run `vmgr batch` from the command line.
 
-**Features:**
-- Enter unlimited directories
-- Windows or Unix path formats
-- Validates each path before processing
-- Maintains statistics across all folders
-- Error handling per directory
-- Combined final report
+**Building the folder list** (a queue screen with live video counts):
 
-**Interactive Flow:**
-```
-📁 Batch Processing Mode
+| Key | Action |
+|-----|--------|
+| `A` | Add a folder using the directory browser |
+| `S` | Pick a parent folder and add **every subfolder that contains videos** (handy for `Season 1`, `Season 2`, ...) |
+| `T` | Type a path |
+| `X` | Remove one entry by number |
+| `C` | Clear the list |
+| `Enter` | Run |
+| `Q` / `Esc` | Cancel (nothing runs) |
 
-Enter directory paths (one per line, empty line to finish):
-You can use Windows paths (C:\Users\...) or Unix paths (/mnt/c/...)
-
-[1] Directory: /mnt/c/Users/Eric/Videos/Collection1
-✓ Added: /mnt/c/Users/Eric/Videos/Collection1
-
-[2] Directory: C:\Users\Eric\Videos\Collection2
-✓ Added: /mnt/c/Users/Eric/Videos/Collection2
-
-[3] Directory: 
-
-Processing 2 directories:
-
-[1/2] Processing: /mnt/c/Users/Eric/Videos/Collection1
-...
-
-[2/2] Processing: /mnt/c/Users/Eric/Videos/Collection2
-...
-
-✓ Batch processing complete!
-```
+**Running it**
+- With **Dry run on**, it previews every folder first, then asks whether to apply the changes.
+- With dry run off it asks for confirmation (it tells you how many folders and videos will change) before touching files.
+- Each folder gets a header with an overall progress bar, and the run ends with a per-folder **Results** list
+  (`✓ Alpha  2 renamed`) followed by the usual summary card.
+- A folder that cannot be found is marked failed; the rest still run.
+- When input is piped (not a terminal), it reads one directory per line (empty line to finish) and runs without prompting.
 
 ---
 
@@ -478,8 +465,8 @@ Process multiple directories with same operation.
 
 **[1] Batch Rename Multiple Folders**
 - Apply bracket notation to multiple directories
-- Enter paths one by one
-- Accumulated statistics
+- Build the list with the browser, "add every subfolder", or typed paths
+- Preview, confirm, then a per-folder results list
 
 **[2] Batch Flatten Multiple Folders**
 - Flatten multiple directory structures

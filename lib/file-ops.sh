@@ -154,6 +154,7 @@ _apply_transform_to_directory() {
                     echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
                     echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
                 fi
+                ((STATS[files_previewed]++))
                 log_message "DRYRUN" "Would rename: $filename -> $new_filename"
             else
                 mv -- "$file" "$new_path" 2>/dev/null

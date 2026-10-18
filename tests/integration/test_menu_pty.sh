@@ -38,6 +38,9 @@ for k in re.findall(rb'\x1b\[[A-D]|.', keys, re.S):
 log += drain(0.8)
 text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', log)
 done, _ = os.waitpid(pid, os.WNOHANG)
+if os.environ.get('DRV_FIND'):
+    print('|'.join(str(text.count(t)) for t in os.environ['DRV_FIND'].split(',')))
+    sys.exit(0)
 print('|'.join(str(text.count(t)) for t in ('FILE OPERATIONS', 'UTILITIES', 'MAIN MENU', 'Goodbye', 'Press any key')) + f'|{int(done != 0)}')
 PY
 }
@@ -85,5 +88,38 @@ test_pty_info_screen_waits_for_a_key() {
 test_pty_pause_then_back_to_menu() {
     _setup
     assert_equals "0|2|1|0|1|0" "$(_drive '57x')" "menu: any key after the pause returns to the menu"
+    _teardown
+}
+
+test_pty_batch_reachable_from_file_operations() {
+    _setup
+    # File Operations > Batch Processing > Batch Rename opens the folder queue
+    assert_equals "1|1|1" "$(DRV_FIND='BATCH PROCESSING,BATCH RENAME MULTIPLE FOLDERS,Folders to process (0)' _drive '171')" \
+        "menu: Batch Processing is reachable and opens an empty queue"
+    _teardown
+}
+
+test_pty_batch_queue_cancels_back_to_menu() {
+    _setup
+    assert_equals "2" "$(DRV_FIND='BATCH PROCESSING' _drive '171q')" \
+        "menu: Q on the queue returns to the Batch menu"
+    _teardown
+}
+
+test_pty_batch_decline_changes_nothing() {
+    _setup
+    mkdir "$TEST_TMPDIR/vids"; touch "$TEST_TMPDIR/vids/studio one.mp4"
+    local seen
+    seen="$(DRV_FIND='BATCH PROCESSING' _drive "171t$TEST_TMPDIR/vids\\r\\rn")"
+    assert_equals "2" "$seen" "batch: declining the confirm returns to the Batch menu"
+    assert_file_exists "$TEST_TMPDIR/vids/studio one.mp4" "batch: declining leaves the files alone"
+    _teardown
+}
+
+test_pty_batch_accept_renames() {
+    _setup
+    mkdir "$TEST_TMPDIR/vids"; touch "$TEST_TMPDIR/vids/studio one.mp4"
+    DRV_FIND='Results' _drive "171t$TEST_TMPDIR/vids\\r\\ry" >/dev/null
+    assert_file_exists "$TEST_TMPDIR/vids/[Studio] one.mp4" "batch: accepting the confirm renames the files"
     _teardown
 }

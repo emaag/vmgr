@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- **Batch processing reworked**: it is now reachable from File Operations (7) as are Automated Workflows (8); both were
+  previously unreachable from the menu. Batch builds a folder queue with live video counts (add with the browser, add every
+  subfolder that has videos, or type a path), previews when dry run is on, asks for confirmation before changing files, shows a
+  per-folder header with an overall progress bar, and ends with a per-folder Results list. Cancelling returns straight to the
+  menu. Dry runs now report how many files *would* be renamed. Workflows also confirm before running and show the operation banner
+  and summary card. `vmgr batch` keeps reading one directory per line when input is piped.
 - **Quiet by default**: verbose output is now off. The per-file intermediate steps ("After dash removal", ...)
   no longer bury the before/after results. Use `--verbose` (new) or Settings > Toggle Verbose Output for detail;
   `-q`/`--quiet` still works. A saved config keeps whatever it stored.

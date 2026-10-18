@@ -177,7 +177,7 @@ ui_item_toggle() {
 # ui_hint_line KEY LABEL [KEY LABEL ...]: one footer line of key hints, with
 # the keys in the accent color and their labels dimmed.
 ui_hint_line() {
-    local line=""
+    local line="${UI_HINT_INDENT:-}"
     while (( $# >= 2 )); do
         line+="${UI_ACCENT}${1}${COLOR_RESET} ${UI_DIM}${2}${COLOR_RESET}  "
         shift 2

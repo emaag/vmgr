@@ -81,6 +81,10 @@ show_single_operations_menu() {
     ui_item 5 "Full Cleanup" "All Operations"
     ui_item 6 "Image Operations" "Convert to JPG ${SYMBOL_ARROW}"
     echo ""
+    ui_section "More"
+    ui_item 7 "Batch Processing" "Several folders at once ${SYMBOL_ARROW}"
+    ui_item 8 "Automated Workflows" "Clean up a collection ${SYMBOL_ARROW}"
+    echo ""
     ui_item_toggle D "Toggle Dry Run" "$DRY_RUN"
     echo ""
     ui_item B "Back to Main Menu" "" back
@@ -469,6 +473,14 @@ _handle_single_operations_choice() {
             handle_image_ops
             return 0
             ;;
+        7)
+            handle_batch_processing
+            return 0
+            ;;
+        8)
+            handle_workflows
+            return 0
+            ;;
         d|D)
             toggle_flag_with_log DRY_RUN "Dry run mode"
             return 0
@@ -557,24 +569,18 @@ _handle_batch_choice() {
     local choice="$1"
     case "$choice" in
         1)
-            start_operation "Batch Rename Multiple Folders"
             batch_rename_interactive
-            end_operation
-            ui_pause
+            [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
         2)
-            start_operation "Batch Flatten Multiple Folders"
             batch_flatten_interactive
-            end_operation
-            ui_pause
+            [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
         3)
-            start_operation "Batch Full Cleanup"
             batch_cleanup_interactive
-            end_operation
-            ui_pause
+            [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
         b|B) return 1 ;;
@@ -594,15 +600,23 @@ _handle_workflow_choice() {
     case "$choice" in
         1)
             if get_directory_input; then
-                workflow_new_collection "$TARGET_FOLDER"
-                ui_pause
+                if [[ "$DRY_RUN" == true ]] || ui_confirm "This will flatten, rename and look for duplicates in $TARGET_FOLDER. Continue?"; then
+                    start_operation "New Collection Setup"
+                    workflow_new_collection "$TARGET_FOLDER"
+                    end_operation
+                    ui_pause
+                fi
             fi
             return 0
             ;;
         2)
             if get_directory_input; then
-                workflow_deep_clean "$TARGET_FOLDER"
-                ui_pause
+                if [[ "$DRY_RUN" == true ]] || ui_confirm "This will rename and look for duplicates in $TARGET_FOLDER. Continue?"; then
+                    start_operation "Deep Clean"
+                    workflow_deep_clean "$TARGET_FOLDER"
+                    end_operation
+                    ui_pause
+                fi
             fi
             return 0
             ;;
