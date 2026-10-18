@@ -232,9 +232,7 @@ check_dependencies() {
                 ;;
         esac
         echo ""
-        read -p "Continue anyway? (y/n): " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        if ! ask_yes_no "Continue anyway?"; then
             exit 1
         fi
     fi

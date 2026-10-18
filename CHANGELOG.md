@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Info screens (Supported Extensions, System Information, Last 50 Log Entries, Undo History, Whisper check, catalog
+  and filter settings, ...) returned straight to a menu that cleared the screen; they now wait for a key.
 - **Browser paths**: going into a folder from `/` produced `//mnt/...`; leading `//` is now collapsed.
 - **Destructive-op prompt**: `grep -c ... || echo 0` yielded `0\n0` when nothing matched, printing
   `[[: 0 0: syntax error` before "Proceed?". The prompt also now explains when videos exist only in
@@ -35,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Menu redesign**: a framed header with a status strip (dry-run state and the selected folder), compact
   one-line menu items with colored key chips and dimmed descriptions, on/off dots for toggles, and grouped
   sections. New `lib/theme.sh` holds the shared helpers (`ui_title`, `ui_item`, `ui_item_toggle`, ...).
+- Sub-screens and prompts use the same look: a titled `show_screen`, `ui_confirm` (single-key y/n; Enter takes the
+  default, Esc means no), `ui_ask` for text input, and `ui_pause` (any key). `ask_yes_no` / `pause_for_key` in
+  `core.sh` fall back to plain prompts when `theme.sh` is not loaded.
 - The directory browser now matches: a framed header (location, folder and video counts, hidden-folder
   state), accent-colored highlight and preview, and dimmed key hints.
 - Menus take a single keypress (no Enter); `Esc` goes back, and arrow keys are ignored. End of input now

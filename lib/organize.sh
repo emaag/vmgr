@@ -107,9 +107,7 @@ undo_organize_operation() {
 
     # Confirm
     if [[ "$INTERACTIVE" == true ]]; then
-        echo -n "Proceed with undo? (y/n): "
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        if ! ask_yes_no "Proceed with undo?"; then
             log_warning "Undo cancelled"
             return 1
         fi
@@ -279,9 +277,7 @@ organize_by_subfolder_names() {
 
     # Confirm before proceeding
     if [[ "$INTERACTIVE" == true ]]; then
-        echo -n "Proceed with organizing files? (y/n): "
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        if ! ask_yes_no "Proceed with organizing files?"; then
             log_warning "Operation cancelled"
             return 1
         fi

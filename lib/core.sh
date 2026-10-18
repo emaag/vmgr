@@ -243,6 +243,27 @@ load_module() {
     fi
 }
 
+# Yes/no prompt: the themed single-key ui_confirm when theme.sh is loaded, a
+# plain line prompt otherwise. Returns 0 for yes.
+ask_yes_no() {
+    if [[ "$(type -t ui_confirm)" == "function" ]]; then
+        ui_confirm "$@"
+    else
+        local _answer
+        read -r -p "$1 (y/n): " _answer
+        [[ "$_answer" =~ ^[Yy]$ ]]
+    fi
+}
+
+# Wait for a key: ui_pause when theme.sh is loaded, "Press Enter" otherwise.
+pause_for_key() {
+    if [[ "$(type -t ui_pause)" == "function" ]]; then
+        ui_pause "$@"
+    else
+        read -r -p "Press Enter to continue..." _
+    fi
+}
+
 # Generic menu loop handler
 # Reduces boilerplate for menu-based UI patterns
 # Args: $1 - menu display function, $2 - choice handler function
@@ -276,7 +297,7 @@ run_menu_loop() {
             1) break ;; # Exit loop
             2) # Invalid choice
                 [[ "$(type -t log_error)" == "function" ]] && log_error "Invalid option" || echo "Invalid option"
-                read -p "Press Enter to continue..."
+                pause_for_key
                 ;;
         esac
 

@@ -91,3 +91,50 @@ test_ascii_fallback_for_non_utf8() {
     out="$(LC_ALL=C LANG=C bash -c 'source "'"$LIB_DIR"'/core.sh"; printf "%s%s" "$SYMBOL_ARROW" "$SYMBOL_CHECK"')"
     assert_equals ">+" "$out" "ASCII: non-UTF-8 locale gets plain glyphs"
 }
+
+test_confirm_yes_and_no_from_pipe() {
+    local rc=0
+    ui_confirm "Go?" <<< "y" >/dev/null || rc=$?
+    assert_equals "0" "$rc" "confirm: y returns 0"
+    assert_equals "y" "$REPLY" "confirm: y sets REPLY"
+    rc=0; ui_confirm "Go?" <<< "n" >/dev/null || rc=$?
+    assert_equals "1" "$rc" "confirm: n returns 1"
+    assert_equals "n" "$REPLY" "confirm: n sets REPLY"
+}
+
+test_confirm_default_on_empty_input() {
+    local rc=0
+    ui_confirm "Go?" <<< "" >/dev/null || rc=$?
+    assert_equals "1" "$rc" "confirm: Enter picks the default (no)"
+    rc=0; ui_confirm "Go?" y <<< "" >/dev/null || rc=$?
+    assert_equals "0" "$rc" "confirm: Enter picks the default when it is yes"
+    rc=0; ui_confirm "Go?" < /dev/null >/dev/null || rc=$?
+    assert_equals "1" "$rc" "confirm: end of input falls back to the default"
+}
+
+test_confirm_shows_hint() {
+    assert_contains "[y/N]" "$(ui_confirm "Go?" <<< n | _strip)" "confirm: default-no hint"
+    assert_contains "[Y/n]" "$(ui_confirm "Go?" y <<< y | _strip)" "confirm: default-yes hint"
+}
+
+test_ask_reads_a_line() {
+    local answer=""
+    ui_ask answer "Name" <<< "hello world" >/dev/null
+    assert_equals "hello world" "$answer" "ask: reads a line into the variable"
+    ui_ask answer "Name" < /dev/null >/dev/null
+    assert_equals "" "$answer" "ask: end of input leaves the variable empty"
+}
+
+test_pause_returns_on_any_input() {
+    local rc=0
+    ui_pause <<< "x" >/dev/null || rc=$?
+    assert_equals "0" "$rc" "pause: returns after a line of input"
+    rc=0; ui_pause < /dev/null >/dev/null || rc=$?
+    assert_equals "0" "$rc" "pause: end of input does not hang or fail"
+}
+
+test_ask_yes_no_fallback_without_theme() {
+    local out
+    out="$(bash -c 'source "'"$LIB_DIR"'/core.sh"; ask_yes_no "Go?" <<< y; echo rc=$?' 2>&1)"
+    assert_contains "rc=0" "$out" "ask_yes_no: plain fallback works without theme.sh"
+}

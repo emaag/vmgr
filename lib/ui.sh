@@ -48,6 +48,12 @@ show_header() {
     echo ""
 }
 
+# Sub-screen: cleared screen, framed header, then the screen title.
+show_screen() {
+    show_header
+    ui_title "${1^^}"
+}
+
 show_main_menu() {
     show_header
 
@@ -353,10 +359,7 @@ confirm_destructive_op() {
         [[ "${count:-0}" -gt 5 ]] && echo -e "  ${COLOR_CYAN}... and $((count - 5)) more${COLOR_RESET}"
     fi
 
-    echo ""
-    echo -n "${COLOR_YELLOW}Proceed? [y/N]:${COLOR_RESET} "
-    read -r answer
-    [[ "${answer,,}" == "y" ]]
+    ui_confirm "Proceed?"
 }
 
 # Get directory input
@@ -376,15 +379,15 @@ _handle_single_operations_choice() {
                     rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     if [[ "$DRY_RUN" == true ]]; then
-                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
-                        read -r _apply
+                        ui_confirm "Apply these changes?" || true
+                        _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Rename Files" "$TARGET_FOLDER"; then
                             start_operation "Rename Files (Apply)"
                             rename_files_in_directory "$TARGET_FOLDER" false
                             end_operation
                         fi
                     fi
-                    read -p "Press Enter to continue..."
+                    ui_pause
                 fi
             fi
             return 0
@@ -396,15 +399,15 @@ _handle_single_operations_choice() {
                     remove_dashes_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     if [[ "$DRY_RUN" == true ]]; then
-                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
-                        read -r _apply
+                        ui_confirm "Apply these changes?" || true
+                        _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Remove Dashes" "$TARGET_FOLDER"; then
                             start_operation "Remove Dashes (Apply)"
                             remove_dashes_in_directory "$TARGET_FOLDER" false
                             end_operation
                         fi
                     fi
-                    read -p "Press Enter to continue..."
+                    ui_pause
                 fi
             fi
             return 0
@@ -416,15 +419,15 @@ _handle_single_operations_choice() {
                     fix_bracket_spacing_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     if [[ "$DRY_RUN" == true ]]; then
-                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
-                        read -r _apply
+                        ui_confirm "Apply these changes?" || true
+                        _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Fix Bracket Spacing" "$TARGET_FOLDER"; then
                             start_operation "Fix Bracket Spacing (Apply)"
                             fix_bracket_spacing_in_directory "$TARGET_FOLDER" false
                             end_operation
                         fi
                     fi
-                    read -p "Press Enter to continue..."
+                    ui_pause
                 fi
             fi
             return 0
@@ -436,15 +439,15 @@ _handle_single_operations_choice() {
                     flatten_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     if [[ "$DRY_RUN" == true ]]; then
-                        echo -n "${COLOR_YELLOW}Apply these changes? [y/N]:${COLOR_RESET} "
-                        read -r _apply
+                        ui_confirm "Apply these changes?" || true
+                        _apply="$REPLY"
                         if [[ "${_apply,,}" == "y" ]] && confirm_destructive_op "Flatten Directory" "$TARGET_FOLDER" "deep"; then
                             start_operation "Flatten Directory (Apply)"
                             flatten_directory "$TARGET_FOLDER" false
                             end_operation
                         fi
                     fi
-                    read -p "Press Enter to continue..."
+                    ui_pause
                 fi
             fi
             return 0
@@ -453,7 +456,7 @@ _handle_single_operations_choice() {
             if get_directory_input; then
                 if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Full Cleanup" "$TARGET_FOLDER"; then
                     workflow_deep_clean "$TARGET_FOLDER"
-                    read -p "Press Enter to continue..."
+                    ui_pause
                 fi
             fi
             return 0
@@ -486,7 +489,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert JPEG to JPG"
                 convert_jpeg_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -495,7 +498,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert PNG to JPG"
                 convert_png_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -504,7 +507,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert WebP to JPG"
                 convert_webp_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -513,7 +516,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert HEIC to JPG"
                 convert_heic_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -522,7 +525,7 @@ _handle_image_ops_choice() {
                 start_operation "Convert All Images to JPG"
                 convert_all_images_to_jpg "$TARGET_FOLDER" "$DRY_RUN" "$IMAGE_RECURSIVE"
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -553,21 +556,21 @@ _handle_batch_choice() {
             start_operation "Batch Rename Multiple Folders"
             batch_rename_interactive
             end_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         2)
             start_operation "Batch Flatten Multiple Folders"
             batch_flatten_interactive
             end_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         3)
             start_operation "Batch Full Cleanup"
             batch_cleanup_interactive
             end_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;
@@ -588,14 +591,14 @@ _handle_workflow_choice() {
         1)
             if get_directory_input; then
                 workflow_new_collection "$TARGET_FOLDER"
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
         2)
             if get_directory_input; then
                 workflow_deep_clean "$TARGET_FOLDER"
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -626,14 +629,14 @@ _handle_duplicates_choice() {
                 start_operation "Find and Delete Duplicates"
                 echo ""
                 log_warning "This will DELETE duplicate files!"
-                read -p "Are you sure? (type 'yes' to confirm): " confirm
+                ui_ask confirm "Are you sure? (type 'yes' to confirm)"
                 if [[ "$confirm" == "yes" ]]; then
                     find_duplicates "$TARGET_FOLDER" "delete"
                 else
                     log_warning "Operation cancelled"
                 fi
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -661,9 +664,7 @@ handle_duplicates() {
 
 # Configure basic subtitle settings (model, format, language)
 _handle_subtitle_configure() {
-    clear
-    echo -e "${COLOR_BRIGHT_CYAN}Configure Subtitle Settings${COLOR_RESET}"
-    echo ""
+    show_screen "Configure Subtitle Settings"
 
     echo -e "${COLOR_WHITE}Select Whisper Model:${COLOR_RESET}"
     echo "  [1] tiny   - Fastest, least accurate"
@@ -671,8 +672,7 @@ _handle_subtitle_configure() {
     echo "  [3] small  - Good accuracy"
     echo "  [4] medium - Better accuracy"
     echo "  [5] large  - Best accuracy, slowest"
-    echo -n "Choice [1-5]: "
-    read -r model_choice
+    ui_ask model_choice "Choice [1-5]"
     case "$model_choice" in
         1) WHISPER_MODEL="tiny" ;;
         2) WHISPER_MODEL="base" ;;
@@ -687,8 +687,7 @@ _handle_subtitle_configure() {
     echo "  [2] vtt  - WebVTT"
     echo "  [3] txt  - Plain text"
     echo "  [4] json - JSON format"
-    echo -n "Choice [1-4]: "
-    read -r format_choice
+    ui_ask format_choice "Choice [1-4]"
     case "$format_choice" in
         1) SUBTITLE_FORMAT="srt" ;;
         2) SUBTITLE_FORMAT="vtt" ;;
@@ -699,37 +698,34 @@ _handle_subtitle_configure() {
     echo ""
     echo -e "${COLOR_WHITE}Language (enter code or 'auto'):${COLOR_RESET}"
     echo "  Examples: en (English), es (Spanish), fr (French), auto (detect)"
-    echo -n "Language: "
-    read -r lang_choice
+    ui_ask lang_choice "Language"
     [[ -n "$lang_choice" ]] && SUBTITLE_LANGUAGE="$lang_choice"
 
     echo ""
     log_success "Settings updated!"
     log_info "Model: $WHISPER_MODEL | Format: $SUBTITLE_FORMAT | Language: $SUBTITLE_LANGUAGE"
+    ui_pause
 }
 
 # Configure advanced subtitle settings (GPU, parallel, toggles, filters)
 _handle_subtitle_advanced() {
-    clear
-    echo -e "${COLOR_BRIGHT_CYAN}Advanced Subtitle Settings${COLOR_RESET}"
-    echo ""
+    show_screen "Advanced Subtitle Settings"
 
-    echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle GPU Acceleration (Current: $([[ "$SUBTITLE_USE_GPU" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Parallel Jobs (Current: ${COLOR_CYAN}$SUBTITLE_PARALLEL_JOBS${COLOR_RESET})"
-    echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Toggle Batch Optimization (Current: $([[ "$SUBTITLE_OPTIMIZE_BATCH" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Speaker Diarization (Current: $([[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Auto-Punctuation (Current: $([[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Editing (Current: $([[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Toggle Auto-Edit (Current: $([[ "$SUBTITLE_AUTO_EDIT" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
+    ui_item_toggle 1 "Toggle GPU Acceleration" "$SUBTITLE_USE_GPU"
+    ui_item 2 "Set Parallel Jobs" "now: $SUBTITLE_PARALLEL_JOBS"
+    ui_item_toggle 3 "Toggle Batch Optimization" "$SUBTITLE_OPTIMIZE_BATCH"
+    ui_item_toggle 4 "Toggle Speaker Diarization" "$SUBTITLE_SPEAKER_DIARIZATION"
+    ui_item_toggle 5 "Toggle Auto-Punctuation" "$SUBTITLE_AUTO_PUNCTUATION"
+    ui_item_toggle 6 "Toggle Interactive Editing" "$SUBTITLE_INTERACTIVE_EDIT"
+    ui_item_toggle 7 "Toggle Auto-Edit" "$SUBTITLE_AUTO_EDIT"
     echo ""
     echo -e "${COLOR_YELLOW}Recursive Scanning:${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Toggle Recursive Mode (Current: $([[ "$SUBTITLE_RECURSIVE" == true ]] && echo "${COLOR_GREEN}ON${COLOR_RESET}" || echo "${COLOR_RED}OFF${COLOR_RESET}"))"
-    echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Set Max Depth (Current: ${COLOR_CYAN}$SUBTITLE_MAX_DEPTH${COLOR_RESET})"
-    echo -e "${COLOR_WHITE}[10]${COLOR_RESET} Set Max Files (Current: ${COLOR_CYAN}$SUBTITLE_MAX_FILES${COLOR_RESET})"
-    echo -e "${COLOR_WHITE}[11]${COLOR_RESET} Configure Filters & Selection"
+    ui_item_toggle 8 "Toggle Recursive Mode" "$SUBTITLE_RECURSIVE"
+    ui_item 9 "Set Max Depth" "now: $SUBTITLE_MAX_DEPTH"
+    ui_item 10 "Set Max Files" "now: $SUBTITLE_MAX_FILES"
+    ui_item 11 "Configure Filters & Selection"
     echo ""
-    echo -n "Select option (or Enter to skip): "
-    read -r adv_choice
+    ui_ask adv_choice "Select option (or Enter to skip)"
 
     case "$adv_choice" in
         1)
@@ -746,8 +742,7 @@ _handle_subtitle_advanced() {
             fi
             ;;
         2)
-            echo -n "Enter number of parallel jobs (1-8): "
-            read -r jobs
+            ui_ask jobs "Enter number of parallel jobs (1-8)"
             if [[ $jobs -ge 1 && $jobs -le 8 ]]; then
                 SUBTITLE_PARALLEL_JOBS=$jobs
                 log_success "Parallel jobs set to: $jobs"
@@ -786,8 +781,7 @@ _handle_subtitle_advanced() {
             fi
             ;;
         9)
-            echo -n "Enter maximum recursion depth (1-50): "
-            read -r depth
+            ui_ask depth "Enter maximum recursion depth (1-50)"
             if [[ $depth -ge 1 && $depth -le 50 ]]; then
                 SUBTITLE_MAX_DEPTH=$depth
                 log_success "Max depth set to: $depth"
@@ -796,8 +790,7 @@ _handle_subtitle_advanced() {
             fi
             ;;
         10)
-            echo -n "Enter maximum files to process (1-10000): "
-            read -r max_files
+            ui_ask max_files "Enter maximum files to process (1-10000)"
             if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
                 SUBTITLE_MAX_FILES=$max_files
                 log_success "Max files set to: $max_files"
@@ -807,9 +800,7 @@ _handle_subtitle_advanced() {
             ;;
         11)
             # Filters & Selection submenu
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Advanced Filters & Selection${COLOR_RESET}"
-            echo ""
+            show_screen "Advanced Filters & Selection"
             echo -e "${COLOR_YELLOW}Current Filters:${COLOR_RESET}"
             echo -e "  Min Size: ${COLOR_CYAN}${SUBTITLE_MIN_SIZE_MB}${COLOR_RESET} MB"
             echo -e "  Max Size: ${COLOR_CYAN}${SUBTITLE_MAX_SIZE_MB}${COLOR_RESET} MB (0=unlimited)"
@@ -820,23 +811,21 @@ _handle_subtitle_advanced() {
             echo -e "  Min Depth: ${COLOR_CYAN}${SUBTITLE_MIN_DEPTH}${COLOR_RESET}"
             echo -e "  Skip Patterns: ${COLOR_CYAN}${#SUBTITLE_SKIP_PATTERNS[@]}${COLOR_RESET} patterns"
             echo ""
-            echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Set Minimum File Size (MB)"
-            echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Set Maximum File Size (MB)"
-            echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Set Modified Days Filter"
-            echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Skip Existing Subtitles"
-            echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Show Directory Stats"
-            echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Toggle Interactive Directory Selection"
-            echo -e "${COLOR_WHITE}[7]${COLOR_RESET} Set Minimum Depth"
-            echo -e "${COLOR_WHITE}[8]${COLOR_RESET} Manage Skip Patterns"
-            echo -e "${COLOR_WHITE}[9]${COLOR_RESET} Reset All Filters to Default"
+            ui_item 1 "Set Minimum File Size (MB)"
+            ui_item 2 "Set Maximum File Size (MB)"
+            ui_item 3 "Set Modified Days Filter"
+            ui_item 4 "Toggle Skip Existing Subtitles"
+            ui_item 5 "Toggle Show Directory Stats"
+            ui_item 6 "Toggle Interactive Directory Selection"
+            ui_item 7 "Set Minimum Depth"
+            ui_item 8 "Manage Skip Patterns"
+            ui_item 9 "Reset All Filters to Default"
             echo ""
-            echo -n "Select option: "
-            read -r filter_choice
+            ui_ask filter_choice "Select option"
 
             case "$filter_choice" in
                 1)
-                    echo -n "Enter minimum file size in MB (0=no limit): "
-                    read -r min_size
+                    ui_ask min_size "Enter minimum file size in MB (0=no limit)"
                     if [[ $min_size -ge 0 ]]; then
                         SUBTITLE_MIN_SIZE_MB=$min_size
                         log_success "Minimum size set to: ${min_size}MB"
@@ -845,8 +834,7 @@ _handle_subtitle_advanced() {
                     fi
                     ;;
                 2)
-                    echo -n "Enter maximum file size in MB (0=no limit): "
-                    read -r max_size
+                    ui_ask max_size "Enter maximum file size in MB (0=no limit)"
                     if [[ $max_size -ge 0 ]]; then
                         SUBTITLE_MAX_SIZE_MB=$max_size
                         log_success "Maximum size set to: ${max_size}MB"
@@ -855,8 +843,7 @@ _handle_subtitle_advanced() {
                     fi
                     ;;
                 3)
-                    echo -n "Process files modified in last N days (0=all files): "
-                    read -r days
+                    ui_ask days "Process files modified in last N days (0=all files)"
                     if [[ $days -ge 0 ]]; then
                         SUBTITLE_MODIFIED_DAYS=$days
                         log_success "Date filter set to: ${days} days"
@@ -887,8 +874,7 @@ _handle_subtitle_advanced() {
                     fi
                     ;;
                 7)
-                    echo -n "Enter minimum depth (0=include current dir, 1=subdirs only): "
-                    read -r min_depth
+                    ui_ask min_depth "Enter minimum depth (0=include current dir, 1=subdirs only)"
                     if [[ $min_depth -ge 0 && $min_depth -le 50 ]]; then
                         SUBTITLE_MIN_DEPTH=$min_depth
                         log_success "Minimum depth set to: $min_depth"
@@ -906,8 +892,7 @@ _handle_subtitle_advanced() {
                     echo "Common patterns: .* (hidden), _* (underscore), tmp, temp, Trash"
                     echo "Leave empty to keep current patterns"
                     echo ""
-                    echo -n "Enter new patterns (space-separated): "
-                    read -r new_patterns
+                    ui_ask new_patterns "Enter new patterns (space-separated)"
                     if [[ -n "$new_patterns" ]]; then
                         read -ra SUBTITLE_SKIP_PATTERNS <<< "$new_patterns"
                         log_success "Skip patterns updated: ${SUBTITLE_SKIP_PATTERNS[*]}"
@@ -927,6 +912,7 @@ _handle_subtitle_advanced() {
             esac
             ;;
     esac
+    ui_pause
 }
 
 # Choice handler for subtitle generation menu
@@ -939,7 +925,7 @@ _handle_subtitles_choice() {
                 start_operation "Generate Subtitles"
                 generate_subtitles_in_directory "$TARGET_FOLDER" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN"
                 end_operation
-                read -p "Press Enter to continue..."
+                ui_pause
             fi
             return 0
             ;;
@@ -947,7 +933,7 @@ _handle_subtitles_choice() {
             start_operation "Batch Subtitle Generation"
             batch_generate_subtitles
             end_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         3)
@@ -960,25 +946,20 @@ _handle_subtitles_choice() {
             ;;
         5)
             # Edit existing subtitle
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Edit Existing Subtitle${COLOR_RESET}"
-            echo ""
-            echo -n "Enter subtitle file path: "
-            read -r subtitle_path
+            show_screen "Edit Existing Subtitle"
+            ui_ask subtitle_path "Enter subtitle file path"
 
             if [[ -f "$subtitle_path" ]]; then
                 edit_subtitle_interactive "$subtitle_path"
             else
                 log_error "File not found: $subtitle_path"
             fi
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         6)
             # Check whisper installation
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Checking Whisper Installation${COLOR_RESET}"
-            echo ""
+            show_screen "Checking Whisper Installation"
 
             if check_whisper_installation; then
                 local whisper_cmd=$(get_whisper_command)
@@ -1005,6 +986,7 @@ _handle_subtitles_choice() {
                 echo "  # Add to PATH or create symlink"
                 echo ""
             fi
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;
@@ -1024,30 +1006,27 @@ _handle_catalog_choice() {
     case "$choice" in
         1)
             # Scan & catalog a drive
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Scan & Catalog a Drive${COLOR_RESET}"
-            echo ""
+            show_screen "Scan & Catalog a Drive"
             echo "Available mount points:"
             echo "  /mnt/c  - Windows C: drive"
             echo "  /mnt/d  - Windows D: drive"
             echo "  /media/* - USB drives (if mounted)"
             echo ""
-            read -p "Enter mount point to catalog: " mount_point
+            ui_ask mount_point "Enter mount point to catalog"
 
             if [[ -z "$mount_point" ]]; then
                 log_error "No mount point specified"
                 return 0
             fi
 
-            read -p "Scan recursively? (y/n): " -n 1 -r
-            echo ""
+            ui_confirm "Scan recursively?" || true
             local recursive=false
             [[ $REPLY =~ ^[Yy]$ ]] && recursive=true
 
             start_operation "Catalog Drive: $mount_point"
             catalog_drive "$mount_point" "$recursive"
             end_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         2)
@@ -1060,16 +1039,14 @@ _handle_catalog_choice() {
             ;;
         3)
             # Search catalog
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Search Catalog${COLOR_RESET}"
-            echo ""
+            show_screen "Search Catalog"
             echo -e "${COLOR_WHITE}Filter by media type:${COLOR_RESET}"
             echo "  [1] All media"
             echo "  [2] Videos only"
             echo "  [3] Images only"
             echo "  [4] Audio only"
             echo ""
-            read -p "Choose filter [1-4]: " filter_choice
+            ui_ask filter_choice "Choose filter [1-4]"
 
             local media_filter="all"
             case "$filter_choice" in
@@ -1080,13 +1057,14 @@ _handle_catalog_choice() {
             esac
 
             echo ""
-            read -p "Enter search term: " search_term
+            ui_ask search_term "Enter search term"
 
             if [[ -n "$search_term" ]]; then
                 start_operation "Search Catalog"
                 search_catalog "$search_term" "$media_filter"
                 end_operation
             fi
+            ui_pause
             return 0
             ;;
         4)
@@ -1099,15 +1077,13 @@ _handle_catalog_choice() {
             ;;
         5)
             # Catalog multiple drives (batch)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Batch Catalog Multiple Drives${COLOR_RESET}"
-            echo ""
+            show_screen "Batch Catalog Multiple Drives"
             echo "Enter mount points to catalog (one per line, empty line to finish):"
             echo ""
 
             local -a mount_points
             while true; do
-                read -p "Mount point: " mp
+                ui_ask mp "Mount point"
                 [[ -z "$mp" ]] && break
                 mount_points+=("$mp")
             done
@@ -1117,8 +1093,7 @@ _handle_catalog_choice() {
                 return 0
             fi
 
-            read -p "Scan recursively? (y/n): " -n 1 -r
-            echo ""
+            ui_confirm "Scan recursively?" || true
             local recursive=false
             [[ $REPLY =~ ^[Yy]$ ]] && recursive=true
 
@@ -1128,14 +1103,12 @@ _handle_catalog_choice() {
                 catalog_drive "$mp" "$recursive"
             done
             end_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         6)
             # Export catalog report
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Export Catalog Report${COLOR_RESET}"
-            echo ""
+            show_screen "Export Catalog Report"
 
             local report_file="$HOME/video-catalog-report-$(date +%Y%m%d-%H%M%S).txt"
             {
@@ -1155,13 +1128,12 @@ _handle_catalog_choice() {
             } > "$report_file"
 
             log_success "Report exported to: $report_file"
+            ui_pause
             return 0
             ;;
         7)
             # Catalog settings
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Catalog Settings${COLOR_RESET}"
-            echo ""
+            show_screen "Catalog Settings"
             echo -e "${COLOR_WHITE}Media Types to Catalog:${COLOR_RESET}"
             echo -e "  Videos: $([[ "$CATALOG_VIDEOS" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
             echo -e "  Images: $([[ "$CATALOG_IMAGES" == true ]] && echo "${COLOR_GREEN}ENABLED${COLOR_RESET}" || echo "${COLOR_RED}DISABLED${COLOR_RESET}")"
@@ -1172,15 +1144,14 @@ _handle_catalog_choice() {
             echo -e "  Include Hash: $([[ "$CATALOG_INCLUDE_HASH" == true ]] && echo "${COLOR_GREEN}YES${COLOR_RESET}" || echo "${COLOR_RED}NO${COLOR_RESET}")"
             echo -e "  Offline Retention: ${COLOR_CYAN}$CATALOG_OFFLINE_RETENTION${COLOR_RESET} days"
             echo ""
-            echo -e "${COLOR_WHITE}[1]${COLOR_RESET} Toggle Video Cataloging"
-            echo -e "${COLOR_WHITE}[2]${COLOR_RESET} Toggle Image Cataloging"
-            echo -e "${COLOR_WHITE}[3]${COLOR_RESET} Toggle Audio Cataloging"
-            echo -e "${COLOR_WHITE}[4]${COLOR_RESET} Toggle Include Metadata"
-            echo -e "${COLOR_WHITE}[5]${COLOR_RESET} Toggle Include Hash"
-            echo -e "${COLOR_WHITE}[6]${COLOR_RESET} Set Offline Retention Days"
+            ui_item 1 "Toggle Video Cataloging"
+            ui_item 2 "Toggle Image Cataloging"
+            ui_item 3 "Toggle Audio Cataloging"
+            ui_item 4 "Toggle Include Metadata"
+            ui_item 5 "Toggle Include Hash"
+            ui_item 6 "Set Offline Retention Days"
             echo ""
-            echo -n "Select option (or Enter to skip): "
-            read -r setting_choice
+            ui_ask setting_choice "Select option (or Enter to skip)"
 
             case "$setting_choice" in
                 1)
@@ -1212,13 +1183,14 @@ _handle_catalog_choice() {
                     log_success "Hash inclusion toggled"
                     ;;
                 6)
-                    read -p "Enter offline retention days (0=forever): " days
+                    ui_ask days "Enter offline retention days (0=forever)"
                     if [[ $days -ge 0 ]]; then
                         CATALOG_OFFLINE_RETENTION=$days
                         log_success "Offline retention set to: $days days"
                     fi
                     ;;
             esac
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;
@@ -1244,27 +1216,23 @@ _handle_utilities_choice() {
     local choice="$1"
     case "$choice" in
         1)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Organize by Subfolder Names${COLOR_RESET}"
-            echo ""
+            show_screen "Organize by Subfolder Names"
             echo "This feature will:"
             echo "  1. Scan a target folder for subfolders"
             echo "  2. Search for video files matching those subfolder names"
             echo "  3. Move matching files into their respective subfolders"
             echo "  4. Skip files in 'full' folders or already in place"
             echo ""
-            echo -n "Enter target folder with subfolders (or . for current): "
-            read -r target_folder
+            ui_ask target_folder "Enter target folder with subfolders (or . for current)"
             target_folder="${target_folder:-.}"
 
-            echo -n "Enter search path (or . for current, or enter for target): "
-            read -r search_path
+            ui_ask search_path "Enter search path (or . for current, or enter for target)"
             search_path="${search_path:-$target_folder}"
 
             organize_by_subfolder_names "$target_folder" "$search_path"
 
             echo ""
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         2)
@@ -1276,14 +1244,13 @@ _handle_utilities_choice() {
             clear
             undo_organize_operation
             echo ""
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         4)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Last 50 Log Entries:${COLOR_RESET}"
-            echo ""
+            show_screen "Last 50 Log Entries"
             tail -n 50 "$LOG_FILE" 2>/dev/null || echo "No log entries found"
+            ui_pause
             return 0
             ;;
         5)
@@ -1297,11 +1264,8 @@ _handle_utilities_choice() {
             return 0
             ;;
         6)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Test Filename Transformation:${COLOR_RESET}"
-            echo ""
-            echo -n "Enter filename to test: "
-            read -r test_file
+            show_screen "Test Filename Transformation"
+            ui_ask test_file "Enter filename to test"
 
             echo ""
             echo -e "${COLOR_WHITE}Original:${COLOR_RESET} $test_file"
@@ -1314,12 +1278,11 @@ _handle_utilities_choice() {
 
             result=$(fix_bracket_spacing "$result")
             echo -e "${COLOR_WHITE}Final result:${COLOR_RESET} $result"
+            ui_pause
             return 0
             ;;
         7)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}System Information:${COLOR_RESET}"
-            echo ""
+            show_screen "System Information"
             echo -e "${COLOR_BOLD}${COLOR_WHITE}Environment:${COLOR_RESET}"
             echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Script Version: ${COLOR_WHITE}$SCRIPT_VERSION${COLOR_RESET}"
             echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Platform: ${COLOR_WHITE}$OS_TYPE${COLOR_RESET}"
@@ -1341,6 +1304,7 @@ _handle_utilities_choice() {
             command -v exiftool &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} exiftool" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} exiftool"
             command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
             command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;
@@ -1359,8 +1323,7 @@ _handle_organize_settings_choice() {
     case "$choice" in
         1)
             echo ""
-            echo -n "Enter default target folder path: "
-            read -r target_path
+            ui_ask target_path "Enter default target folder path"
             if [[ -d "$target_path" ]]; then
                 ORGANIZE_DEFAULT_TARGET="$target_path"
                 log_success "Default target set to: $target_path"
@@ -1372,8 +1335,7 @@ _handle_organize_settings_choice() {
             ;;
         2)
             echo ""
-            echo -n "Enter default search path: "
-            read -r search_path
+            ui_ask search_path "Enter default search path"
             if [[ -d "$search_path" ]]; then
                 ORGANIZE_DEFAULT_SEARCH="$search_path"
                 log_success "Default search path set to: $search_path"
@@ -1414,12 +1376,11 @@ _handle_settings_choice() {
             return 0
             ;;
         3)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Supported Video Extensions:${COLOR_RESET}"
-            echo ""
+            show_screen "Supported Video Extensions"
             for ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
                 echo "  ${SYMBOL_BULLET} .$ext"
             done
+            ui_pause
             return 0
             ;;
         4)
@@ -1431,22 +1392,20 @@ _handle_settings_choice() {
             return 0
             ;;
         6)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Save Configuration${COLOR_RESET}"
-            echo ""
-            read -p "Enter profile name (default): " profile_name
+            show_screen "Save Configuration"
+            ui_ask profile_name "Enter profile name (default)"
             profile_name=${profile_name:-default}
             save_config "$profile_name"
+            ui_pause
             return 0
             ;;
         7)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Load Configuration${COLOR_RESET}"
-            echo ""
+            show_screen "Load Configuration"
             list_config_profiles
-            read -p "Enter profile name to load (default): " profile_name
+            ui_ask profile_name "Enter profile name to load (default)"
             profile_name=${profile_name:-default}
             load_config "$profile_name"
+            ui_pause
             return 0
             ;;
         8)
@@ -1458,10 +1417,9 @@ _handle_settings_choice() {
             clear
             list_config_profiles
             echo ""
-            read -p "Enter profile name to delete: " profile_name
+            ui_ask profile_name "Enter profile name to delete"
             if [[ -n "$profile_name" ]]; then
-                read -p "Are you sure? (y/n): " -n 1 -r
-                echo ""
+                ui_confirm "Are you sure?" || true
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     delete_config_profile "$profile_name"
                 fi
@@ -1495,53 +1453,47 @@ _handle_granular_controls_choice() {
             return 0
             ;;
         4)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Configure Size Filter${COLOR_RESET}"
-            echo ""
-            read -p "Enable size filter? (y/n): " -n 1 -r
-            echo ""
+            show_screen "Configure Size Filter"
+            ui_confirm "Enable size filter?" || true
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 FILTER_BY_SIZE=true
-                read -p "Minimum size in MB (0 for no minimum): " FILTER_MIN_SIZE_MB
-                read -p "Maximum size in MB (0 for no maximum): " FILTER_MAX_SIZE_MB
+                ui_ask FILTER_MIN_SIZE_MB "Minimum size in MB (0 for no minimum)"
+                ui_ask FILTER_MAX_SIZE_MB "Maximum size in MB (0 for no maximum)"
                 log_success "Size filter enabled: ${FILTER_MIN_SIZE_MB}MB - ${FILTER_MAX_SIZE_MB}MB"
             else
                 FILTER_BY_SIZE=false
                 log_success "Size filter disabled"
             fi
+            ui_pause
             return 0
             ;;
         5)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Configure Date Filter${COLOR_RESET}"
-            echo ""
-            read -p "Enable date filter? (y/n): " -n 1 -r
-            echo ""
+            show_screen "Configure Date Filter"
+            ui_confirm "Enable date filter?" || true
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 FILTER_BY_DATE=true
-                read -p "Process files older than N days: " FILTER_DAYS_OLD
+                ui_ask FILTER_DAYS_OLD "Process files older than N days"
                 log_success "Date filter enabled: ${FILTER_DAYS_OLD}+ days old"
             else
                 FILTER_BY_DATE=false
                 log_success "Date filter disabled"
             fi
+            ui_pause
             return 0
             ;;
         6)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Configure Pattern Filter${COLOR_RESET}"
-            echo ""
-            read -p "Enable pattern filter? (y/n): " -n 1 -r
-            echo ""
+            show_screen "Configure Pattern Filter"
+            ui_confirm "Enable pattern filter?" || true
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 FILTER_BY_PATTERN=true
-                read -p "Enter regex pattern: " FILTER_PATTERN
+                ui_ask FILTER_PATTERN "Enter regex pattern"
                 log_success "Pattern filter enabled: $FILTER_PATTERN"
             else
                 FILTER_BY_PATTERN=false
                 FILTER_PATTERN=""
                 log_success "Pattern filter disabled"
             fi
+            ui_pause
             return 0
             ;;
         7)
@@ -1549,9 +1501,7 @@ _handle_granular_controls_choice() {
             return 0
             ;;
         8)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Undo History${COLOR_RESET}"
-            echo ""
+            show_screen "Undo History"
             if [[ -f "$UNDO_HISTORY_FILE" ]]; then
                 local operations=$(jq -r '.operations[] | select(.undone == false) | "\(.timestamp) - \(.type): \(.original) -> \(.new)"' "$UNDO_HISTORY_FILE" 2>/dev/null)
                 if [[ -n "$operations" ]]; then
@@ -1562,12 +1512,13 @@ _handle_granular_controls_choice() {
             else
                 echo "No undo history file found"
             fi
+            ui_pause
             return 0
             ;;
         9)
             clear
             undo_last_operation
-            read -p "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;
@@ -1628,41 +1579,37 @@ _handle_main_menu_choice() {
 show_reddit_menu() {
     show_header
 
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}REDDIT IMAGE DOWNLOADER${COLOR_RESET}"
+    ui_title "REDDIT IMAGE DOWNLOADER"
+    ui_item 1 "Download Images from Subreddit"
     echo ""
-    echo -e "${COLOR_BRIGHT_GREEN}[1]${COLOR_RESET} ${COLOR_WHITE}Download Images from Subreddit${COLOR_RESET}"
-    echo ""
-    echo -e "${COLOR_RED}[B]${COLOR_RESET} ${COLOR_WHITE}Back to Main Menu${COLOR_RESET}"
-    echo ""
-    echo -n "${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Select option: "
+    ui_item B "Back to Main Menu" "" back
+    ui_prompt
 }
 
 _handle_reddit_choice() {
     local choice="$1"
     case "$choice" in
         1)
-            clear
-            echo -e "${COLOR_BRIGHT_CYAN}Reddit Image Downloader${COLOR_RESET}"
-            echo ""
-            read -rp "Subreddit name (e.g. EarthPorn): " subreddit
+            show_screen "Reddit Image Downloader"
+            ui_ask subreddit "Subreddit name (e.g. EarthPorn)"
             if [[ -z "$subreddit" ]]; then
                 log_error "No subreddit specified"
-                read -rp "Press Enter to continue..."
+                ui_pause
                 return 0
             fi
 
             local default_dir="$HOME/Pictures/reddit/${subreddit}"
-            read -rp "Output directory [${default_dir}]: " output_dir
+            ui_ask output_dir "Output directory [${default_dir}]"
             [[ -z "$output_dir" ]] && output_dir="$default_dir"
 
-            read -rp "Max images to download [200]: " max_images
+            ui_ask max_images "Max images to download [200]"
             [[ -z "$max_images" || ! "$max_images" =~ ^[0-9]+$ ]] && max_images=200
 
             echo ""
             start_operation "Reddit Download: r/${subreddit}"
             download_subreddit_images "$subreddit" "$output_dir" "$max_images"
             end_operation
-            read -rp "Press Enter to continue..."
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;

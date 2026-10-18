@@ -223,4 +223,70 @@ ui_read_choice() {
     printf -v "$1" '%s' "$_k"
 }
 
+# ui_ask VAR TEXT: prompt for a line of text into the variable named VAR.
+# Leaves VAR empty at end of input.
+ui_ask() {
+    printf '  %s%s%s %s ' "$UI_ACCENT" "$UI_PROMPT" "$COLOR_RESET" "$2"
+    IFS= read -r "$1" || printf -v "$1" '%s' ""
+}
+
+# ui_confirm QUESTION [DEFAULT]: single-keypress yes/no. DEFAULT is y or n
+# (n if omitted) and is what Enter picks; Esc means no. Sets REPLY to y or n and
+# returns 0 for yes. Reads a whole line when stdin is not a terminal.
+ui_confirm() {
+    local question="$1" default="${2:-n}" hint key answer _ui_c
+    [[ "$default" == y ]] && hint="Y/n" || hint="y/N"
+    printf '\n  %s%s%s %s %s[%s]%s ' "$UI_ACCENT" "$UI_PROMPT" "$COLOR_RESET" "$question" "$UI_DIM" "$hint" "$COLOR_RESET"
+
+    if [[ ! -t 0 ]]; then
+        IFS= read -r key || key=""
+        key="${key:0:1}"
+        [[ -z "$key" ]] && key="$default"
+    else
+        while true; do
+            IFS= read -rsn1 key || { key="$default"; break; }
+            case "$key" in
+                [yY]) key=y; break ;;
+                [nN]) key=n; break ;;
+                '')   key="$default"; break ;;
+                $'\033')
+                    # A lone Esc means no; anything longer is an arrow key, ignore it
+                    if IFS= read -rsn1 -t 0.05 _ui_c; then
+                        while IFS= read -rsn1 -t 0.05 _ui_c; do
+                            [[ "$_ui_c" == [A-Za-z~] ]] && break
+                        done
+                    else
+                        key=n; break
+                    fi
+                    ;;
+            esac
+        done
+    fi
+
+    case "$key" in
+        [yY]) answer=yes; REPLY=y ;;
+        *)    answer=no;  REPLY=n ;;
+    esac
+    printf '%s%s%s\n' "$UI_DIM" "$answer" "$COLOR_RESET"
+    [[ "$REPLY" == y ]]
+}
+
+# ui_pause [TEXT]: wait for any key (a line when stdin is not a terminal).
+ui_pause() {
+    local key
+    printf '\n  %s%s%s ' "$UI_DIM" "${1:-Press any key to continue}" "$COLOR_RESET"
+    if [[ -t 0 ]]; then
+        IFS= read -rsn1 key || true
+        if [[ "$key" == $'\033' ]]; then
+            # Swallow the rest of an arrow/function-key sequence
+            while IFS= read -rsn1 -t 0.05 key; do
+                [[ "$key" == [A-Za-z~] ]] && break
+            done
+        fi
+    else
+        IFS= read -r key || true
+    fi
+    printf '\n'
+}
+
 return 0

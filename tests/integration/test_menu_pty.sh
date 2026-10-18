@@ -38,12 +38,12 @@ for k in re.findall(rb'\x1b\[[A-D]|.', keys, re.S):
 log += drain(0.8)
 text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', log)
 done, _ = os.waitpid(pid, os.WNOHANG)
-print('|'.join(str(text.count(t)) for t in ('FILE OPERATIONS', 'UTILITIES', 'MAIN MENU', 'Goodbye')) + f'|{int(done != 0)}')
+print('|'.join(str(text.count(t)) for t in ('FILE OPERATIONS', 'UTILITIES', 'MAIN MENU', 'Goodbye', 'Press any key')) + f'|{int(done != 0)}')
 PY
 }
 _teardown() { [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPDIR"; }
 
-# _drive KEYS -> "fileops|utilities|mainmenu|goodbye|exited"
+# _drive KEYS -> "fileops|utilities|mainmenu|goodbye|anykey|exited"
 _drive() { HOME="$TEST_TMPDIR" python3 "$TEST_TMPDIR/drive.py" "$VMGR_ROOT/video-manager-ultimate.sh" "$1" 2>/dev/null; }
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -53,24 +53,37 @@ fi
 
 test_pty_menu_needs_no_enter() {
     _setup
-    assert_equals "1|0|1|0|0" "$(_drive '1')" "menu: one keypress opens File Operations"
+    assert_equals "1|0|1|0|0|0" "$(_drive '1')" "menu: one keypress opens File Operations"
     _teardown
 }
 
 test_pty_menu_esc_goes_back() {
     _setup
-    assert_equals "1|0|2|0|0" "$(_drive '1\x1b')" "menu: Esc returns to the main menu"
+    assert_equals "1|0|2|0|0|0" "$(_drive '1\x1b')" "menu: Esc returns to the main menu"
     _teardown
 }
 
 test_pty_menu_arrows_ignored() {
     _setup
-    assert_equals "0|0|1|0|0" "$(_drive '\x1b[A\x1b[B')" "menu: arrow keys are ignored"
+    assert_equals "0|0|1|0|0|0" "$(_drive '\x1b[A\x1b[B')" "menu: arrow keys are ignored"
     _teardown
 }
 
 test_pty_menu_quit() {
     _setup
-    assert_equals "0|0|1|1|1" "$(_drive 'q')" "menu: Q quits immediately"
+    assert_equals "0|0|1|1|0|1" "$(_drive 'q')" "menu: Q quits immediately"
+    _teardown
+}
+
+test_pty_info_screen_waits_for_a_key() {
+    _setup
+    # Utilities > System Information shows the screen and waits instead of flashing past
+    assert_equals "0|1|1|0|1|0" "$(_drive '57')" "menu: an info screen pauses for a key"
+    _teardown
+}
+
+test_pty_pause_then_back_to_menu() {
+    _setup
+    assert_equals "0|2|1|0|1|0" "$(_drive '57x')" "menu: any key after the pause returns to the menu"
     _teardown
 }
