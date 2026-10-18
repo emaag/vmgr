@@ -181,3 +181,41 @@ test_subtitle_scan_skips_the_trash() {
     assert_not_equals "" "$(grep -c real "$TEST_TMPDIR/calls")" "subtitles: it is the real one"
     _teardown
 }
+
+# Two trashed batches, one aged 10 days, each with its own undo log.
+_two_batches() {
+    local t="$TEST_TMPDIR/v/.vmgr-trash"
+    mkdir -p "$t/old" "$t/new" "$UNDO_LOG_DIR"
+    echo old > "$t/old/o.mp4"; echo new > "$t/new/n.mp4"
+    printf '# Operation: old\n%s|%s\n' "$TEST_TMPDIR/v/o.mp4" "$t/old/o.mp4" > "$UNDO_LOG_DIR/op-old.log"
+    printf '# Operation: new\n%s|%s\n' "$TEST_TMPDIR/v/n.mp4" "$t/new/n.mp4" > "$UNDO_LOG_DIR/op-new.log"
+    touch -d "10 days ago" "$t/old"
+}
+
+test_empty_trash_with_days_keeps_newer_batches_and_their_undo() {
+    _setup
+    _two_batches
+    empty_trash 7 <<< "y" >/dev/null 2>&1
+    assert_file_not_exists "$TEST_TMPDIR/v/.vmgr-trash/old/o.mp4" "empty trash days: the old batch is deleted"
+    assert_file_exists "$TEST_TMPDIR/v/.vmgr-trash/new/n.mp4" "empty trash days: the new batch is kept"
+    assert_file_exists "$UNDO_LOG_DIR/op-new.log" "empty trash days: the kept batch can still be undone"
+    assert_file_exists "$UNDO_LOG_DIR/op-old.log.expired" "empty trash days: the deleted batch's undo log is retired"
+    _teardown
+}
+
+test_empty_trash_with_days_reports_when_nothing_is_old_enough() {
+    _setup
+    _two_batches
+    local out; out="$(empty_trash 30 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
+    assert_contains "Nothing in the trash is 30 day(s) old yet" "$out" "empty trash days: says nothing qualifies"
+    assert_equals "2" "$(_trashed_files | wc -l | tr -d ' ')" "empty trash days: nothing deleted"
+    _teardown
+}
+
+test_empty_trash_rejects_a_bad_day_count() {
+    _setup
+    local rc=0
+    empty_trash "abc" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "empty trash days: a non-number is an error"
+    _teardown
+}

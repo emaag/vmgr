@@ -389,7 +389,7 @@ previewing when Dry run is on). *Utilities → List Undo Operations* shows each 
 **The trash.** Removing duplicates moves the extra copies into a hidden `.vmgr-trash/<timestamp>/` folder inside the folder you
 scanned (on the same drive, so it is instant even for large videos), keeping each file's relative path. Every scan the tool runs
 (duplicates, flatten, image conversion, subtitles, organize, the catalog) skips `.vmgr-trash`. *Utilities → Empty Trash* (or
-`--empty-trash`) lists each trash with its size, asks, and then deletes for good; the undo logs that pointed into it are retired.
+`--empty-trash`) lists each trash with its size, asks, and then deletes for good; the undo logs that pointed into it are retired. Give a number of days (`--empty-trash 30`, or answer the menu prompt) to delete only batches at least that old and keep the newer ones undoable.
 
 **Limits.** If you switch **Settings → Granular Controls → Undo System** off, nothing is recorded
 and duplicates are deleted permanently (with a typed `yes`). Undo restores files to their places but does not re-add them to the
@@ -579,7 +579,7 @@ Main menu **[5]**. System management, diagnostics and undo.
 **[5] Open Log Directory**: file manager on the logs folder (WSL and Linux)
 **[6] Test Filename Transformation**: type a filename and see each step of the pipeline
 **[7] Display System Information**: versions, paths and which optional tools are installed
-**[8] Empty Trash**: lists every `.vmgr-trash` the undo logs know about with its size and deletes the contents for good after you confirm
+**[8] Empty Trash**: lists every `.vmgr-trash` the undo logs know about with its size and deletes the contents for good after you confirm; you can limit it to batches at least N days old
 
 ---
 

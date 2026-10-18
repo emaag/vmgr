@@ -1352,7 +1352,9 @@ _handle_utilities_choice() {
             ;;
         8)
             clear
-            empty_trash
+            local trash_days=""
+            read -r -p "  Only delete trash at least this many days old (Enter = everything): " trash_days
+            empty_trash "${trash_days:-0}"
             [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;

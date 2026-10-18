@@ -136,7 +136,7 @@ Main Menu                      (single keypress; Esc goes back)
 └── [7] Reddit Downloader ← downloads; [2] guided API setup
 
 Undo:  Utilities > Undo Last Operation   |   vmgr --undo-organize [ID]   |   vmgr --list-undo
-Trash: Utilities > Empty Trash           |   vmgr --empty-trash
+Trash: Utilities > Empty Trash           |   vmgr --empty-trash [DAYS]
 ```
 
 ---

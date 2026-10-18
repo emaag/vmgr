@@ -128,7 +128,8 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     --organize              Organize files by subfolder names
     --undo-organize [id]    Undo a logged operation (default: the most recent)
     --list-undo             List available undo operations
-    --empty-trash           Permanently delete files the tool moved to trash
+    --empty-trash [DAYS]    Permanently delete files the tool moved to trash
+                            (with DAYS, only batches at least that old)
     catalog <dir>           Scan a drive or folder into the catalog (incremental)
     catalog-list            List cataloged drives (online/offline, totals)
     catalog-search <term> [video|image|audio]   Search the catalog, offline drives included
@@ -321,6 +322,10 @@ parse_arguments() {
             --empty-trash)
                 command="empty-trash"
                 shift
+                if [[ "$1" =~ ^[0-9]+$ ]]; then
+                    TRASH_MIN_DAYS="$1"
+                    shift
+                fi
                 ;;
             reddit-setup)
                 command="reddit-setup"
@@ -462,7 +467,7 @@ parse_arguments() {
             list_undo_operations
             ;;
         empty-trash)
-            empty_trash
+            empty_trash "${TRASH_MIN_DAYS:-0}"
             ;;
         reddit-setup)
             reddit_setup_interactive

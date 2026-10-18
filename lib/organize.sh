@@ -212,9 +212,17 @@ _trash_roots() {
     shopt -u nullglob
 }
 
-# Permanently delete everything the tool has moved to trash. This is the point of
-# no return: the matching undo logs are retired because they can no longer work.
+# Permanently delete what the tool has moved to trash. With MIN_DAYS only the
+# trashed batches (one folder per operation) untouched for that many days or more
+# go; the undo logs of batches that are gone can no longer restore anything and
+# are retired. Returns 2 when the user declines.
+# Args: [MIN_DAYS]  (0 or empty = everything)
 empty_trash() {
+    local min_days="${1:-0}"
+    if [[ ! "$min_days" =~ ^[0-9]+$ ]]; then
+        log_error "Days must be a whole number: $min_days"
+        return 1
+    fi
     start_operation "Empty Trash"
 
     local -a roots=()
@@ -225,15 +233,35 @@ empty_trash() {
         return 0
     fi
 
-    local root bytes total=0 files total_files=0 short
+    # What to delete: each whole trash, or only its batches old enough
+    local -a targets=()
+    local root d bytes total=0 files total_files=0 short kept=0
     for root in "${roots[@]}"; do
-        bytes="$(_dir_bytes "$root")"
-        files=$(find "$root" -type f 2>/dev/null | wc -l)
-        files=$(( files ))
+        local -a mine=()
+        if (( min_days > 0 )); then
+            while IFS= read -r -d '' d; do mine+=("$d"); done < <(find "$root" -mindepth 1 -maxdepth 1 -mtime "+$(( min_days - 1 ))" -print0 2>/dev/null)
+            kept=$(( kept + $(find "$root" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l) - ${#mine[@]} ))
+        else
+            mine=("$root")
+        fi
+        [[ ${#mine[@]} -gt 0 ]] || continue
+        bytes=0; files=0
+        for d in "${mine[@]}"; do
+            bytes=$(( bytes + $(_dir_bytes "$d") ))
+            files=$(( files + $(find "$d" -type f 2>/dev/null | wc -l) ))
+        done
+        targets+=("${mine[@]}")
         total=$(( total + bytes )); total_files=$(( total_files + files ))
         _ui_short_path "$(dirname "$root")" 52 short 2>/dev/null || short="$(dirname "$root")"
         printf '  %s%s%s %s(%d file(s), %s)%s\n' "${UI_ACCENT:-}" "$short" "$COLOR_RESET" "${UI_DIM:-}" "$files" "$(format_bytes "$bytes")" "$COLOR_RESET"
     done
+
+    if [[ ${#targets[@]} -eq 0 ]]; then
+        log_info "Nothing in the trash is ${min_days} day(s) old yet"
+        end_operation
+        return 0
+    fi
+    (( min_days > 0 && kept > 0 )) && echo -e "  ${UI_DIM:-}${kept} newer batch(es) will be kept${COLOR_RESET}"
     echo ""
 
     if [[ "$DRY_RUN" == true ]]; then
@@ -247,22 +275,29 @@ empty_trash() {
     fi
 
     local f
-    for root in "${roots[@]}"; do
-        [[ "$(basename "$root")" == "$VMGR_TRASH_DIR" ]] || continue
-        if rm -rf -- "$root"; then
-            log_success "Emptied: $(dirname "$root")/$VMGR_TRASH_DIR"
+    for d in "${targets[@]}"; do
+        case "$d" in
+            */"$VMGR_TRASH_DIR"|*/"$VMGR_TRASH_DIR"/*) ;;
+            *) continue ;;
+        esac
+        if rm -rf -- "$d"; then
+            log_success "Deleted: $d"
         else
-            log_error "Could not remove: $root"
+            log_error "Could not remove: $d"
         fi
     done
+    for root in "${roots[@]}"; do rmdir "$root" 2>/dev/null; done
     STATS[space_saved]=$(( ${STATS[space_saved]:-0} + total ))
 
-    # The undo logs that pointed into the trash can no longer restore anything
+    # Retire the undo logs that point at something now gone
+    local dest gone
     shopt -s nullglob
     for f in "$UNDO_LOG_DIR"/*.log; do
-        if grep -v '^#' "$f" | cut -d'|' -f2 | grep -q "/$VMGR_TRASH_DIR/"; then
-            mv "$f" "${f}.expired" 2>/dev/null
-        fi
+        gone=false
+        while IFS= read -r dest; do
+            [[ -e "$dest" ]] || { gone=true; break; }
+        done < <(grep -v '^#' "$f" | cut -d'|' -f2 | grep "/$VMGR_TRASH_DIR/")
+        $gone && mv "$f" "${f}.expired" 2>/dev/null
     done
     shopt -u nullglob
 
