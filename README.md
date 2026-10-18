@@ -2,15 +2,15 @@
 
 **Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.**
 
-[![Version](https://img.shields.io/badge/version-1.9.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.9.0)
+[![Version](https://img.shields.io/badge/version-1.9.1-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.9.1)
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-682%2F682%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-690%2F690%20passing-success.svg)](tests/)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
-### Status at a glance — v1.9.0: Undo for Image Conversion, Cataloging Progress
+### Status at a glance — v1.9.1: Safe Ctrl-C for Subtitles
 
 | Change | State |
 |--------|-------|
@@ -26,7 +26,7 @@
 | Progress bars and a summary card after every operation | ✅ Shipped |
 | Quiet output by default (`--verbose` for detail); `NO_COLOR` and ASCII fallbacks | ✅ Shipped |
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
-| 682-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
+| 690-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
 
 [See the changelog →](CHANGELOG.md)
 
@@ -271,6 +271,10 @@ Or use command-line flags:
 
 <details>
 <summary>Version history — click to expand</summary>
+
+### v1.9.1 (October 2026)
+- Ctrl-C while generating subtitles stops cleanly and removes the half-written file
+- Failed subtitle videos are listed by name when the run finishes
 
 ### v1.9.0 (October 2026)
 - Undo for image conversion (originals are trashed, not deleted)
