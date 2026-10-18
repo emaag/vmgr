@@ -137,8 +137,9 @@ Main Menu
 ## 📂 Directory Browser Keys
 
 ```
-↑ ↓  move        → / Enter  open folder      ← / Backspace  up one level
-S / Space  choose the Location shown        Q / Esc  cancel
+↑ ↓  move        →  open folder              ← / Backspace  up one level
+Enter  choose highlighted folder             S / Space  choose the Location shown
+Q / Esc  cancel
 Home / End  first / last folder              ~  home        -  previous directory
 R  recent directories                        T  type a path (Tab completes)
 .  show/hide hidden folders                  F  refresh listing

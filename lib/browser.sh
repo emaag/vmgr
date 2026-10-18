@@ -412,8 +412,8 @@ _browser_interactive() {
             fi
         done
 
-        printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→/Enter${COLOR_RESET} open highlighted folder  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} go up"
-        printf '%s\033[K\n' "${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} choose the Location shown above  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
+        printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→${COLOR_RESET} open folder  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} go up"
+        printf '%s\033[K\n' "${COLOR_BRIGHT_GREEN}Enter${COLOR_RESET} choose highlighted folder  ${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} choose Location above  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
         printf '%s\033[K\n' "${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path  ${COLOR_YELLOW}.${COLOR_RESET} hidden  ${COLOR_YELLOW}F${COLOR_RESET} refresh"
         printf '%s\033[K' "${COLOR_RED}${msg}${COLOR_RESET}"
         printf '\033[J'
@@ -430,14 +430,20 @@ _browser_interactive() {
             END)    sel=$(( count > 0 ? count - 1 : 0 )) ;;
             PGUP)   sel=$(( sel - visible )); (( sel < 0 )) && sel=0 ;;
             PGDN)   sel=$(( sel + visible )); (( sel > count - 1 )) && sel=$(( count > 0 ? count - 1 : 0 )) ;;
-            RIGHT|l|ENTER)
+            RIGHT|l)
                 if (( count > 0 )); then
                     _browser_goto "$current_dir/${dirs[$sel]}" || msg="Cannot open ${dirs[$sel]}/"
-                elif [[ "$key" == ENTER ]]; then
-                    TARGET_FOLDER="$current_dir"
-                    browser_recent_add "$current_dir"
-                    return 0
                 fi
+                ;;
+            ENTER)
+                # Choose the highlighted folder; with none, choose this one
+                if (( count > 0 )); then
+                    TARGET_FOLDER="$current_dir/${dirs[$sel]}"
+                else
+                    TARGET_FOLDER="$current_dir"
+                fi
+                browser_recent_add "$TARGET_FOLDER"
+                return 0
                 ;;
             LEFT|h)
                 local parent

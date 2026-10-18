@@ -588,9 +588,9 @@ Location: /home/you/Videos
 Here: 3 folder(s), 1 video(s)  (hidden: off)
 FOLDERS                      │ PREVIEW: alpha/
                              │ Folders (2)
-▸ 1. alpha/                  │ inner/
-  2. beta/                   │ second/
-  3. gamma/                  │
+▸ alpha/                     │ inner/
+  beta/                      │ second/
+  gamma/                     │
                              │ Videos (2)
                              │ a.mkv
                              │ b.mkv
@@ -599,11 +599,12 @@ FOLDERS                      │ PREVIEW: alpha/
 | Key | Action |
 |-----|--------|
 | `↑` `↓` (or `k` `j`) | Move the highlight; `PgUp` / `PgDn` page through long lists |
-| `→` / `Enter` (or `l`) | Open the highlighted folder (on a folder with no subfolders, `Enter` selects it) |
+| `→` (or `l`) | Open the highlighted folder |
+| `Enter` | **Choose the highlighted folder** and continue (with no subfolders, chooses the current one) |
 | `←` / `Backspace` (or `h`) | Go up one level, keeping the folder you came from highlighted |
-| `S` / `Space` | **Select the current directory** and continue |
+| `S` / `Space` | **Choose the current directory** (the `Location:` line) and continue |
 | `Q` / `Esc` / `C` | Cancel |
-| `1`-`9` | Jump straight into the numbered folder on screen |
+| `Home` / `End` | Jump to the first / last folder |
 | `~` | Go to your home directory |
 | `-` | Go back to the previous directory |
 | `R` | Pick from recently used directories (numbered `1`-`9`) |
@@ -614,6 +615,7 @@ FOLDERS                      │ PREVIEW: alpha/
 **Good to know**
 - It starts in the directory you used last. Recent directories are stored in `~/.video-manager-recent-dirs`
   (10 entries; folders that no longer exist are dropped).
+- Symlinks and Windows junctions are not listed; use `T` to type a path into one.
 - Terminals narrower than 70 columns show a single list without the preview.
 - When input is piped (not a terminal) it falls back to a plain `Directory [default]:` prompt.
 
