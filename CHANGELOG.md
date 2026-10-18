@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Browser paths**: going into a folder from `/` produced `//mnt/...`; leading `//` is now collapsed.
+- **Destructive-op prompt**: `grep -c ... || echo 0` yielded `0\n0` when nothing matched, printing
+  `[[: 0 0: syntax error` before "Proceed?". The prompt also now explains when videos exist only in
+  subfolders (Rename and similar operations only look at files directly in the folder).
 - **Reddit downloads without API credentials**: Reddit now returns HTTP 403 for unauthenticated `.json`
   requests. Without `~/.vmgr-reddit.conf` the downloader now uses the public RSS feed instead
   (images, gifs, direct video links, and `v.redd.it` videos resolved through the DASH manifest and muxed
@@ -29,15 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Directory browser rewrite** (`lib/browser.sh`, moved out of `ui.sh`): arrow-key navigation
-  (↑↓ move, →/Enter open, ←/Backspace up, PgUp/PgDn), in-place repainting instead of full-screen
+  (↑↓ move, → open, Enter choose the highlighted folder, ←/Backspace up, PgUp/PgDn, Home/End), in-place repainting instead of full-screen
   clears, scrolling for long lists, and a two-column layout: folders on the left, a live preview
   of the highlighted folder (its subfolders and videos) on the right. Narrow terminals (<70 cols) show one column.
-- Shortcuts: `1-9` jump, `~` home, `-` previous directory, `R` recent directories (persisted in
+- Shortcuts: `~` home, `-` previous directory, `R` recent directories (persisted in
   `~/.video-manager-recent-dirs`), `.` toggle hidden folders, `T` type a path with readline
   Tab completion and history. The browser starts in the most recently used directory.
 - Directory listings are cached per folder (validated by the folder's mtime), so revisiting a folder
   or moving over it no longer re-scans the disk. Press `F` to force a refresh.
-- Enter now opens the highlighted folder; use `S` or Space to select the current one.
+- Enter chooses the highlighted folder; `S` or Space chooses the `Location:` shown. Symlinks and Windows
+  junctions are no longer listed (use `T` to type a path into one).
+- The browser redraws without forking subprocesses and paints once for a burst of queued keys, so holding
+  an arrow key no longer lags (60 queued keypresses: 6.0s to 0.4s).
 - Falls back to a plain prompt when stdin/stdout is not a terminal.
 
 ---
