@@ -130,7 +130,6 @@ SUBTITLE_MAX_SIZE_MB=0 # Maximum file size filter in MB (0=disabled)
 SUBTITLE_MODIFIED_DAYS=0 # Only process files modified within N days (0=disabled)
 SUBTITLE_SKIP_EXISTING=true # Skip files that already have subtitles
 SUBTITLE_INTERACTIVE_SELECT=false # Interactively select files before processing
-SUBTITLE_RESUME_FILE="$HOME/.video-manager-subtitle-resume.txt" # For future resume/checkpoint feature
 
 # Advanced subtitle settings (referenced by ui.sh advanced menu)
 SUBTITLE_SPEAKER_DIARIZATION=false  # Speaker diarization (future: pyannote-audio)

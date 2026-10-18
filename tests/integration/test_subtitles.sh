@@ -53,7 +53,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 base="$(basename "${input_file%.*}")"
+[[ -n "${MOCK_WHISPER_FAIL:-}" && "$input_file" == *"$MOCK_WHISPER_FAIL"* ]] && exit 3
 [[ -n "${MOCK_WHISPER_CALLS:-}" ]] && echo "$input_file" >> "$MOCK_WHISPER_CALLS"
+if [[ -n "${MOCK_WHISPER_SLEEP:-}" ]]; then
+    printf "1\n00:00:00,000 --> 00:00:02,000\npartial\n" > "${output_dir}/${base}.${format}"
+    sleep "$MOCK_WHISPER_SLEEP"
+fi
 if [[ -n "${MOCK_WHISPER_BODY:-}" ]]; then
     printf '%b' "$MOCK_WHISPER_BODY" > "${output_dir}/${base}.${format}"
 else
@@ -367,5 +372,38 @@ test_mixed_output_keeps_the_real_cues() {
     assert_contains "Hello there" "$(cat "$TEST_TMPDIR/talk.srt")" "mixed: real cues kept"
     assert_equals "0" "$(grep -c '^\.$' "$TEST_TMPDIR/talk.srt")" "mixed: filler cues removed"
     assert_file_not_exists "$TEST_TMPDIR/.talk.nospeech" "mixed: no no-speech marker"
+    _teardown
+}
+
+test_failed_videos_are_listed_in_the_closing_report() {
+    _setup
+    _setup_mock_whisper
+    touch "$TEST_TMPDIR/good.mp4" "$TEST_TMPDIR/bad.mp4"
+    local out
+    out=$(MOCK_WHISPER_FAIL="bad" generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false 2>&1)
+    _restore_path
+    assert_contains "1 video(s) failed" "$out" "failures: count reported"
+    assert_contains "bad.mp4 (whisper exited with code 3)" "$out" "failures: failed video named"
+    assert_file_exists "$TEST_TMPDIR/good.srt" "failures: other videos still processed"
+    assert_file_not_exists "$TEST_TMPDIR/bad.srt" "failures: no subtitle left for the failed video"
+    _teardown
+}
+
+test_interrupt_stops_the_run_and_removes_the_partial_subtitle() {
+    _setup
+    _setup_mock_whisper
+    touch "$TEST_TMPDIR/a.mp4" "$TEST_TMPDIR/b.mp4"
+    export MOCK_WHISPER_CALLS="$TEST_TMPDIR/calls"
+    local me=$BASHPID; ( sleep 1; kill -TERM $me ) &
+    local killer=$! rc=0 start=$SECONDS
+    MOCK_WHISPER_SLEEP=30 generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false >/dev/null 2>&1 || rc=$?
+    local took=$(( SECONDS - start ))
+    kill "$killer" 2>/dev/null
+    unset MOCK_WHISPER_CALLS
+    _restore_path
+    assert_equals "130" "$rc" "interrupt: returns 130"
+    assert_equals "0" "$(( took < 10 ? 0 : 1 ))" "interrupt: stops promptly instead of finishing the file"
+    assert_file_not_exists "$TEST_TMPDIR/a.srt" "interrupt: partial subtitle removed"
+    assert_equals "1" "$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')" "interrupt: remaining videos not started"
     _teardown
 }

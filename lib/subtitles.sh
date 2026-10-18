@@ -184,6 +184,24 @@ _no_speech_marker() {
     printf '%s/.%s.nospeech' "$(dirname "$video_file")" "$(basename "${video_file%.*}")"
 }
 
+# Ctrl-C / SIGTERM handling. whisper runs in the background (see
+# _generate_single_subtitle) so the trap fires at once instead of after the file.
+_SUBTITLE_INTERRUPTED=false
+_SUBTITLE_WPID=""
+_SUBTITLE_JOB_PIDS=()
+
+_subtitle_on_interrupt() {
+    _SUBTITLE_INTERRUPTED=true
+    local p
+    [[ -n "$_SUBTITLE_WPID" ]] && kill -TERM "$_SUBTITLE_WPID" 2>/dev/null
+    for p in "${_SUBTITLE_JOB_PIDS[@]}"; do kill -TERM "$p" 2>/dev/null; done
+}
+
+# Record a failed video for the closing report. Args: video_file reason
+_subtitle_note_failure() {
+    [[ -n "${SUBTITLE_FAIL_LOG:-}" ]] && printf '%s\t%s\n' "$1" "$2" >> "$SUBTITLE_FAIL_LOG"
+}
+
 # Internal helper: run whisper on a single file and update stats.
 # Args: video_file whisper_cmd model format language device output_dir [file_idx] [file_total]
 # Language "auto" omits --language entirely (older whisper versions error otherwise).
@@ -263,6 +281,8 @@ _generate_single_subtitle() {
 
     # timeout: kill whisper if it hangs (default 2 hours per file)
     # stdout suppressed (raw transcription text); stderr shown live for progress
+    # Run in the background and wait, so Ctrl-C is handled straight away.
+    trap _subtitle_on_interrupt INT TERM
     run_with_timeout "${SUBTITLE_TIMEOUT:-7200}" \
         "$whisper_cmd" "$video_file" \
         --model "$model" \
@@ -271,8 +291,18 @@ _generate_single_subtitle() {
         --output_dir "$output_dir" \
         --device "$device" \
         --verbose False \
-        "${fp16_args[@]}" >/dev/null
-    local rc=$?
+        "${fp16_args[@]}" >/dev/null &
+    _SUBTITLE_WPID=$!
+    local rc=0
+    wait "$_SUBTITLE_WPID" || rc=$?
+    if [[ "$_SUBTITLE_INTERRUPTED" == true ]]; then
+        kill -TERM "$_SUBTITLE_WPID" 2>/dev/null
+        wait "$_SUBTITLE_WPID" 2>/dev/null
+        _SUBTITLE_WPID=""
+        rm -f "$expected_subtitle"
+        return 130
+    fi
+    _SUBTITLE_WPID=""
 
     # On failure or timeout, remove any partial file whisper may have written so
     # the next run does not mistake it for a completed subtitle.
@@ -280,11 +310,13 @@ _generate_single_subtitle() {
         log_warning "Whisper timed out after ${SUBTITLE_TIMEOUT:-7200}s: $(basename "$video_file")"
         [[ -f "$expected_subtitle" ]] && rm -f "$expected_subtitle"
         STATS[subtitles_failed]=$(( STATS[subtitles_failed] + 1 ))
+        _subtitle_note_failure "$video_file" "timed out"
         return 1
     elif [[ $rc -ne 0 ]]; then
         log_warning "Whisper failed for: $(basename "$video_file")"
         [[ -f "$expected_subtitle" ]] && rm -f "$expected_subtitle"
         STATS[subtitles_failed]=$(( STATS[subtitles_failed] + 1 ))
+        _subtitle_note_failure "$video_file" "whisper exited with code $rc"
         return 1
     fi
 
@@ -425,10 +457,15 @@ generate_subtitles_in_directory() {
 
     # 10. Process each file
     local -a pids=()
+    _SUBTITLE_INTERRUPTED=false
+    _SUBTITLE_JOB_PIDS=()
+    SUBTITLE_FAIL_LOG=$(mktemp 2>/dev/null) || SUBTITLE_FAIL_LOG=""
+    trap _subtitle_on_interrupt INT TERM
     local file_idx=0
     local _eta_elapsed_sum=0
     local _eta_files_done=0
     for video_file in "${video_files[@]}"; do
+        [[ "$_SUBTITLE_INTERRUPTED" == true ]] && break
         file_idx=$(( file_idx + 1 ))
         local output_dir
         output_dir="$(dirname "$video_file")"
@@ -466,7 +503,7 @@ generate_subtitles_in_directory() {
         # Parallel dispatch (only when interactive edit is off)
         if [[ "${SUBTITLE_PARALLEL_JOBS:-1}" -gt 1 && "${SUBTITLE_INTERACTIVE_EDIT:-false}" != true ]]; then
             # Wait for an available job slot
-            while [[ ${#pids[@]} -ge "${SUBTITLE_PARALLEL_JOBS}" ]]; do
+            while [[ ${#pids[@]} -ge "${SUBTITLE_PARALLEL_JOBS}" && "$_SUBTITLE_INTERRUPTED" != true ]]; do
                 local new_pids=()
                 for pid in "${pids[@]}"; do
                     if kill -0 "$pid" 2>/dev/null; then
@@ -474,17 +511,21 @@ generate_subtitles_in_directory() {
                     fi
                 done
                 pids=("${new_pids[@]}")
+                _SUBTITLE_JOB_PIDS=("${pids[@]}")
                 [[ ${#pids[@]} -ge "${SUBTITLE_PARALLEL_JOBS}" ]] && sleep 0.2
             done
+            [[ "$_SUBTITLE_INTERRUPTED" == true ]] && break
             # Count at dispatch time; STATS won't propagate from background subshell
             STATS[subtitles_generated]=$(( STATS[subtitles_generated] + 1 ))
             STATS[files_processed]=$(( STATS[files_processed] + 1 ))
             {
+                _SUBTITLE_JOB_PIDS=()
                 _generate_single_subtitle \
                     "$video_file" "$whisper_cmd" "$model" "$format" \
                     "$language" "$device" "$output_dir" "$file_idx" "$total"
             } &
             pids+=($!)
+            _SUBTITLE_JOB_PIDS=("${pids[@]}")
         else
             # Sequential: track elapsed for ETA
             local _iter_start
@@ -495,13 +536,35 @@ generate_subtitles_in_directory() {
                 "$_eta_elapsed_sum" "$_eta_files_done"
             _eta_elapsed_sum=$(( _eta_elapsed_sum + $(date +%s) - _iter_start ))
             (( _eta_files_done++ ))
+            [[ "$_SUBTITLE_INTERRUPTED" == true ]] && break
         fi
     done
 
     # 11. Wait for all background jobs
     for pid in "${pids[@]}"; do
-        wait "$pid" || true
+        wait "$pid" 2>/dev/null || true
     done
+    trap - INT TERM
+    _SUBTITLE_JOB_PIDS=()
+
+    # Failures are listed here because background jobs cannot update STATS
+    local fail_count=0
+    if [[ -n "${SUBTITLE_FAIL_LOG:-}" && -s "$SUBTITLE_FAIL_LOG" ]]; then
+        fail_count=$(wc -l < "$SUBTITLE_FAIL_LOG" | tr -d ' ')
+        echo -e "${COLOR_YELLOW}${fail_count} video(s) failed; no subtitle was written:${COLOR_RESET}" >&2
+        local f_path f_reason
+        while IFS=$'\t' read -r f_path f_reason; do
+            echo "    - $(basename "$f_path") (${f_reason})" >&2
+        done < "$SUBTITLE_FAIL_LOG"
+    fi
+    [[ -n "${SUBTITLE_FAIL_LOG:-}" ]] && rm -f "$SUBTITLE_FAIL_LOG"
+    SUBTITLE_FAIL_LOG=""
+
+    if [[ "$_SUBTITLE_INTERRUPTED" == true ]]; then
+        log_warning "Interrupted; unfinished subtitle files were removed. Run again to continue: finished videos are skipped."
+        _SUBTITLE_INTERRUPTED=false
+        return 130
+    fi
 
     # 12. Summary
     local no_speech_note="" nospeech_here=$(( ${STATS[subtitles_no_speech]:-0} - nospeech_before ))

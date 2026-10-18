@@ -130,7 +130,7 @@ batch_process_folders() {
             "cleanup")    workflow_deep_clean "$folder" || rc=1 ;;
             "duplicates") find_duplicates "$folder" "report" || rc=1 ;;
             "catalog")    catalog_drive "$folder" true || rc=1 ;;
-            "subtitles")  generate_subtitles_in_directory "$folder" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN" || rc=1 ;;
+            "subtitles")  generate_subtitles_in_directory "$folder" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN" || rc=$? ;;
             *)
                 log_error "Unknown operation: $operation"
                 rc=1
@@ -143,6 +143,8 @@ batch_process_folders() {
         (( _BATCH_ERRORS > 0 )) && status=warn
         if (( rc != 0 )); then status=fail; ((failed++)); else ((success++)); fi
         BATCH_RESULT_STATUS+=("$status"); BATCH_RESULT_NOTE+=("$_BATCH_NOTE")
+        # Ctrl-C during subtitles (rc 130) ends the whole batch, not just this folder
+        if (( rc == 130 )); then log_warning "Batch interrupted; remaining folders skipped"; break; fi
     done
 
     if $themed; then

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Safe cancel while generating subtitles**: Ctrl-C now stops Whisper at once, removes the half-written subtitle and ends the run (a batch stops too). Re-running continues where it left off, since finished videos are skipped.
+- **Failure report**: videos that failed or timed out are listed by name when subtitle generation finishes, including parallel runs.
+
 ---
 
 ## [1.9.0] - 2026-10-18
