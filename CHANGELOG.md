@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.7.0] - 2026-10-18
+
+The multi-drive catalog now handles large libraries, and duplicate copies can be cleaned up across drives.
+
 ### Added
 - **Clean up duplicates across drives**: after the cross-drive duplicate report, pick a drive and its extra copies are moved to that
   drive's own `.vmgr-trash` (undoable, and the catalog is updated at once). A copy is moved only when an identical copy exists on
