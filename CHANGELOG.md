@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The test suite no longer writes to the real home directory: `core.sh` overwrote the log and undo paths the tests set, so
+  tests that rename or flatten files created undo records in `~/.video-manager-logs/undo-history`, where they could shadow a
+  real operation for Undo Last Operation. Tests now re-apply their paths after loading `core.sh` and run under a throwaway `HOME`.
+
 ---
 
 ## [1.4.0] - 2026-10-18

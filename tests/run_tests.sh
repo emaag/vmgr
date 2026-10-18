@@ -10,6 +10,13 @@
 # Intentionally no set -e: test runner must survive individual failures
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Run everything under a throwaway HOME so no test can touch the real one
+# (logs, undo records, recent folders, saved configs).
+TEST_HOME="$(mktemp -d)"
+export HOME="$TEST_HOME"
+trap 'rm -rf "$TEST_HOME"' EXIT
+
 source "$SCRIPT_DIR/helpers.sh"
 
 # ── File selection ────────────────────────────────────────────────────────────

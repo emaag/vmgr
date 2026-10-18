@@ -137,6 +137,11 @@ load_vmgr_core() {
     export LOG_DIR=/dev/null
     export UNDO_LOG_DIR=/dev/null
     source "$LIB_DIR/core.sh"
+    # core.sh assigns these unconditionally, so set them again afterwards: tests
+    # must never write logs or undo records into the real home directory
+    LOG_FILE=/dev/null
+    LOG_DIR=/dev/null
+    UNDO_LOG_DIR=/dev/null
     source "$LIB_DIR/platform.sh"
     source "$LIB_DIR/logging.sh"
     stub_logging

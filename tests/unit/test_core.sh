@@ -129,3 +129,9 @@ test_cli_accepts_verbose_flag() {
     out="$("$VMGR_ROOT/video-manager-ultimate.sh" --verbose --help 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
     assert_contains "--verbose" "$out" "cli: --verbose is accepted and documented"
 }
+
+test_test_environment_is_isolated_from_the_real_home() {
+    assert_equals "/dev/null" "$UNDO_LOG_DIR" "isolation: tests never write undo records to a real directory"
+    [[ "$LOG_FILE" != *"/.video-manager-logs/"* ]]
+    assert_equals "0" "$?" "isolation: tests never write to the real log directory"
+}
