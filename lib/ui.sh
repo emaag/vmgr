@@ -196,6 +196,10 @@ show_catalog_menu() {
     ui_section "Catalog Status"
     ui_kv "Cataloged Drives" "$drives"
     ui_kv "Total Media Files" "$files$([[ "${files:-0}" -gt 0 ]] && echo " ($(format_bytes "$bytes"))")"
+    local sid slabel sdays
+    while IFS="$_CAT_SEP" read -r sid slabel sdays; do
+        echo -e "${COLOR_YELLOW}${SYMBOL_WARN} ${slabel}: $([[ -n "$sdays" ]] && echo "last scanned $sdays days ago" || echo "never scanned") - rescan with 1${COLOR_RESET}"
+    done < <(catalog_stale_drives)
     echo ""
 
     ui_item 1 "Scan & Catalog Drive"    "Index a drive or folder"

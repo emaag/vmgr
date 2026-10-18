@@ -705,6 +705,18 @@ catalog_stats() {
     jq -r '"\(.drives | length) \([.drives[].file_count] | add // 0) \([.drives[].total_size] | add // 0)"' "$CATALOG_DRIVES_DB" 2>/dev/null || echo "0 0 0"
 }
 
+# Days since a drive's last scan, per drive, for drives scanned at least
+# CATALOG_STALE_DAYS ago (or never). One line per drive: id, label, days ("" = never).
+catalog_stale_drives() {
+    [[ -f "$CATALOG_DRIVES_DB" ]] && command -v jq >/dev/null 2>&1 || return 0
+    jq -r --argjson limit "${CATALOG_STALE_DAYS:-30}" '
+        .drives[]
+        | (if (.last_scanned // "") == "" then null
+           else ((now - (.last_scanned | fromdateiso8601? // now)) / 86400 | floor) end) as $d
+        | select($d == null or $d >= $limit)
+        | [.drive_id, .drive_label, ($d // "" | tostring)] | join("\u001f")' "$CATALOG_DRIVES_DB" 2>/dev/null
+}
+
 # List cataloged drives with their status and totals.
 list_cataloged_drives() {
     _catalog_require_jq || return 1
@@ -715,7 +727,7 @@ list_cataloged_drives() {
         return 0
     fi
 
-    local id label type mp count size scanned status dot color kinds
+    local id label type mp count size scanned status dot color kinds stale
     while IFS="$_CAT_SEP" read -r id label type mp count size scanned; do
         if _catalog_mount_online "$mp"; then
             status="online"; dot="${UI_DOT_ON:-*}"; color="${UI_OK:-$COLOR_GREEN}"
@@ -727,6 +739,8 @@ list_cataloged_drives() {
         printf '      %s%s %s %s file(s) %s %s%s\n' "${UI_DIM:-}" "$type" "${UI_SEP:-·}" "$count" "${UI_SEP:-·}" "$(format_bytes "$size")" "$COLOR_RESET"
         [[ -n "$kinds" ]] && printf '      %s%s%s\n' "${UI_DIM:-}" "$kinds" "$COLOR_RESET"
         printf '      %s%s %s scanned %s%s\n' "${UI_DIM:-}" "$mp" "${UI_SEP:-·}" "${scanned:-never}" "$COLOR_RESET"
+        stale="$(catalog_stale_drives | awk -F"$_CAT_SEP" -v i="$id" '$1 == i { print ($3 == "" ? "never scanned" : $3 " days ago"); exit }')"
+        [[ -n "$stale" ]] && printf '      %s%s Out of date: %s%s\n' "${UI_WARN:-$COLOR_YELLOW}" "${SYMBOL_WARN:-!}" "$stale" "$COLOR_RESET"
         echo ""
     done < <(jq -r '.drives | sort_by(.drive_label | ascii_downcase)[]
         | [.drive_id, .drive_label, .drive_type, .mount_point, (.file_count | tostring), (.total_size | tostring), (.last_scanned // "")]

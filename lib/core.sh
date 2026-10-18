@@ -154,6 +154,7 @@ CATALOG_DRIVES_DB="$HOME/.video-manager-drives.json" # Known drives database
 CATALOG_AUTO_SCAN=false # Auto-scan on drive connect
 CATALOG_INCLUDE_METADATA=true # Extract metadata (duration, resolution, dimensions, etc.)
 CATALOG_INCLUDE_HASH=true # Calculate file hashes (slower but detects duplicates)
+CATALOG_STALE_DAYS=30       # Warn when a drive has not been scanned for this many days
 CATALOG_OFFLINE_RETENTION=90 # Days to keep offline drive data (0=forever)
 
 # Media type configuration

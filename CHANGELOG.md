@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Catalog freshness warnings**: the catalog menu and Cataloged Drives list flag any drive that hasn't been scanned for 30 days (or ever), with how long ago it was last scanned. The limit is `CATALOG_STALE_DAYS` in the config.
+
 ---
 
 ## [1.7.0] - 2026-10-18

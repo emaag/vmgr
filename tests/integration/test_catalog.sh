@@ -591,3 +591,22 @@ test_names_with_quotes_and_backslashes_are_found() {
     assert_equals "0" "${STATS[catalog_added]}" "rescan: odd names are recognised as unchanged"
     _teardown
 }
+
+test_drives_not_scanned_for_a_while_are_flagged() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    assert_equals "" "$(catalog_stale_drives)" "stale: a drive scanned just now is fine"
+
+    local old; old="$(date -u -d '45 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-45d +%Y-%m-%dT%H:%M:%SZ)"
+    jq --arg t "$old" '.drives[0].last_scanned = $t' "$CATALOG_DRIVES_DB" > "$CATALOG_DRIVES_DB.tmp" && mv "$CATALOG_DRIVES_DB.tmp" "$CATALOG_DRIVES_DB"
+    assert_contains "45" "$(catalog_stale_drives)" "stale: a 45 day old scan is flagged with its age"
+    assert_contains "Out of date: 45 days ago" "$(list_cataloged_drives 2>&1 | _strip)" "list: shows how old the scan is"
+
+    CATALOG_STALE_DAYS=60
+    assert_equals "" "$(catalog_stale_drives)" "stale: the limit is configurable"
+    CATALOG_STALE_DAYS=30
+
+    jq '.drives[0].last_scanned = ""' "$CATALOG_DRIVES_DB" > "$CATALOG_DRIVES_DB.tmp" && mv "$CATALOG_DRIVES_DB.tmp" "$CATALOG_DRIVES_DB"
+    assert_contains "never scanned" "$(list_cataloged_drives 2>&1 | _strip)" "list: a drive with no scan is flagged"
+    _teardown
+}
