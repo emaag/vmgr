@@ -47,10 +47,10 @@ fi
 # ── Glyphs ───────────────────────────────────────────────────────────────────
 if (( _VM_ASCII )); then
     UI_TL="+"; UI_TR="+"; UI_BL="+"; UI_BR="+"; UI_H="-"; UI_V="|"
-    UI_DOT_ON="*"; UI_DOT_OFF="o"; UI_BAR="|"; UI_PROMPT=">"; UI_ELLIPSIS="..."
+    UI_DOT_ON="*"; UI_DOT_OFF="o"; UI_BAR="|"; UI_PROMPT=">"; UI_ELLIPSIS="..."; UI_SEP="-"
 else
     UI_TL="╭"; UI_TR="╮"; UI_BL="╰"; UI_BR="╯"; UI_H="─"; UI_V="│"
-    UI_DOT_ON="●"; UI_DOT_OFF="○"; UI_BAR="▍"; UI_PROMPT="❯"; UI_ELLIPSIS="…"
+    UI_DOT_ON="●"; UI_DOT_OFF="○"; UI_BAR="▍"; UI_PROMPT="❯"; UI_ELLIPSIS="…"; UI_SEP="·"
 fi
 
 UI_MAX_WIDTH=64
@@ -90,8 +90,17 @@ _ui_short_path() {
 
 # ui_box_top / ui_box_bottom: the frame edges, in the accent color.
 ui_box_top() {
-    local rule; _ui_measure; _ui_repeat "$UI_H" $(( UI_W - 2 )) rule
-    printf '%s%s%s%s%s\n' "$UI_ACCENT" "$UI_TL" "$rule" "$UI_TR" "$COLOR_RESET"
+    local rule label=""
+    _ui_measure
+    if [[ -n "${1:-}" ]]; then
+        label=" $1 "
+        _ui_repeat "$UI_H" $(( UI_W - 3 - ${#label} )) rule
+        printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$UI_ACCENT" "$UI_TL" "$UI_H" "$COLOR_RESET" \
+            "$UI_TITLE" "$label" "$COLOR_RESET" "$UI_ACCENT" "$rule" "$UI_TR" "$COLOR_RESET"
+    else
+        _ui_repeat "$UI_H" $(( UI_W - 2 )) rule
+        printf '%s%s%s%s%s\n' "$UI_ACCENT" "$UI_TL" "$rule" "$UI_TR" "$COLOR_RESET"
+    fi
 }
 ui_box_bottom() {
     local rule; _ui_measure; _ui_repeat "$UI_H" $(( UI_W - 2 )) rule
@@ -160,6 +169,17 @@ ui_item_toggle() {
         state="${UI_DIM}${UI_DOT_OFF} OFF${COLOR_RESET}"
     fi
     ui_item "$1" "$2" "$state" toggle
+}
+
+# ui_hint_line KEY LABEL [KEY LABEL ...]: one footer line of key hints, with
+# the keys in the accent color and their labels dimmed.
+ui_hint_line() {
+    local line=""
+    while (( $# >= 2 )); do
+        line+="${UI_ACCENT}${1}${COLOR_RESET} ${UI_DIM}${2}${COLOR_RESET}  "
+        shift 2
+    done
+    printf '%s\033[K\n' "$line"
 }
 
 # ui_prompt [TEXT]: the line shown before a single keypress is read.

@@ -6,6 +6,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/helpers.sh"
 load_vmgr_core
 load_module_under_test "utils.sh"
+load_module_under_test "theme.sh"
 load_module_under_test "browser.sh"
 
 _mk_tree() {

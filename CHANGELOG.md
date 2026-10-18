@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Menu redesign**: a framed header with a status strip (dry-run state and the selected folder), compact
   one-line menu items with colored key chips and dimmed descriptions, on/off dots for toggles, and grouped
   sections. New `lib/theme.sh` holds the shared helpers (`ui_title`, `ui_item`, `ui_item_toggle`, ...).
+- The directory browser now matches: a framed header (location, folder and video counts, hidden-folder
+  state), accent-colored highlight and preview, and dimmed key hints.
 - Menus take a single keypress (no Enter); `Esc` goes back, and arrow keys are ignored. End of input now
   leaves the menu instead of looping.
 - 256-color palette when the terminal supports it. `NO_COLOR` / `TERM=dumb` print no escape codes, and a

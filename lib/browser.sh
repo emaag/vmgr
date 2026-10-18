@@ -4,7 +4,8 @@
 # Arrow-key directory picker with folder previews, recent directories, and
 # tab-completed path entry. Falls back to a plain prompt when not on a TTY.
 #
-# Dependencies: core.sh (colors), utils.sh (is_video_file, validate_directory)
+# Dependencies: core.sh (colors), theme.sh (frame and hint helpers),
+#               utils.sh (is_video_file, validate_directory)
 #
 
 BROWSER_RECENT_FILE="${BROWSER_RECENT_FILE:-$HOME/.video-manager-recent-dirs}"
@@ -305,7 +306,7 @@ _browser_interactive() {
             resized=0
             printf '\033[2J'
         fi
-        visible=$(( rows - 11 ))
+        visible=$(( rows - 12 ))
         (( visible < 3 )) && visible=3
         (( sel < top )) && top=$sel
         (( sel >= top + visible )) && top=$(( sel - visible + 1 ))
@@ -337,12 +338,22 @@ _browser_interactive() {
             :
         else
         # ── Draw (repaint in place; no clear, so no flicker) ────────────────
-        local hidden_label="hidden: off"
-        (( show_hidden )) && hidden_label="hidden: on"
+        # Frame width follows the terminal so the box lines up with the panes
+        local UI_MAX_WIDTH=$(( cols > 140 ? 140 : cols ))
+        local hid_plain hid_styled loc here_plain
+        if (( show_hidden )); then
+            hid_plain="${UI_DOT_ON} hidden shown"; hid_styled="${UI_WARN}${hid_plain}${COLOR_RESET}"
+        else
+            hid_plain="${UI_DOT_OFF} hidden off"; hid_styled="${UI_DIM}${hid_plain}${COLOR_RESET}"
+        fi
+        here_plain="${count} folder(s) ${UI_SEP} ${n_videos} video(s)"
+        _ui_short_path "$current_dir" $(( UI_MAX_WIDTH - 6 - ${#hid_plain} )) loc
+
         printf '\033[H'
-        printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_YELLOW}SELECT DIRECTORY${COLOR_RESET}"
-        printf '%s\033[K\n' "${COLOR_CYAN}Location:${COLOR_RESET} ${COLOR_WHITE}${current_dir}${COLOR_RESET}"
-        printf '%s\033[K\n' "${COLOR_CYAN}Here:${COLOR_RESET} ${count} folder(s), ${n_videos} video(s)  ${COLOR_CYAN}(${hidden_label})${COLOR_RESET}"
+        ui_box_top "SELECT DIRECTORY"
+        ui_box_row "$loc" "${COLOR_WHITE}${loc}${COLOR_RESET}" "$hid_plain" "$hid_styled"
+        ui_box_row "$here_plain" "${UI_DIM}${here_plain}${COLOR_RESET}" "" ""
+        ui_box_bottom
 
         local head_l head_r
         local head_txt="FOLDERS"
@@ -350,19 +361,19 @@ _browser_interactive() {
         _browser_fit "$head_txt" "$lw" head_l
         if (( two_col )); then
             if (( count > 0 )); then
-                _browser_fit "PREVIEW: ${dirs[$sel]}/" "$rw" head_r
+                _browser_fit "PREVIEW  ${dirs[$sel]}/" "$rw" head_r
             else
                 _browser_fit "PREVIEW" "$rw" head_r
             fi
             _browser_pad "$head_l" "$lw" head_l
-            printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}${head_l} │ ${head_r}${COLOR_RESET}"
+            printf '%s%s%s %s│%s %s%s%s\033[K\n' "$UI_TITLE" "$head_l" "$COLOR_RESET" "$UI_DIM" "$COLOR_RESET" "$UI_TITLE" "$head_r" "$COLOR_RESET"
         else
-            printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}${head_l}${COLOR_RESET}"
+            printf '%s%s%s\033[K\n' "$UI_TITLE" "$head_l" "$COLOR_RESET"
         fi
 
         # Grid rows: visible items, then a down-indicator row
         local grid=$(( visible + 1 )) r idx ltxt lcell rcell rk rt
-        local rn=${#rtext[@]}
+        local rn=${#rtext[@]} hl="${UI_CHIP:-$_BROWSER_REV}"
         for (( r = 0; r < grid; r++ )); do
             # left cell
             ltxt=""; lcell=""
@@ -370,16 +381,16 @@ _browser_interactive() {
             if (( r == grid - 1 )); then
                 (( top + visible < count )) && ltxt="  ↓ $(( count - top - visible )) more"
                 _browser_pad "$ltxt" "$lw" ltxt
-                lcell="${COLOR_CYAN}${ltxt}${COLOR_RESET}"
+                lcell="${UI_DIM}${ltxt}${COLOR_RESET}"
             elif (( count == 0 )); then
                 (( r == 0 )) && ltxt="  (no subdirectories)"
                 _browser_pad "$ltxt" "$lw" ltxt
-                lcell="${COLOR_CYAN}${ltxt}${COLOR_RESET}"
+                lcell="${UI_DIM}${ltxt}${COLOR_RESET}"
             elif (( idx < count )); then
                 if (( idx == sel )); then
-                    _browser_fit "▸ ${dirs[$idx]}/" "$lw" ltxt
+                    _browser_fit "${UI_PROMPT} ${dirs[$idx]}/" "$lw" ltxt
                     _browser_pad "$ltxt" "$lw" ltxt
-                    lcell="${COLOR_BOLD}${_BROWSER_REV}${ltxt}${COLOR_RESET}"
+                    lcell="${hl}${ltxt}${COLOR_RESET}"
                 else
                     _browser_fit "  ${dirs[$idx]}/" "$lw" ltxt
                     _browser_pad "$ltxt" "$lw" ltxt
@@ -400,22 +411,22 @@ _browser_interactive() {
                 fi
                 _browser_fit "$rt" "$rw" rt
                 case "$rk" in
-                    h) rcell="${COLOR_BOLD}${COLOR_YELLOW}${rt}${COLOR_RESET}" ;;
-                    d) rcell="${COLOR_CYAN}${rt}${COLOR_RESET}" ;;
-                    v) rcell="${COLOR_BRIGHT_GREEN}${rt}${COLOR_RESET}" ;;
-                    m) rcell="${COLOR_CYAN}${rt}${COLOR_RESET}" ;;
+                    h) rcell="${UI_TITLE}${rt}${COLOR_RESET}" ;;
+                    d) rcell="${UI_ACCENT}${rt}${COLOR_RESET}" ;;
+                    v) rcell="${UI_OK}${rt}${COLOR_RESET}" ;;
+                    m) rcell="${UI_DIM}${rt}${COLOR_RESET}" ;;
                     *) rcell="$rt" ;;
                 esac
-                printf '%s │ %s\033[K\n' "$lcell" "$rcell"
+                printf '%s %s│%s %s\033[K\n' "$lcell" "$UI_DIM" "$COLOR_RESET" "$rcell"
             else
                 printf '%s\033[K\n' "$lcell"
             fi
         done
 
-        printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→${COLOR_RESET} open folder  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} go up"
-        printf '%s\033[K\n' "${COLOR_BRIGHT_GREEN}Enter${COLOR_RESET} choose highlighted folder  ${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} choose Location above  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
-        printf '%s\033[K\n' "${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path  ${COLOR_YELLOW}.${COLOR_RESET} hidden  ${COLOR_YELLOW}F${COLOR_RESET} refresh"
-        printf '%s\033[K' "${COLOR_RED}${msg}${COLOR_RESET}"
+        ui_hint_line "↑↓" "move" "→" "open" "←" "up" "Home/End" "first/last" "PgUp/PgDn" "page"
+        ui_hint_line "Enter" "choose highlighted" "S" "choose this location" "Q" "cancel"
+        ui_hint_line "~" "home" "-" "previous" "R" "recent" "T" "type path" "." "hidden" "F" "refresh"
+        printf '%s%s%s\033[K' "${UI_WARN}" "${msg}" "${COLOR_RESET}"
         printf '\033[J'
         msg=""
         fi

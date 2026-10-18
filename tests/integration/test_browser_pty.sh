@@ -18,7 +18,7 @@ lib, start, keys = sys.argv[1], sys.argv[2], sys.argv[3]
 keys = keys.encode().decode('unicode_escape').encode('latin1')
 script = (
     'export LOG_FILE=/dev/null LOG_DIR=/dev/null UNDO_LOG_DIR=/dev/null; '
-    f'for f in {lib}/core.sh {lib}/platform.sh {lib}/utils.sh {lib}/browser.sh; do source "$f" >/dev/null 2>&1; done; '
+    f'for f in {lib}/core.sh {lib}/platform.sh {lib}/utils.sh {lib}/theme.sh {lib}/browser.sh; do source "$f" >/dev/null 2>&1; done; '
     'BROWSER_RECENT_FILE=/dev/null; '
     f'browse_directory "{start}"; echo "RESULT rc=$? T=$TARGET_FOLDER"'
 )
