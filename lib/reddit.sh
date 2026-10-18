@@ -97,11 +97,30 @@ _reddit_explain_status() {
         000) echo "network error (could not reach Reddit)" ;;
         401) echo "Reddit rejected the API credentials — check ~/.vmgr-reddit.conf" ;;
         403) echo "Reddit refused the request — r/$2 may be private or banned, or the request was blocked (add API credentials to ~/.vmgr-reddit.conf)" ;;
-        404) echo "r/$2 was not found" ;;
+        30[1-8]) echo "r/$2 was not found. Reddit redirected to its search page, which it does for subreddits that do not exist or are not public. Check the spelling" ;;
+        404) echo "r/$2 was not found. Check the spelling; Reddit also answers 404 for banned, private and quarantined subreddits when you are not logged in" ;;
         429) echo "Reddit is rate limiting requests — try again in a few minutes (API credentials raise the limit)" ;;
         5??) echo "Reddit is having problems (server error)" ;;
         *)   echo "unexpected response" ;;
     esac
+}
+
+# Turn "r/foo", "/r/foo/", or a pasted reddit.com URL into the bare name "foo".
+_reddit_normalize_name() {
+    sed -E 's#^[[:space:]]+##; s#[[:space:]]+$##; s#^https?://(www\.|old\.)?reddit\.com/##; s#^/+##; s#^[Rr]/##; s#/.*##' <<< "$1"
+}
+
+# Subreddit names are letters, digits and underscores, 2 to 21 characters.
+_reddit_valid_name() {
+    [[ "$1" =~ ^[A-Za-z0-9_]{2,21}$ ]]
+}
+
+# Can $1 be created (or does it exist and accept files)? Walks up to the nearest
+# existing ancestor and checks it is a writable directory. Creates nothing.
+_reddit_dir_creatable() {
+    local d="$1"
+    while [[ ! -e "$d" && "$d" != "/" && "$d" != "." ]]; do d="$(dirname "$d")"; done
+    [[ -d "$d" && -w "$d" ]]
 }
 
 # GET $1 (optionally with bearer token $2), waiting out HTTP 429 responses.
@@ -384,9 +403,10 @@ download_subreddit_images() {
 
     # Normalize common ways of specifying a subreddit ("r/foo", "/r/foo/",
     # a pasted reddit.com URL) into the bare name the Reddit API expects.
-    subreddit=$(sed -E 's#^https?://(www\.)?reddit\.com/##; s#^/+##; s#^[Rr]/##; s#/.*##' <<< "$subreddit")
-    if [[ -z "$subreddit" ]]; then
-        log_error "Invalid subreddit name"
+    local entered="$subreddit"
+    subreddit="$(_reddit_normalize_name "$subreddit")"
+    if ! _reddit_valid_name "$subreddit"; then
+        log_error "\"${entered}\" is not a valid subreddit name (letters, numbers and underscores, 2-21 characters)"
         return 1
     fi
 
@@ -415,7 +435,13 @@ download_subreddit_images() {
         return 1
     fi
 
-    mkdir -p "$output_dir" || { log_error "Cannot create output directory: $output_dir"; return 1; }
+    # The folder is created when the first file is about to be saved, so a failed
+    # request never leaves an empty folder behind.
+    if ! _reddit_dir_creatable "$output_dir"; then
+        log_error "Cannot create the output directory: $output_dir"
+        return 1
+    fi
+    local made_dir=false
 
     REDDIT_ACCESS_TOKEN=""
     REDDIT_WARNED_NO_FFMPEG=false
@@ -469,11 +495,15 @@ download_subreddit_images() {
         for item in "${items[@]}"; do
             [[ $downloaded -ge $max_images ]] && break
 
+            if [[ ! -d "$output_dir" ]]; then
+                mkdir -p "$output_dir" || { log_error "Cannot create the output directory: $output_dir"; return 1; }
+                made_dir=true
+            fi
             _reddit_download_item "$item" "$output_dir"
             case $? in
                 0)
                     ((downloaded++))
-                    ((STATS[files_moved]++))
+                    ((STATS[files_downloaded]++))
                     show_progress "$downloaded" "$max_images" "Downloading"
                     ;;
                 2)
@@ -497,10 +527,21 @@ download_subreddit_images() {
     done
 
     echo ""
+    if [[ $downloaded -eq 0 && $skipped -eq 0 ]]; then
+        # Nothing was saved: say why, and do not leave an empty folder we made
+        log_warning "Nothing was downloaded from r/$subreddit"
+        [[ $galleries -gt 0 ]] && log_info "  $galleries gallery post(s) were skipped; galleries need Reddit API credentials ($REDDIT_CONFIG_FILE)"
+        [[ $failed -gt 0 ]] && log_info "  $failed download(s) failed"
+        [[ $galleries -eq 0 && $failed -eq 0 ]] && log_info "  No image or video posts were found (text posts and links to other sites are not downloaded)"
+        $made_dir && rmdir "$output_dir" 2>/dev/null
+        return 1
+    fi
+
     log_success "Downloaded $downloaded items from r/$subreddit"
     [[ $skipped -gt 0 ]] && log_info "Skipped $skipped (already existed)"
     [[ $galleries -gt 0 ]] && log_warning "Skipped $galleries gallery post(s) — galleries need Reddit API credentials ($REDDIT_CONFIG_FILE)"
     [[ $failed -gt 0 ]] && log_warning "$failed downloads failed"
+    return 0
 }
 
 return 0

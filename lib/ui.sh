@@ -1611,6 +1611,17 @@ _handle_reddit_choice() {
                 return 0
             fi
 
+            # "r/EarthPorn", "/r/EarthPorn/" and pasted reddit.com URLs all become EarthPorn;
+            # anything else (a file path pasted by mistake, spaces, ...) is refused here,
+            # before a folder is named after it
+            local entered_name="$subreddit"
+            subreddit="$(_reddit_normalize_name "$subreddit")"
+            if ! _reddit_valid_name "$subreddit"; then
+                log_error "\"${entered_name}\" is not a valid subreddit name (letters, numbers and underscores, 2-21 characters)"
+                ui_pause
+                return 0
+            fi
+
             local default_dir="$HOME/Pictures/reddit/${subreddit}"
             ui_ask output_dir "Output directory [${default_dir}]"
             [[ -z "$output_dir" ]] && output_dir="$default_dir"

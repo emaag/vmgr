@@ -70,7 +70,7 @@ log_verbose() {
     local message="$*"
     if [[ "$VERBOSE" == true ]]; then
         _clear_progress_line
-        echo -e "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message" >&2
+        printf '%s %s\n' "${COLOR_CYAN}${SYMBOL_INFO}${COLOR_RESET}" "$message" >&2
     fi
     log_message "INFO" "$message"
 }
@@ -80,7 +80,7 @@ log_verbose() {
 log_success() {
     local message="$*"
     _clear_progress_line
-    echo -e "${COLOR_BRIGHT_GREEN}${SYMBOL_CHECK}${COLOR_RESET} $message" >&2
+    printf '%s %s\n' "${COLOR_BRIGHT_GREEN}${SYMBOL_CHECK}${COLOR_RESET}" "$message" >&2
     log_message "SUCCESS" "$message"
 }
 
@@ -89,7 +89,7 @@ log_success() {
 log_error() {
     local message="$*"
     _clear_progress_line
-    echo -e "${COLOR_BRIGHT_RED}${SYMBOL_CROSS}${COLOR_RESET} $message" >&2
+    printf '%s %s\n' "${COLOR_BRIGHT_RED}${SYMBOL_CROSS}${COLOR_RESET}" "$message" >&2
     log_message "ERROR" "$message"
     ((STATS[errors]++))
 }
@@ -99,7 +99,7 @@ log_error() {
 log_warning() {
     local message="$*"
     _clear_progress_line
-    echo -e "${COLOR_BRIGHT_YELLOW}${SYMBOL_WARN}${COLOR_RESET} $message" >&2
+    printf '%s %s\n' "${COLOR_BRIGHT_YELLOW}${SYMBOL_WARN}${COLOR_RESET}" "$message" >&2
     log_message "WARN" "$message"
 }
 
@@ -108,7 +108,7 @@ log_warning() {
 log_info() {
     local message="$*"
     _clear_progress_line
-    echo -e "${COLOR_BRIGHT_CYAN}${SYMBOL_INFO}${COLOR_RESET} $message" >&2
+    printf '%s %s\n' "${COLOR_BRIGHT_CYAN}${SYMBOL_INFO}${COLOR_RESET}" "$message" >&2
     log_message "INFO" "$message"
 }
 
@@ -180,6 +180,7 @@ _print_summary_card() {
     [[ ${STATS[files_previewed]:-0}       -gt 0 ]] && rows+=("Would change" "${STATS[files_previewed]}")
     [[ ${STATS[files_moved]:-0}           -gt 0 ]] && rows+=("Files moved" "${STATS[files_moved]}")
     [[ ${STATS[files_restored]:-0}        -gt 0 ]] && rows+=("Files restored" "${STATS[files_restored]}")
+    [[ ${STATS[files_downloaded]:-0}      -gt 0 ]] && rows+=("Downloaded" "${STATS[files_downloaded]}")
     [[ ${STATS[files_trashed]:-0}         -gt 0 ]] && rows+=("Moved to trash" "${STATS[files_trashed]}")
     [[ ${STATS[catalog_added]:-0}         -gt 0 ]] && rows+=("Cataloged (new)" "${STATS[catalog_added]}")
     [[ ${STATS[catalog_updated]:-0}       -gt 0 ]] && rows+=("Cataloged (updated)" "${STATS[catalog_updated]}")

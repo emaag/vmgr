@@ -211,3 +211,119 @@ test_explain_status() {
     assert_contains "rate limiting" "$(_reddit_explain_status 429 pics)" "explain: 429 mentions rate limiting"
     assert_contains "network" "$(_reddit_explain_status 000 pics)" "explain: 000 is a network error"
 }
+
+# ── Empty folders and bad names ───────────────────────────────────────────────
+
+_dl_setup() {
+    TEST_TMPDIR="$(mktemp -d)"
+    OUT="$TEST_TMPDIR/pics/sub"
+    REDDIT_RATE_LIMIT_DELAY=0
+    _reddit_get_access_token() { return 1; }
+    log_error() { echo "ERROR: $*"; }
+    log_warning() { echo "WARN: $*"; }
+    log_info() { echo "INFO: $*"; }
+    log_success() { echo "OK: $*"; }
+    show_progress() { :; }
+}
+_dl_teardown() {
+    [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPDIR"
+    # Put back the real functions the test replaced (tests share one shell)
+    source "$LIB_DIR/reddit.sh"
+    source "$LIB_DIR/logging.sh"
+    stub_logging
+}
+
+test_normalize_name_accepts_the_usual_forms() {
+    assert_equals "EarthPorn" "$(_reddit_normalize_name 'EarthPorn')" "normalize: bare name"
+    assert_equals "EarthPorn" "$(_reddit_normalize_name 'r/EarthPorn')" "normalize: r/name"
+    assert_equals "EarthPorn" "$(_reddit_normalize_name '/r/EarthPorn/')" "normalize: /r/name/"
+    assert_equals "EarthPorn" "$(_reddit_normalize_name 'https://www.reddit.com/r/EarthPorn/top/?t=week')" "normalize: pasted URL"
+    assert_equals "EarthPorn" "$(_reddit_normalize_name '  EarthPorn  ')" "normalize: surrounding spaces"
+}
+
+test_valid_name_rules() {
+    _reddit_valid_name "EarthPorn" && _reddit_valid_name "a_b2"
+    assert_equals "0" "$?" "valid: letters, digits, underscores"
+    local bad
+    for bad in 'earthC:\Users\x.mp4' 'has space' 'a' 'toolongtoolongtoolongtoolong' 'bad!name' ''; do
+        _reddit_valid_name "$bad"
+        assert_not_equals "0" "$?" "valid: '$bad' is refused"
+    done
+}
+
+test_a_pasted_file_path_is_refused_before_any_folder_is_made() {
+    _dl_setup
+    local out rc=0
+    out="$(download_subreddit_images 'earthC:\Users\emaag\Videos\prom\clip.mp4' "$OUT" 5 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "bad name: the download fails"
+    assert_contains "is not a valid subreddit name" "$out" "bad name: says why"
+    assert_file_not_exists "$OUT" "bad name: no folder is created"
+    _dl_teardown
+}
+
+test_a_failed_request_leaves_no_empty_folder() {
+    _dl_setup
+    _reddit_fetch_listing() { REDDIT_HTTP_STATUS=404; REDDIT_RESPONSE=""; return 1; }
+    local out rc=0
+    out="$(download_subreddit_images "nosuchsub" "$OUT" 5 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "404: the download fails"
+    assert_contains "was not found" "$out" "404: explains it"
+    assert_contains "banned, private and quarantined" "$out" "404: mentions the other reasons Reddit answers 404"
+    assert_file_not_exists "$OUT" "404: no empty folder is left"
+    _dl_teardown
+}
+
+test_only_galleries_is_reported_and_leaves_no_empty_folder() {
+    _dl_setup
+    _reddit_fetch_listing() { REDDIT_HTTP_STATUS=200; REDDIT_RESPONSE="$(_entry ccc333 'https://www.reddit.com/gallery/ccc333'; printf '</feed>')"; return 0; }
+    # one gallery post, then the feed ends
+    _reddit_next_cursor() { echo ""; }
+    local out rc=0
+    out="$(download_subreddit_images "galleryonly" "$OUT" 5 2>&1)" || rc=$?
+    assert_equals "1" "$rc" "galleries only: reported as a failure, not a success"
+    assert_contains "Nothing was downloaded" "$out" "galleries only: says nothing was downloaded"
+    assert_contains "gallery post(s) were skipped" "$out" "galleries only: says why"
+    assert_file_not_exists "$OUT" "galleries only: no empty folder"
+    _dl_teardown
+}
+
+test_a_successful_download_creates_the_folder_and_returns_zero() {
+    _dl_setup
+    _reddit_fetch_listing() { REDDIT_HTTP_STATUS=200; REDDIT_RESPONSE="$(_entry aaa111 'https://i.redd.it/pic.jpeg'; printf '</feed>')"; return 0; }
+    _reddit_next_cursor() { echo ""; }
+    _reddit_download_item() { echo data > "$2/pic.jpg"; return 0; }
+    local rc=0
+    download_subreddit_images "goodsub" "$OUT" 5 >/dev/null 2>&1 || rc=$?
+    assert_equals "0" "$rc" "success: returns 0"
+    assert_file_exists "$OUT/pic.jpg" "success: the file is saved in the new folder"
+    _dl_teardown
+}
+
+test_a_folder_we_did_not_create_is_never_removed() {
+    _dl_setup
+    mkdir -p "$OUT"
+    _reddit_fetch_listing() { REDDIT_HTTP_STATUS=200; REDDIT_RESPONSE="$(_entry ccc333 'https://www.reddit.com/gallery/ccc333'; printf '</feed>')"; return 0; }
+    _reddit_next_cursor() { echo ""; }
+    download_subreddit_images "galleryonly" "$OUT" 5 >/dev/null 2>&1
+    assert_file_exists "$OUT" "existing folder: left alone even when nothing was downloaded"
+    _dl_teardown
+}
+
+test_an_uncreatable_output_folder_is_reported_up_front() {
+    _dl_setup
+    if [[ "$(id -u)" == 0 ]]; then _dl_teardown; return; fi
+    mkdir -p "$TEST_TMPDIR/ro"; chmod a-w "$TEST_TMPDIR/ro"
+    local out rc=0 requested=0
+    _reddit_fetch_listing() { requested=1; return 1; }
+    out="$(download_subreddit_images "goodsub" "$TEST_TMPDIR/ro/deeper/out" 5 2>&1)" || rc=$?
+    chmod u+w "$TEST_TMPDIR/ro"
+    assert_equals "1" "$rc" "unwritable: fails"
+    assert_contains "Cannot create the output directory" "$out" "unwritable: says so before contacting Reddit"
+    _dl_teardown
+}
+
+test_a_redirect_means_the_subreddit_does_not_exist() {
+    local msg; msg="$(_reddit_explain_status 302 nosuchsub)"
+    assert_contains "was not found" "$msg" "explain 302: not found"
+    assert_contains "redirected to its search page" "$msg" "explain 302: says what Reddit did"
+}

@@ -75,3 +75,13 @@ test_messages_wipe_a_live_progress_line() {
     assert_equals "1" "$UI_PROGRESS_ACTIVE" "log_verbose: leaves the bar alone when it prints nothing"
     UI_PROGRESS_ACTIVE=0
 }
+
+test_log_messages_are_printed_literally() {
+    local out
+    out="$(log_info 'Path: C:\Users\emaag\New folder\tab' 2>&1 | _strip)"
+    assert_contains 'C:\Users\emaag\New folder\tab' "$out" "log_info: backslashes in a message are not treated as escapes"
+    out="$(log_error 'bad "earthC:\Users\emaag\x.mp4"' 2>&1 | _strip)"
+    assert_contains 'earthC:\Users\emaag\x.mp4' "$out" "log_error: a pasted Windows path survives"
+    out="$(log_warning '100%s and \n stay' 2>&1 | _strip)"
+    assert_contains '100%s and \n stay' "$out" "log_warning: % and \n are literal text"
+}

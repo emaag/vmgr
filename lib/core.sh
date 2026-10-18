@@ -168,6 +168,7 @@ STATS[files_renamed]=0
 STATS[files_moved]=0
 STATS[files_previewed]=0
 STATS[files_restored]=0
+STATS[files_downloaded]=0
 STATS[files_trashed]=0
 STATS[space_trashed]=0
 STATS[catalog_added]=0
@@ -447,6 +448,7 @@ reset_statistics() {
     STATS[files_moved]=0
     STATS[files_previewed]=0
     STATS[files_restored]=0
+    STATS[files_downloaded]=0
     STATS[files_trashed]=0
     STATS[space_trashed]=0
     STATS[catalog_added]=0

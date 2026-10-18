@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Reddit downloader left empty folders and unclear failures.** The output folder is now created when the first file is about to be
+  saved, so a failed request (HTTP 404 for a missing, banned, private or quarantined subreddit; Reddit's 302 redirect for one that
+  does not exist) no longer leaves an empty folder behind. A run that saves nothing (a subreddit of galleries, which need API
+  credentials, of text posts, or only failures) now says "Nothing was downloaded", explains why, returns a failure instead of
+  "Downloaded 0 items", and removes a folder it created. Subreddit names are validated up front (letters, numbers and underscores,
+  2-21 characters), so a file path pasted by mistake is refused before any folder is named after it. A 404 now explains that Reddit
+  also answers 404 for banned, private and quarantined subreddits; the summary card says "Downloaded N" instead of "Files moved".
+- Log messages are printed literally: a backslash in a message (a Windows path such as `C:\Users\emaag`) was treated as an escape and
+  mangled by `echo -e`.
+
 ### Added
 - **Multi-Drive Catalog** (previously a stub): scan a drive or folder into a catalog of every media file with its size, modification
   time, SHA-256 hash and metadata (video/audio resolution, codec and duration via `ffprobe`; image dimensions and camera via
