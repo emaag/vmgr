@@ -71,8 +71,8 @@ vmgr cleanup /mnt/c/Users/Eric/Videos
 vmgr duplicates /mnt/c/Users/Eric/Videos
 
 # Report location:
-# _duplicate_report_TIMESTAMP/duplicates.txt
-# _duplicate_report_TIMESTAMP/duplicates.csv
+# ~/.video-manager-logs/duplicate-reports/FOLDER_TIMESTAMP/duplicates.txt
+# ~/.video-manager-logs/duplicate-reports/FOLDER_TIMESTAMP/duplicates.csv
 ```
 
 ---
@@ -305,7 +305,7 @@ vmgr
 ls -t ~/.video-manager-logs/ | head -n 1
 
 # Duplicate reports
-# In target directory: _duplicate_report_TIMESTAMP/
+# Under the logs dir: duplicate-reports/FOLDER_TIMESTAMP/
 ```
 
 ---

@@ -246,7 +246,7 @@ vmgr workflow-clean /mnt/c/Users/Eric/Videos
 
 ```bash
 vmgr duplicates /mnt/c/Users/Eric/Videos
-# Report will be in: /mnt/c/Users/Eric/Videos/_duplicate_report_TIMESTAMP/
+# Report will be in: ~/.video-manager-logs/duplicate-reports/Videos_TIMESTAMP/
 ```
 
 ---
@@ -525,7 +525,7 @@ vmgr flatten /Downloads/NewVideoCollection
 ### Task 3: Find Duplicates Across Collection
 ```bash
 vmgr duplicates /mnt/c/Users/Eric/Videos
-# Check report: /Videos/_duplicate_report_TIMESTAMP/
+# Check report: ~/.video-manager-logs/duplicate-reports/Videos_TIMESTAMP/
 ```
 
 ### Task 4: Monthly Cleanup

@@ -6,7 +6,7 @@ load_vmgr_core
 load_module_under_test "utils.sh"
 load_module_under_test "duplicates.sh"
 
-_setup() { TEST_TMPDIR="$(mktemp -d)"; }
+_setup() { TEST_TMPDIR="$(mktemp -d)"; LOG_DIR="$TEST_TMPDIR/logs"; }
 _teardown() { [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPDIR"; }
 
 # Helper: create two identical video files in TEST_TMPDIR
@@ -33,7 +33,7 @@ test_no_duplicates_no_report_dir_created() {
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
     # Report dir only created when duplicates found
     local report_dirs
-    report_dirs=$(find "$TEST_TMPDIR" -name "_duplicate_report_*" -type d 2>/dev/null | wc -l | tr -d ' ')
+    report_dirs=$(find "$TEST_TMPDIR" -name "*_[0-9]*-[0-9]*" -path "*duplicate-reports*" -type d 2>/dev/null | wc -l | tr -d ' ')
     assert_equals "0" "$report_dirs" "no_duplicates: no report dir created"
     _teardown
 }
@@ -45,7 +45,7 @@ test_duplicates_found_creates_report_dir() {
     _make_duplicates
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
     local report_dirs
-    report_dirs=$(find "$TEST_TMPDIR" -name "_duplicate_report_*" -type d 2>/dev/null | wc -l | tr -d ' ')
+    report_dirs=$(find "$TEST_TMPDIR" -name "*_[0-9]*-[0-9]*" -path "*duplicate-reports*" -type d 2>/dev/null | wc -l | tr -d ' ')
     assert_not_equals "0" "$report_dirs" "duplicates: report directory created"
     _teardown
 }
@@ -100,7 +100,7 @@ test_duplicates_delete_removes_one_file() {
     _make_duplicates
     find_duplicates "$TEST_TMPDIR" delete >/dev/null 2>&1
     local mp4_count
-    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" -not -path "*_duplicate_report_*" | wc -l | tr -d ' ')
+    mp4_count=$(find "$TEST_TMPDIR" -maxdepth 1 -name "*.mp4" -not -path "*duplicate-reports*" | wc -l | tr -d ' ')
     assert_equals "1" "$mp4_count" "duplicates delete: only one .mp4 remains"
     _teardown
 }
@@ -145,5 +145,32 @@ test_duplicates_single_file_no_duplicates() {
     local rc=0
     find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1 || rc=$?
     assert_equals "0" "$rc" "duplicates: single file exits 0"
+    _teardown
+}
+
+test_report_is_written_under_the_logs_dir_not_the_scanned_folder() {
+    _setup
+    mkdir "$TEST_TMPDIR/scan"
+    echo "dup content" > "$TEST_TMPDIR/scan/a.mp4"; cp "$TEST_TMPDIR/scan/a.mp4" "$TEST_TMPDIR/scan/b.mp4"
+    find_duplicates "$TEST_TMPDIR/scan" report >/dev/null 2>&1
+    assert_equals "0" "$(find "$TEST_TMPDIR/scan" -name '*report*' | wc -l | tr -d ' ')" "report: nothing added to the scanned folder"
+    assert_equals "1" "$(find "$TEST_TMPDIR/logs/duplicate-reports" -name duplicates.txt | wc -l | tr -d ' ')" "report: written under the logs directory"
+    _teardown
+}
+
+test_report_falls_back_to_the_scanned_folder_when_logs_are_unwritable() {
+    _setup
+    mkdir "$TEST_TMPDIR/scan"
+    echo "dup content" > "$TEST_TMPDIR/scan/a.mp4"; cp "$TEST_TMPDIR/scan/a.mp4" "$TEST_TMPDIR/scan/b.mp4"
+    LOG_DIR=/dev/null find_duplicates "$TEST_TMPDIR/scan" report >/dev/null 2>&1
+    assert_equals "1" "$(find "$TEST_TMPDIR/scan" -name duplicates.txt | wc -l | tr -d ' ')" "report: falls back to the scanned folder"
+    _teardown
+}
+
+test_clean_scan_leaves_no_empty_report_dir() {
+    _setup
+    echo "only one" > "$TEST_TMPDIR/only.mp4"
+    find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
+    assert_equals "0" "$(find "$TEST_TMPDIR/logs" -mindepth 2 -type d 2>/dev/null | wc -l | tr -d ' ')" "report: a clean scan leaves no empty report folder"
     _teardown
 }

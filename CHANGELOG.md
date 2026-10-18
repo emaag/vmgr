@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- Duplicate reports are written to `~/.video-manager-logs/duplicate-reports/<folder>_<timestamp>/` instead of a
+  `_duplicate_report_*` folder inside the scanned collection (which is still the fallback if the logs directory is not
+  writable). A scan that finds nothing leaves no empty report folder behind.
 - Batch Processing gains **Batch Find Duplicates** (report only, per folder). Duplicate groups print as
   `Group 1 · 3 copies · 2.9MiB each` with keep/extra lines and paths relative to the scanned folder (the full hash stays in the report file).
 - Subtitle settings choose the model and format with a single keypress, in the same style as the menus.

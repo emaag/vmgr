@@ -31,8 +31,14 @@ find_duplicates() {
     local total_duplicates=0
     local space_wasted=0
 
-    # Create output directory for reports
-    local report_dir="$directory/_duplicate_report_$(date +%Y%m%d-%H%M%S)"
+    # Reports go under the logs directory so the scanned collection stays clean;
+    # if that is not writable, fall back to a folder inside the scanned directory.
+    local stamp report_dir
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    report_dir="${LOG_DIR:-$HOME/.video-manager-logs}/duplicate-reports/$(basename "$(cd "$directory" 2>/dev/null && pwd || echo "$directory")")_$stamp"
+    if ! mkdir -p "$report_dir" 2>/dev/null; then
+        report_dir="$directory/_duplicate_report_$stamp"
+    fi
 
     echo ""
 
@@ -90,6 +96,7 @@ find_duplicates() {
     echo -ne "\r\033[K" # Clear line
 
     if [[ $total_duplicates -eq 0 ]]; then
+        rmdir "$report_dir" 2>/dev/null
         log_success "No duplicates found! Your collection is clean."
         return 0
     fi

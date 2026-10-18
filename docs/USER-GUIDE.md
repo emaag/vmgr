@@ -296,8 +296,8 @@ Identifies exact duplicates using SHA-256 cryptographic hashing.
 - CSV export for analysis
 
 **Output:**
-- **Text Report:** `_duplicate_report_TIMESTAMP/duplicates.txt`
-- **CSV Export:** `_duplicate_report_TIMESTAMP/duplicates.csv`
+- **Text Report:** `~/.video-manager-logs/duplicate-reports/FOLDER_TIMESTAMP/duplicates.txt`
+- **CSV Export:** `~/.video-manager-logs/duplicate-reports/FOLDER_TIMESTAMP/duplicates.csv`
 
 **Example Report:**
 ```
@@ -333,8 +333,8 @@ Processing: [15 files] Current: movie.mp4...
   Original: /Videos/movie.mp4
   Duplicate: /Videos/Backup/movie.mp4
 
-✓ Report generated: /Videos/_duplicate_report_20251019-143000/duplicates.txt
-✓ CSV export: /Videos/_duplicate_report_20251019-143000/duplicates.csv
+✓ Report generated: ~/.video-manager-logs/duplicate-reports/Videos_20251019-143000/duplicates.txt
+✓ CSV export: ~/.video-manager-logs/duplicate-reports/Videos_20251019-143000/duplicates.csv
 ℹ Total space wasted by duplicates: 2450 MB
 ```
 
