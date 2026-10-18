@@ -19,34 +19,56 @@ readonly SCRIPT_VERSION="1.3.0"
 readonly SCRIPT_NAME="Video Manager Ultimate - Bash Edition"
 readonly SCRIPT_DATE="2025-12-23"
 
-# Color codes for beautiful output
-readonly COLOR_RESET=$'\033[0m'
-readonly COLOR_BOLD=$'\033[1m'
-readonly COLOR_RED=$'\033[0;31m'
-readonly COLOR_GREEN=$'\033[0;32m'
-readonly COLOR_YELLOW=$'\033[0;33m'
-readonly COLOR_BLUE=$'\033[0;34m'
-readonly COLOR_MAGENTA=$'\033[0;35m'
-readonly COLOR_CYAN=$'\033[0;36m'
-readonly COLOR_WHITE=$'\033[0;37m'
-readonly COLOR_BRIGHT_RED=$'\033[1;31m'
-readonly COLOR_BRIGHT_GREEN=$'\033[1;32m'
-readonly COLOR_BRIGHT_YELLOW=$'\033[1;33m'
-readonly COLOR_BRIGHT_BLUE=$'\033[1;34m'
-readonly COLOR_BRIGHT_MAGENTA=$'\033[1;35m'
-readonly COLOR_BRIGHT_CYAN=$'\033[1;36m'
+# Plain mode: NO_COLOR (https://no-color.org) or a dumb terminal drops all
+# escape codes; a non-UTF-8 locale or the linux console falls back to ASCII glyphs.
+if [[ -n "${NO_COLOR:-}" || "${TERM:-}" == "dumb" ]]; then _VM_NC=""; fi
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+    *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) _VM_ASCII=0 ;;
+    *) _VM_ASCII=1 ;;
+esac
+[[ "${TERM:-}" == "dumb" || "${TERM:-}" == "linux" ]] && _VM_ASCII=1
 
-# Unicode characters for visual appeal
-readonly SYMBOL_CHECK="✓"
-readonly SYMBOL_CROSS="✗"
-readonly SYMBOL_ARROW="→"
-readonly SYMBOL_BULLET="•"
-readonly SYMBOL_STAR="★"
-readonly SYMBOL_WARN="⚠"
-readonly SYMBOL_INFO="ℹ"
-readonly SYMBOL_FOLDER="📁"
-readonly SYMBOL_FILE="📄"
-readonly SYMBOL_VIDEO="🎬"
+# Color codes for beautiful output
+readonly COLOR_RESET="${_VM_NC-$'\033[0m'}"
+readonly COLOR_BOLD="${_VM_NC-$'\033[1m'}"
+readonly COLOR_RED="${_VM_NC-$'\033[0;31m'}"
+readonly COLOR_GREEN="${_VM_NC-$'\033[0;32m'}"
+readonly COLOR_YELLOW="${_VM_NC-$'\033[0;33m'}"
+readonly COLOR_BLUE="${_VM_NC-$'\033[0;34m'}"
+readonly COLOR_MAGENTA="${_VM_NC-$'\033[0;35m'}"
+readonly COLOR_CYAN="${_VM_NC-$'\033[0;36m'}"
+readonly COLOR_WHITE="${_VM_NC-$'\033[0;37m'}"
+readonly COLOR_BRIGHT_RED="${_VM_NC-$'\033[1;31m'}"
+readonly COLOR_BRIGHT_GREEN="${_VM_NC-$'\033[1;32m'}"
+readonly COLOR_BRIGHT_YELLOW="${_VM_NC-$'\033[1;33m'}"
+readonly COLOR_BRIGHT_BLUE="${_VM_NC-$'\033[1;34m'}"
+readonly COLOR_BRIGHT_MAGENTA="${_VM_NC-$'\033[1;35m'}"
+readonly COLOR_BRIGHT_CYAN="${_VM_NC-$'\033[1;36m'}"
+
+# Unicode characters for visual appeal (ASCII stand-ins in plain mode)
+if (( _VM_ASCII )); then
+    readonly SYMBOL_CHECK="+"
+    readonly SYMBOL_CROSS="x"
+    readonly SYMBOL_ARROW=">"
+    readonly SYMBOL_BULLET="*"
+    readonly SYMBOL_STAR="*"
+    readonly SYMBOL_WARN="!"
+    readonly SYMBOL_INFO="i"
+    readonly SYMBOL_FOLDER="[D]"
+    readonly SYMBOL_FILE="[F]"
+    readonly SYMBOL_VIDEO="[V]"
+else
+    readonly SYMBOL_CHECK="✓"
+    readonly SYMBOL_CROSS="✗"
+    readonly SYMBOL_ARROW="→"
+    readonly SYMBOL_BULLET="•"
+    readonly SYMBOL_STAR="★"
+    readonly SYMBOL_WARN="⚠"
+    readonly SYMBOL_INFO="ℹ"
+    readonly SYMBOL_FOLDER="📁"
+    readonly SYMBOL_FILE="📄"
+    readonly SYMBOL_VIDEO="🎬"
+fi
 
 # Configuration
 DEFAULT_VIDEO_EXTENSIONS=("mp4" "mkv" "avi" "mov" "wmv" "flv" "webm" "m4v" "mpg" "mpeg" "3gp")
@@ -198,11 +220,12 @@ print_toggle_setting() {
     local value="$2"
     local extra="${3:-}"
 
-    printf "  ${COLOR_CYAN}%-22s${COLOR_RESET} " "$label:"
+    local on_dot="${UI_DOT_ON:-$SYMBOL_CHECK}" off_dot="${UI_DOT_OFF:-$SYMBOL_CROSS}"
+    printf "  ${UI_DIM:-$COLOR_CYAN}%-22s${COLOR_RESET} " "$label"
     if [[ "$value" == true ]]; then
-        echo -e "${COLOR_GREEN}${SYMBOL_CHECK} ENABLED${COLOR_RESET}${extra:+ ${COLOR_WHITE}$extra${COLOR_RESET}}"
+        echo -e "${UI_OK:-$COLOR_GREEN}${on_dot} on${COLOR_RESET}${extra:+ ${UI_DIM:-$COLOR_WHITE}$extra${COLOR_RESET}}"
     else
-        echo -e "${COLOR_RED}${SYMBOL_CROSS} DISABLED${COLOR_RESET}${extra:+ ${COLOR_WHITE}$extra${COLOR_RESET}}"
+        echo -e "${UI_DIM:-$COLOR_RED}${off_dot} off${COLOR_RESET}${extra:+ ${UI_DIM:-$COLOR_WHITE}$extra${COLOR_RESET}}"
     fi
 }
 
@@ -236,8 +259,13 @@ run_menu_loop() {
         # Display the menu
         "$menu_func"
 
-        # Read user choice
-        read -r choice
+        # Read user choice: one keypress when the theme module is loaded
+        if [[ "$(type -t ui_read_choice)" == "function" ]]; then
+            ui_read_choice choice || break
+            [[ "$choice" == ESC ]] && choice=b
+        else
+            read -r choice || break
+        fi
 
         # Handle the choice
         "$handler_func" "$choice"

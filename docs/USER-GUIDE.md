@@ -410,22 +410,29 @@ Preview all operations without making any changes.
 ### Main Menu
 
 ```
-╔═══════════════════════════════════════════════════════════════╗
-║  VIDEO MANAGER ULTIMATE - BASH EDITION                       ║
-║  Version 1.0.0 - 2025-10-19                                  ║
-╚═══════════════════════════════════════════════════════════════╝
+╭──────────────────────────────────────────────────────────────╮
+│ VIDEO MANAGER ULTIMATE                                v1.3.0 │
+│ ○ Dry run OFF                             ~/Videos/Series    │
+╰──────────────────────────────────────────────────────────────╯
 
-MAIN MENU
+  ▍ MAIN MENU
 
-[1] Single Operations
-[2] Batch Processing
-[3] Automated Workflows
-[4] Duplicate Detection
-[5] Utilities
-[6] Settings
+   1   File Operations            Rename, organize, flatten
+   2   Subtitle Generation        Generate, edit, translate
+   3   Duplicate Detection        Find and remove duplicates
+   4   Multi-Drive Catalog        Scan drives, search media
+   5   Utilities                  Logs, system info, testing
+   6   Settings                   Options and preferences
+   7   Reddit Downloader          Images from a subreddit
 
-[Q] Quit
+   Q   Quit
 ```
+
+**Using the menus**
+- Press a single key to choose: no Enter needed. `Esc` goes back one level (it does nothing on the main menu).
+- The header always shows whether **Dry run** is on and which folder is currently selected.
+- Colors and box drawing adapt to your terminal. Set `NO_COLOR=1` (or use `TERM=dumb`) for plain output with
+  no colors, and a non-UTF-8 locale falls back to ASCII glyphs.
 
 ---
 

@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- **Menu redesign**: a framed header with a status strip (dry-run state and the selected folder), compact
+  one-line menu items with colored key chips and dimmed descriptions, on/off dots for toggles, and grouped
+  sections. New `lib/theme.sh` holds the shared helpers (`ui_title`, `ui_item`, `ui_item_toggle`, ...).
+- Menus take a single keypress (no Enter); `Esc` goes back, and arrow keys are ignored. End of input now
+  leaves the menu instead of looping.
+- 256-color palette when the terminal supports it. `NO_COLOR` / `TERM=dumb` print no escape codes, and a
+  non-UTF-8 locale (or the linux console) uses ASCII glyphs.
 - **Directory browser rewrite** (`lib/browser.sh`, moved out of `ui.sh`): arrow-key navigation
   (↑↓ move, → open, Enter choose the highlighted folder, ←/Backspace up, PgUp/PgDn, Home/End), in-place repainting instead of full-screen
   clears, scrolling for long lists, and a two-column layout: folders on the left, a live preview
