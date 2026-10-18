@@ -2,18 +2,21 @@
 
 **Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.**
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.5.0)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.6.0)
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-429%2F429%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-600%2F600%20passing-success.svg)](tests/)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
-### Status at a glance — v1.5.0: Undoable Duplicate Trash, Whisper Cleanup, Batch Subtitles
+### Status at a glance — v1.6.0: Multi-Drive Catalog, Reddit API Setup
 
 | Change | State |
 |--------|-------|
+| Multi-drive catalog: incremental scans, search that works for unplugged drives, duplicates across drives | ✅ Shipped |
+| Guided Reddit API setup that checks the login before saving; galleries and full-speed downloads | ✅ Shipped |
+| Reddit downloader no longer leaves empty folders and explains why nothing downloaded | ✅ Shipped |
 | Duplicates are moved to an undoable `.vmgr-trash` (Empty Trash deletes them for good) | ✅ Shipped |
 | Whisper filler cues removed; silent videos reported as "no speech" | ✅ Shipped |
 | Batch Subtitle Generation with the folder queue and per-folder results | ✅ Shipped |
@@ -23,7 +26,7 @@
 | Progress bars and a summary card after every operation | ✅ Shipped |
 | Quiet output by default (`--verbose` for detail); `NO_COLOR` and ASCII fallbacks | ✅ Shipped |
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
-| 429-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
+| 600-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
 
 [See the changelog →](CHANGELOG.md)
 
@@ -157,6 +160,31 @@ chmod +x video-manager-ultimate.sh
 ./video-manager-ultimate.sh --list-undo
 ```
 
+### Multi-Drive Catalog
+```console
+# Scan a drive or folder into the catalog (incremental: unchanged files are not re-hashed)
+./video-manager-ultimate.sh catalog /mnt/d
+
+# Drives with online/offline status and totals
+./video-manager-ultimate.sh catalog-list
+
+# Search by name, hash prefix, resolution or camera; drives that are unplugged are included
+./video-manager-ultimate.sh catalog-search "season 2" video
+
+# Duplicates across every cataloged drive, and a text report
+./video-manager-ultimate.sh catalog-duplicates
+./video-manager-ultimate.sh catalog-report
+```
+
+### Reddit
+```console
+# Download images and videos from a subreddit
+./video-manager-ultimate.sh reddit EarthPorn ~/Pictures/earthporn 100
+
+# Guided API setup: unlocks galleries and full-speed downloads (checks the login before saving)
+./video-manager-ultimate.sh reddit-setup
+```
+
 ### Workflows
 ```console
 # New collection setup (flatten + rename + detect duplicates)
@@ -243,6 +271,11 @@ Or use command-line flags:
 
 <details>
 <summary>Version history — click to expand</summary>
+
+### v1.6.0 (October 2026)
+- Multi-drive catalog (incremental scans, offline search, cross-drive duplicates)
+- Guided Reddit API setup; Reddit downloader leaves no empty folders
+- Log messages print Windows paths literally
 
 ### v1.5.0 (October 2026)
 - Deleted duplicates move to an undoable trash; Empty Trash for permanent deletion

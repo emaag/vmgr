@@ -9,7 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.6.0] - 2026-10-18
+
+The multi-drive catalog is real (it was a stub), the Reddit downloader no longer leaves empty folders and has a guided API setup,
+and log messages stop mangling Windows paths.
+
+### Highlights
+- **Multi-Drive Catalog**: scan drives into a searchable, incremental catalog that keeps working when a drive is unplugged, with
+  duplicates across drives.
+- **Reddit API Setup**: a guided screen that checks your login with Reddit before saving it, to unlock galleries and full speed.
+- **Reddit downloader fixes**: no more empty folders, clear reasons when nothing downloads, names validated up front.
+
 ### Added
+- **Multi-Drive Catalog** (previously a stub): scan a drive or folder into a catalog of every media file with its size, modification
+  time, SHA-256 hash and metadata (video/audio resolution, codec and duration via `ffprobe`; image dimensions and camera via
+  `exiftool` or ImageMagick). Scans are **incremental**: files whose size and modification time are unchanged are not hashed or
+  probed again, and the run reports `new / updated / removed / unchanged`. A scan only changes records under the folder scanned.
+  Drives are identified once per mount point (UUID, Windows volume ID, or a hash of the mount point) and paths are stored relative
+  to it.
+- **Cataloged Drives** lists each drive as online or offline with type, totals, a per-media-type breakdown and last scan.
+  **Search** matches names and folders, a hash prefix, an exact resolution or a camera, and includes drives that are offline (marked
+  with a hollow dot). **Duplicates** are found across every drive and name the drive each copy is on. **Export** writes a text
+  report. Offline drives are forgotten after `CATALOG_OFFLINE_RETENTION` days (0 keeps them).
+- **Catalog Several Drives** uses the Batch Processing queue screen and per-drive results list; the scan screen lists detected
+  drives (`/mnt/*`, `/media`, `/Volumes`) with free space.
+- Catalog command line: `catalog <dir>`, `catalog-list`, `catalog-search <term> [video|image|audio]`, `catalog-duplicates`,
+  `catalog-report [file]` (with tab completion). `--dry-run catalog` previews the counts without writing.
 - **Reddit API Setup** (Reddit menu > 2, or `vmgr reddit-setup`): a guided screen for the credentials that unlock galleries and
   full-speed downloads. It shows the steps for creating a "script" app (and can open the page), takes the client ID and the secret
   (typed hidden, never echoed or logged), **checks the login with a real token request before saving**, explains a rejection and
@@ -30,24 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also answers 404 for banned, private and quarantined subreddits; the summary card says "Downloaded N" instead of "Files moved".
 - Log messages are printed literally: a backslash in a message (a Windows path such as `C:\Users\emaag`) was treated as an escape and
   mangled by `echo -e`.
-
-### Added
-- **Multi-Drive Catalog** (previously a stub): scan a drive or folder into a catalog of every media file with its size, modification
-  time, SHA-256 hash and metadata (video/audio resolution, codec and duration via `ffprobe`; image dimensions and camera via
-  `exiftool` or ImageMagick). Scans are **incremental**: files whose size and modification time are unchanged are not hashed or
-  probed again, and the run reports `new / updated / removed / unchanged`. A scan only changes records under the folder scanned.
-  Drives are identified once (UUID, Windows volume ID, or a hash of the mount point) and paths are stored relative to the mount
-  point.
-- **Cataloged Drives** lists each drive as online or offline with type, totals, a per-media-type breakdown and last scan.
-  **Search** matches names and folders, a hash prefix, an exact resolution or a camera, and includes drives that are offline (marked
-  with a hollow dot). **Duplicates** are found across every drive and name the drive each copy is on. **Export** writes a text
-  report. Offline drives are forgotten after `CATALOG_OFFLINE_RETENTION` days (0 keeps them).
-- **Catalog Several Drives** uses the Batch Processing queue screen and per-drive results list; the scan screen lists detected
-  drives (`/mnt/*`, `/media`, `/Volumes`) with free space.
-- Command line: `catalog <dir>`, `catalog-list`, `catalog-search <term> [video|image|audio]`, `catalog-duplicates`,
-  `catalog-report [file]` (with tab completion). `--dry-run catalog` previews the counts without writing.
-
-### Fixed
 - Drive detection: a mount point of `/` was typed "Network" (the check grepped `mount` for `/`, which matches every line) and
   labelled `/`; it is now matched exactly and called "System drive". The drive-id fallback no longer needs `md5sum` (absent on macOS).
 
@@ -311,6 +320,7 @@ For users upgrading from v1.2.0:
 
 ## Development Timeline
 
+- **2026-10-18** - v1.6.0 - Multi-drive catalog, Reddit API setup, Reddit downloader fixes
 - **2026-10-18** - v1.5.0 - Undoable duplicate trash, Whisper filler cleanup, batch subtitles
 - **2026-10-18** - v1.4.0 - New interface, undo for renames and flattens, batch processing
 - **2025-12-23** - v1.3.0 - Modular architecture complete (~10.6 hours of refactoring)
