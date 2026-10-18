@@ -264,13 +264,39 @@ _catalog_media_type() {
     echo "$CAT_TYPE"
 }
 
+# One live status line (replaced by the next one, cleared by progress_break). Nothing
+# is printed unless the output is a terminal.
+_catalog_status() {
+    [[ -t 1 ]] || return 0
+    UI_PROGRESS_ACTIVE=1
+    printf '\r  %s%s%s\033[K' "${UI_DIM:-}" "$1" "${COLOR_RESET:-}"
+}
+
+# "42s" or "3m05s" for a number of seconds.
+_catalog_eta() {
+    local s="$1"
+    if (( s < 60 )); then printf '%ds' "$s"; else printf '%dm%02ds' $(( s / 60 )) $(( s % 60 )); fi
+}
+
+# Progress for a long loop, at most once a second. Args: done, total, label, detail, start (SECONDS)
+# Shows an estimate of the time left once there is something to base it on.
+_catalog_tick() {
+    local n="$1" total="$2" label="$3" detail="$4" start="$5" elapsed eta=""
+    [[ "$(type -t ui_progress)" == "function" ]] || return 0
+    (( SECONDS == ${_CAT_LAST_TICK:--1} && n < total )) && return 0
+    _CAT_LAST_TICK=$SECONDS
+    elapsed=$(( SECONDS - start ))
+    (( elapsed >= 3 && n > 0 && n < total )) && eta=" ~$(_catalog_eta $(( elapsed * (total - n) / n ))) left"
+    ui_progress "$n" "$total" "${label}${eta}" "$detail"
+}
+
 # SHA-256 of many files with a handful of processes instead of one per file.
 # $1 = file with NUL-separated absolute paths, $2 = how many there are.
 # Fills the global CAT_HASHES (path -> hash); a file that could not be hashed is
 # simply missing and the caller falls back to hashing it on its own.
 declare -gA CAT_HASHES=()
 _catalog_hash_files() {
-    local list="$1" total="$2" line h f n=0
+    local list="$1" total="$2" line h f n=0 start=$SECONDS
     CAT_HASHES=()
 
     if command -v sha256sum >/dev/null 2>&1 && printf x | sha256sum -z >/dev/null 2>&1; then
@@ -279,10 +305,8 @@ _catalog_hash_files() {
             h="${line%% *}"; f="${line#*  }"
             CAT_HASHES["$f"]="$h"
             n=$(( n + 1 ))
-            if (( n % 100 == 0 )) && [[ "$(type -t ui_progress)" == "function" ]]; then
-                ui_progress "$n" "$total" "Hashing" "${f##*/}"
-            fi
-        done < <(xargs -0 -n 128 sha256sum -z -- < "$list" 2>/dev/null)
+            _catalog_tick "$n" "$total" "Hashing" "${f##*/}" "$start"
+        done < <(xargs -0 -n 32 sha256sum -z -- < "$list" 2>/dev/null)
     else
         local tool=(sha256sum)
         command -v sha256sum >/dev/null 2>&1 || tool=(shasum -a 256)
@@ -293,10 +317,8 @@ _catalog_hash_files() {
             [[ "$h" == \\* ]] && continue
             CAT_HASHES["$f"]="$h"
             n=$(( n + 1 ))
-            if (( n % 100 == 0 )) && [[ "$(type -t ui_progress)" == "function" ]]; then
-                ui_progress "$n" "$total" "Hashing" "${f##*/}"
-            fi
-        done < <(xargs -0 -n 128 "${tool[@]}" -- < "$list" 2>/dev/null)
+            _catalog_tick "$n" "$total" "Hashing" "${f##*/}" "$start"
+        done < <(xargs -0 -n 32 "${tool[@]}" -- < "$list" 2>/dev/null)
     fi
 }
 
@@ -435,7 +457,21 @@ catalog_drive() {
     # What the catalog already knows about this part of the drive
     _catalog_known_index "$drive_id" "$prefix" > "$work/known"
 
-    _catalog_inventory "$path" "$recursive" > "$work/inventory"
+    # The listing can take minutes on a big drive: run it in the background and show
+    # how many media files it has found so far.
+    if [[ -t 1 ]]; then
+        _catalog_inventory "$path" "$recursive" > "$work/inventory" &
+        local lpid=$! found=0
+        while kill -0 "$lpid" 2>/dev/null; do
+            found="$(wc -l < "$work/inventory" 2>/dev/null | tr -d ' ')"
+            _catalog_status "Looking for media files...  ${found:-0} found"
+            sleep 0.3
+        done
+        wait "$lpid" 2>/dev/null
+        progress_break
+    else
+        _catalog_inventory "$path" "$recursive" > "$work/inventory"
+    fi
 
     # Sort every file into "unchanged" or "needs work" in one awk pass (a file is
     # unchanged when its size and modification time match the catalog's record and,
@@ -498,7 +534,7 @@ catalog_drive() {
     fi
 
     # Phase 3: build the records (metadata, when switched on, costs one probe per file)
-    local total_todo=$todo_count i=0 vanished=0
+    local total_todo=$todo_count i=0 vanished=0 build_start=$SECONDS
     while IFS="$_CAT_SEP" read -r rel size mtime; do
         i=$(( i + 1 ))
         # a file that disappeared since the listing (or a name that did not parse) is skipped
@@ -517,10 +553,7 @@ catalog_drive() {
             "$relpath" "$size" "$mtime" "$hash" "$CAT_TYPE" "${ext,,}" \
             "$CAT_DURATION" "$CAT_RES" "$CAT_DIMS" "$CAT_CODEC" "$CAT_CAMERA" "$CAT_DATE"
 
-        if [[ "$CATALOG_INCLUDE_METADATA" == true ]] && (( i % 10 == 1 || total_todo <= 200 )) \
-           && [[ "$(type -t ui_progress)" == "function" ]]; then
-            ui_progress "$i" "$total_todo" "Reading metadata" "${rel##*/}"
-        fi
+        _catalog_tick "$i" "$total_todo" "$([[ "$CATALOG_INCLUDE_METADATA" == true ]] && echo "Reading metadata" || echo "Preparing records")" "${rel##*/}" "$build_start"
     done < "$work/todo" > "$work/new"
     progress_break
     (( vanished > 0 )) && log_verbose "$vanished file(s) vanished while scanning"
@@ -543,6 +576,7 @@ catalog_drive() {
     # folders and this folder's unchanged records, drop the rest of this folder's
     # records, add the new ones. Nothing is parsed, so memory stays small however
     # large the catalog is.
+    _catalog_status "Updating the catalog..."
     jq -R -c --arg d "$drive_id" --arg now "$now" '
         split("\u001f") | {
             video_id: ($d + ":" + .[0]),
@@ -587,6 +621,7 @@ catalog_drive() {
         return 1
     }
 
+    progress_break
     # Drive record: totals recomputed from the catalog
     local count size_total
     read -r count size_total < <(_catalog_drive_totals "$drive_id")

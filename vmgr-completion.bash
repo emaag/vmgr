@@ -37,6 +37,8 @@ _vmgr_completion() {
         --undo-organize
         --list-undo
         --empty-trash
+        --sort
+        --time
     "
 
     # Whisper models
@@ -63,6 +65,20 @@ _vmgr_completion() {
             ;;
         --parallel)
             COMPREPLY=( $(compgen -W "1 2 3 4 5 6 7 8" -- ${cur}) )
+            return 0
+            ;;
+        --sort)
+            COMPREPLY=( $(compgen -W "hot new top rising controversial" -- ${cur}) )
+            return 0
+            ;;
+        --time)
+            COMPREPLY=( $(compgen -W "hour day week month year all" -- ${cur}) )
+            return 0
+            ;;
+        reddit)
+            # The next word is a subreddit name, or several joined by commas
+            # (a,b,c): nothing to complete from the file system
+            COMPREPLY=()
             return 0
             ;;
         --organize-target|--organize-search)

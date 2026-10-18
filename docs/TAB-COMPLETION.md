@@ -190,7 +190,7 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `--undo-organize` - Undo organize operation
 - `--list-undo` - List available undo operations
 - `--empty-trash` - Permanently delete files moved to trash
-- `reddit` - Download from a subreddit; `reddit-setup` - guided Reddit API setup
+- `reddit` - Download from a subreddit (`reddit a,b,c <dir>` for several; `--sort` and `--time` values complete); `reddit-setup` - guided Reddit API setup
 - `catalog <dir>` - Scan a drive or folder into the catalog (directory completion)
 - `catalog-list`, `catalog-search`, `catalog-duplicates`, `catalog-report` - Query the catalog
 
