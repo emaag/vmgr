@@ -216,6 +216,8 @@ test_explain_status() {
 
 _dl_setup() {
     TEST_TMPDIR="$(mktemp -d)"
+    # the file-level fake sleep() appends to "$_FAKE_CODES.slept": keep that inside the temp dir
+    _FAKE_CODES="$TEST_TMPDIR/fake_codes"
     OUT="$TEST_TMPDIR/pics/sub"
     REDDIT_RATE_LIMIT_DELAY=0
     _reddit_get_access_token() { return 1; }
@@ -227,6 +229,7 @@ _dl_setup() {
 }
 _dl_teardown() {
     [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPDIR"
+    _FAKE_CODES=""
     # Put back the real functions the test replaced (tests share one shell)
     source "$LIB_DIR/reddit.sh"
     source "$LIB_DIR/logging.sh"
