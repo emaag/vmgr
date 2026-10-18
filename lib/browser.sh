@@ -16,7 +16,8 @@ _BROWSER_REV=$'\033[7m'
 ################################################################################
 
 # Print subdirectory names of $1 (one per line, case-insensitive sort).
-# $2 = 1 to include hidden directories.
+# $2 = 1 to include hidden directories. Symlinks (and Windows junctions, which
+# WSL reports as symlinks) are skipped: they only duplicate other folders.
 browser_list_subdirs() {
     local dir="$1" show_hidden="${2:-0}" entry
     local restore
@@ -26,6 +27,7 @@ browser_list_subdirs() {
 
     for entry in "$dir"/*/; do
         entry="${entry%/}"
+        [[ -L "$entry" ]] && continue
         echo "${entry##*/}"
     done | LC_ALL=C sort -f
 
@@ -162,11 +164,21 @@ _browser_read_key() {
                 '[B') _key=DOWN ;;
                 '[C') _key=RIGHT ;;
                 '[D') _key=LEFT ;;
+                'OA') _key=UP ;;
+                'OB') _key=DOWN ;;
+                'OC') _key=RIGHT ;;
+                'OD') _key=LEFT ;;
+                'OH'|'[H') _key=HOME ;;
+                'OF'|'[F') _key=END ;;
                 '[5'|'[6')
                     IFS= read -rsn1 -t 0.05 _extra || true
                     [[ "$_seq" == '[5' ]] && _key=PGUP || _key=PGDN
                     ;;
-                '[1'|'[2'|'[3'|'[4')
+                '[1'|'[4')
+                    IFS= read -rsn1 -t 0.05 _extra || true
+                    [[ "$_seq" == '[1' ]] && _key=HOME || _key=END
+                    ;;
+                '[2'|'[3')
                     IFS= read -rsn1 -t 0.05 _extra || true
                     _key=OTHER
                     ;;
@@ -186,6 +198,7 @@ _browser_read_key() {
 _browser_goto() {
     local target
     target="$(cd "$1" 2>/dev/null && pwd)" || return 1
+    [[ "$target" == //* && "$target" != ///* ]] && target="/${target#//}"
     [[ "$target" == "$current_dir" ]] && return 0
     prev_dir="$current_dir"
     current_dir="$target"
@@ -220,21 +233,23 @@ _browser_pick_recent() {
     fi
 }
 
-# Pad $1 with spaces to $2 characters (printf widths count bytes, not characters).
+# Pad $1 with spaces to $2 characters (printf widths count bytes, not
+# characters). Result goes into the variable named $3, not stdout, so the
+# redraw loop forks nothing.
 _browser_pad() {
-    local text="$1" n=$(( $2 - ${#1} ))
-    (( n > 0 )) && printf -v text '%s%*s' "$text" "$n" ""
-    echo "$text"
+    local _text="$1" _n=$(( $2 - ${#1} ))
+    (( _n > 0 )) && printf -v _text '%s%*s' "$_text" "$_n" ""
+    printf -v "$3" '%s' "$_text"
 }
 
-# Truncate $1 to $2 characters, ending in "…" when cut.
+# Truncate $1 to $2 characters, ending in "…" when cut. Result goes into the
+# variable named $3.
 _browser_fit() {
-    local text="$1" width="$2"
-    if (( ${#text} > width )); then
-        (( width < 1 )) && { echo ""; return; }
-        text="${text:0:width-1}…"
+    local _text="$1" _width="$2"
+    if (( ${#_text} > _width )); then
+        if (( _width < 1 )); then _text=""; else _text="${_text:0:_width-1}…"; fi
     fi
-    echo "$text"
+    printf -v "$3" '%s' "$_text"
 }
 
 # Fill rtext/rkind (caller's locals) with the preview pane for directory $1:
@@ -267,7 +282,8 @@ _browser_interactive() {
     local current_dir="$1" prev_dir="" show_hidden=0
     local -a dirs=()
     local sel=0 top=0 reload=1 key msg="" n_videos=0 rows cols visible count i
-    local preview_path="" rtext=() rkind=()
+    local preview_path="" rtext=() rkind=() resized=1
+    trap 'resized=1' WINCH
 
     printf '\033[2J'
 
@@ -283,8 +299,12 @@ _browser_interactive() {
         count=${#dirs[@]}
         (( sel >= count )) && sel=$(( count > 0 ? count - 1 : 0 ))
 
-        rows="$(tput lines 2>/dev/null || echo 24)"
-        cols="$(tput cols 2>/dev/null || echo 80)"
+        if (( resized )); then
+            rows="$(tput lines 2>/dev/null || echo 24)"
+            cols="$(tput cols 2>/dev/null || echo 80)"
+            resized=0
+            printf '\033[2J'
+        fi
         visible=$(( rows - 11 ))
         (( visible < 3 )) && visible=3
         (( sel < top )) && top=$sel
@@ -311,6 +331,11 @@ _browser_interactive() {
             fi
         fi
 
+        # Keys already queued (held arrow, fast typing): handle them first and
+        # paint once at the end instead of once per key.
+        if (( ! reload )) && IFS= read -rs -t 0 -n 0 2>/dev/null; then
+            :
+        else
         # ── Draw (repaint in place; no clear, so no flicker) ────────────────
         local hidden_label="hidden: off"
         (( show_hidden )) && hidden_label="hidden: on"
@@ -320,46 +345,48 @@ _browser_interactive() {
         printf '%s\033[K\n' "${COLOR_CYAN}Here:${COLOR_RESET} ${count} folder(s), ${n_videos} video(s)  ${COLOR_CYAN}(${hidden_label})${COLOR_RESET}"
 
         local head_l head_r
-        head_l="$(_browser_fit "FOLDERS" "$lw")"
+        local head_txt="FOLDERS"
+        (( top > 0 )) && head_txt="FOLDERS  ↑ ${top} above"
+        _browser_fit "$head_txt" "$lw" head_l
         if (( two_col )); then
             if (( count > 0 )); then
-                head_r="$(_browser_fit "PREVIEW: ${dirs[$sel]}/" "$rw")"
+                _browser_fit "PREVIEW: ${dirs[$sel]}/" "$rw" head_r
             else
-                head_r="$(_browser_fit "PREVIEW" "$rw")"
+                _browser_fit "PREVIEW" "$rw" head_r
             fi
-            printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}$(_browser_pad "$head_l" "$lw") │ ${head_r}${COLOR_RESET}"
+            _browser_pad "$head_l" "$lw" head_l
+            printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}${head_l} │ ${head_r}${COLOR_RESET}"
         else
             printf '%s\033[K\n' "${COLOR_BOLD}${COLOR_CYAN}${head_l}${COLOR_RESET}"
         fi
 
-        # Grid rows: [up-indicator] visible items [down-indicator]
-        local grid=$(( visible + 2 )) r idx ltxt lcell rcell rk rt
+        # Grid rows: visible items, then a down-indicator row
+        local grid=$(( visible + 1 )) r idx ltxt lcell rcell rk rt
         local rn=${#rtext[@]}
         for (( r = 0; r < grid; r++ )); do
             # left cell
             ltxt=""; lcell=""
-            idx=$(( top + r - 1 ))
-            if (( r == 0 )); then
-                (( top > 0 )) && ltxt="  ↑ ${top} more"
-                lcell="${COLOR_CYAN}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
-            elif (( r == grid - 1 )); then
+            idx=$(( top + r ))
+            if (( r == grid - 1 )); then
                 (( top + visible < count )) && ltxt="  ↓ $(( count - top - visible )) more"
-                lcell="${COLOR_CYAN}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+                _browser_pad "$ltxt" "$lw" ltxt
+                lcell="${COLOR_CYAN}${ltxt}${COLOR_RESET}"
             elif (( count == 0 )); then
-                (( r == 1 )) && ltxt="  (no subdirectories)"
-                lcell="${COLOR_CYAN}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+                (( r == 0 )) && ltxt="  (no subdirectories)"
+                _browser_pad "$ltxt" "$lw" ltxt
+                lcell="${COLOR_CYAN}${ltxt}${COLOR_RESET}"
             elif (( idx < count )); then
-                local label="   "
-                (( idx - top < 9 )) && label="$(( idx - top + 1 ))."
                 if (( idx == sel )); then
-                    ltxt="$(_browser_fit "▸ ${label} ${dirs[$idx]}/" "$lw")"
-                    lcell="${COLOR_BOLD}${_BROWSER_REV}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+                    _browser_fit "▸ ${dirs[$idx]}/" "$lw" ltxt
+                    _browser_pad "$ltxt" "$lw" ltxt
+                    lcell="${COLOR_BOLD}${_BROWSER_REV}${ltxt}${COLOR_RESET}"
                 else
-                    ltxt="$(_browser_fit "  ${label} ${dirs[$idx]}/" "$lw")"
-                    lcell="${COLOR_WHITE}$(_browser_pad "$ltxt" "$lw")${COLOR_RESET}"
+                    _browser_fit "  ${dirs[$idx]}/" "$lw" ltxt
+                    _browser_pad "$ltxt" "$lw" ltxt
+                    lcell="${COLOR_WHITE}${ltxt}${COLOR_RESET}"
                 fi
             else
-                lcell="$(_browser_pad "" "$lw")"
+                _browser_pad "" "$lw" lcell
             fi
 
             # right cell
@@ -371,7 +398,7 @@ _browser_interactive() {
                 elif (( r < rn )); then
                     rk="${rkind[$r]}"; rt="${rtext[$r]}"
                 fi
-                rt="$(_browser_fit "$rt" "$rw")"
+                _browser_fit "$rt" "$rw" rt
                 case "$rk" in
                     h) rcell="${COLOR_BOLD}${COLOR_YELLOW}${rt}${COLOR_RESET}" ;;
                     d) rcell="${COLOR_CYAN}${rt}${COLOR_RESET}" ;;
@@ -385,11 +412,13 @@ _browser_interactive() {
             fi
         done
 
-        printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→/Enter${COLOR_RESET} open  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} up  ${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} select here  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
-        printf '%s\033[K\n' "${COLOR_YELLOW}1-9${COLOR_RESET} jump  ${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path (Tab completes)  ${COLOR_YELLOW}.${COLOR_RESET} hidden  ${COLOR_YELLOW}F${COLOR_RESET} refresh"
+        printf '%s\033[K\n' "${COLOR_YELLOW}↑↓${COLOR_RESET} move  ${COLOR_YELLOW}→/Enter${COLOR_RESET} open highlighted folder  ${COLOR_YELLOW}←/Bksp${COLOR_RESET} go up"
+        printf '%s\033[K\n' "${COLOR_BRIGHT_GREEN}S/Space${COLOR_RESET} choose the Location shown above  ${COLOR_RED}Q/Esc${COLOR_RESET} cancel"
+        printf '%s\033[K\n' "${COLOR_YELLOW}~${COLOR_RESET} home  ${COLOR_YELLOW}-${COLOR_RESET} previous  ${COLOR_YELLOW}R${COLOR_RESET} recent  ${COLOR_YELLOW}T${COLOR_RESET} type path  ${COLOR_YELLOW}.${COLOR_RESET} hidden  ${COLOR_YELLOW}F${COLOR_RESET} refresh"
         printf '%s\033[K' "${COLOR_RED}${msg}${COLOR_RESET}"
         printf '\033[J'
         msg=""
+        fi
 
         # ── Input ───────────────────────────────────────────────────────────
         _browser_read_key key || return 1
@@ -397,6 +426,8 @@ _browser_interactive() {
         case "$key" in
             UP|k)   (( sel > 0 )) && sel=$(( sel - 1 )) ;;
             DOWN|j) (( sel < count - 1 )) && sel=$(( sel + 1 )) ;;
+            HOME)   sel=0 ;;
+            END)    sel=$(( count > 0 ? count - 1 : 0 )) ;;
             PGUP)   sel=$(( sel - visible )); (( sel < 0 )) && sel=0 ;;
             PGDN)   sel=$(( sel + visible )); (( sel > count - 1 )) && sel=$(( count > 0 ? count - 1 : 0 )) ;;
             RIGHT|l|ENTER)
@@ -470,12 +501,6 @@ _browser_interactive() {
                 fi
                 printf '\033[2J'
                 ;;
-            [1-9])
-                if (( count > 0 && top + key - 1 < count )); then
-                    sel=$(( top + key - 1 ))
-                    _browser_goto "$current_dir/${dirs[$sel]}" || msg="Cannot open ${dirs[$sel]}/"
-                fi
-                ;;
         esac
     done
 }
@@ -508,6 +533,7 @@ browse_directory() {
 
     local current_dir
     current_dir="$(cd "$start" 2>/dev/null && pwd)" || current_dir="$HOME"
+    [[ "$current_dir" == //* && "$current_dir" != ///* ]] && current_dir="/${current_dir#//}"
 
     if [[ ! -t 0 || ! -t 1 ]]; then
         _browser_simple "$current_dir"
@@ -517,6 +543,7 @@ browse_directory() {
     printf '\033[?25l'
     _browser_interactive "$current_dir"
     local rc=$?
+    trap - WINCH
     printf '\033[?25h\033[2J\033[H'
     return $rc
 }

@@ -138,8 +138,8 @@ Main Menu
 
 ```
 ↑ ↓  move        → / Enter  open folder      ← / Backspace  up one level
-S / Space  SELECT this directory             Q / Esc  cancel
-1-9  jump to numbered folder                 ~  home        -  previous directory
+S / Space  choose the Location shown        Q / Esc  cancel
+Home / End  first / last folder              ~  home        -  previous directory
 R  recent directories                        T  type a path (Tab completes)
 .  show/hide hidden folders                  F  refresh listing
 ```

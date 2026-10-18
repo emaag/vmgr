@@ -200,3 +200,33 @@ test_cache_bounded() {
     assert_equals "1" "$(( n <= 5 ? 1 : 0 ))" "cache: size stays within BROWSER_CACHE_MAX"
     rm -rf "$base"
 }
+
+test_pad_and_fit_write_to_variable() {
+    local out
+    _browser_pad "ab" 5 out
+    assert_equals "ab   " "$out" "pad: right-pads into the named variable"
+    _browser_fit "abcdefgh" 4 out
+    assert_equals "abc…" "$out" "fit: truncates with an ellipsis"
+    _browser_fit "ab" 4 out
+    assert_equals "ab" "$out" "fit: short text unchanged"
+    _browser_fit "abc" 0 out
+    assert_equals "" "$out" "fit: zero width yields empty"
+}
+
+test_read_key_sequences() {
+    local key
+    _browser_read_key key < <(printf '\033[A'); assert_equals "UP" "$key" "key: ESC [ A is UP"
+    _browser_read_key key < <(printf '\033OB'); assert_equals "DOWN" "$key" "key: ESC O B is DOWN"
+    _browser_read_key key < <(printf '\033[H'); assert_equals "HOME" "$key" "key: ESC [ H is HOME"
+    _browser_read_key key < <(printf '\033[4~'); assert_equals "END" "$key" "key: ESC [ 4 ~ is END"
+    _browser_read_key key < <(printf '\177'); assert_equals "LEFT" "$key" "key: DEL (backspace) is LEFT"
+    _browser_read_key key < <(printf '\b'); assert_equals "LEFT" "$key" "key: ^H (backspace) is LEFT"
+}
+
+test_list_subdirs_skips_symlinks() {
+    local d result; d="$(mktemp -d)"
+    mkdir "$d/real"; ln -s "$d/real" "$d/link"
+    result="$(browser_list_subdirs "$d" 0 | tr '\n' ',')"
+    assert_equals "real," "$result" "list_subdirs: symlinked dirs are skipped"
+    rm -rf "$d"
+}
