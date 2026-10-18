@@ -2,25 +2,28 @@
 
 **Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.**
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.4.0)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.5.0)
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-359%2F359%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-429%2F429%20passing-success.svg)](tests/)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
-### Status at a glance — v1.4.0: New Interface, Undo, and Batch Processing
+### Status at a glance — v1.5.0: Undoable Duplicate Trash, Whisper Cleanup, Batch Subtitles
 
 | Change | State |
 |--------|-------|
+| Duplicates are moved to an undoable `.vmgr-trash` (Empty Trash deletes them for good) | ✅ Shipped |
+| Whisper filler cues removed; silent videos reported as "no speech" | ✅ Shipped |
+| Batch Subtitle Generation with the folder queue and per-folder results | ✅ Shipped |
 | Undo for renames and flattens (single and batch) | ✅ Shipped |
 | Batch Processing with a folder queue, preview, confirmation and per-folder results | ✅ Shipped |
 | Redesigned interface: framed header, single-key menus, themed directory browser | ✅ Shipped |
 | Progress bars and a summary card after every operation | ✅ Shipped |
 | Quiet output by default (`--verbose` for detail); `NO_COLOR` and ASCII fallbacks | ✅ Shipped |
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
-| 359-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
+| 429-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
 
 [See the changelog →](CHANGELOG.md)
 
@@ -243,6 +246,11 @@ Or use command-line flags:
 
 <details>
 <summary>Version history — click to expand</summary>
+
+### v1.5.0 (October 2026)
+- Deleted duplicates move to an undoable trash; Empty Trash for permanent deletion
+- Whisper filler cues removed; "no speech" reporting with a skip marker
+- Batch Subtitle Generation uses the folder queue and results list
 
 ### v1.4.0 (October 2026)
 - Undo for renames and flattens, single and batch

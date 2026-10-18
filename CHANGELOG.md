@@ -9,8 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.5.0] - 2026-10-18
+
+Duplicate deletion is now undoable, and subtitle generation copes with silence and runs in batches like everything else.
+
+### Highlights
+- **Deleted duplicates go to an undoable trash** (`.vmgr-trash`), with **Empty Trash** to delete them for good.
+- **Whisper filler is cleaned up**: silent or music-only videos no longer get a subtitle full of `.` cues.
+- **Batch Subtitle Generation** uses the same folder queue and per-folder results as Batch Processing.
+
 ### Added
-- **Trash for duplicates**: "Find and Delete Duplicates" now moves the extra copies to a hidden `.vmgr-trash/<timestamp>/` folder
+- **Trash for duplicates**: "Find and Delete Duplicates" moves the extra copies to a hidden `.vmgr-trash/<timestamp>/` folder
   inside the scanned folder (same drive, so the move is instant, with each file's relative path kept) and records them in the undo
   log, so **Utilities > Undo Last Operation** puts them back. The confirmation is a single-key yes/no; with the Undo System switched
   off it stays a typed `yes` and deletes permanently, as before.
@@ -19,17 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The summary card reports "Moved to trash" and "To reclaim (empty trash)" for these runs.
 - Every recursive scan (duplicates, flatten, image conversion, subtitles, organize) skips `.vmgr-trash`, so trashed files are never
   rediscovered, flattened back out, or transcribed.
+- Subtitle generation removes filler cues (`.`, `...`, punctuation only) that Whisper writes over silence and music. When nothing
+  but filler is left, no subtitle file is written, the video is counted under "No speech found" on the summary card, and a
+  hidden `.<name>.nospeech` marker makes the next run skip it instead of transcribing it again (delete the marker to retry).
 
 ### Changed
 - **Batch Subtitle Generation** uses the folder-queue screen and per-folder results list of Batch Processing (browse, add every
   subfolder with videos, or type a path) instead of the old `[B] Browse [T] Type` prompt. Whisper is checked once up front, and
   each folder's summary line counts only that folder (it used to repeat the running total). A dry run previews and then offers to
   generate.
-
-### Added
-- Subtitle generation removes filler cues (`.`, `...`, punctuation only) that Whisper writes over silence and music. When nothing
-  but filler is left, no subtitle file is written, the video is counted under "No speech found" on the summary card, and a
-  hidden `.<name>.nospeech` marker makes the next run skip it instead of transcribing it again (delete the marker to retry).
 
 ### Fixed
 - The test suite no longer writes to the real home directory: `core.sh` overwrote the log and undo paths the tests set, so
@@ -260,6 +269,7 @@ For users upgrading from v1.2.0:
 
 ## Development Timeline
 
+- **2026-10-18** - v1.5.0 - Undoable duplicate trash, Whisper filler cleanup, batch subtitles
 - **2026-10-18** - v1.4.0 - New interface, undo for renames and flattens, batch processing
 - **2025-12-23** - v1.3.0 - Modular architecture complete (~10.6 hours of refactoring)
 - **2025-11-08** - v1.2.0 - Subtitle and organize features added
