@@ -1,7 +1,7 @@
 # VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Quick Reference Card
 
-**Version:** 1.0.0 | **Platform:** Linux, WSL, macOS
+**Version:** 1.6.0 | **Platform:** Linux, WSL, macOS
 
 ---
 
@@ -124,13 +124,19 @@ vmgr rename /home/user/Videos
 ## 🎯 Interactive Menu Navigation
 
 ```
-Main Menu
-├── [1] Single Operations ← Quick one-time tasks
-├── [2] Batch Processing ← Multiple folders
-├── [3] Automated Workflows ← Multi-step operations
-├── [4] Duplicate Detection ← Find duplicates
-├── [5] Utilities ← Logs & diagnostics
-└── [6] Settings ← Configure behavior
+Main Menu                      (single keypress; Esc goes back)
+├── [1] File Operations ← Rename, flatten, cleanup, images, D = dry run
+│     ├── [7] Batch Processing ← folder queue: A add, S add subfolders, T type, Enter run
+│     └── [8] Automated Workflows ← multi-step clean-ups
+├── [2] Subtitle Generation ← Whisper; batch uses the same queue
+├── [3] Duplicate Detection ← report, move to trash (undoable), dry run
+├── [4] Multi-Drive Catalog ← scan, search offline drives, cross-drive duplicates
+├── [5] Utilities ← undo, empty trash, logs, diagnostics
+├── [6] Settings ← dry run, verbose, profiles, granular controls
+└── [7] Reddit Downloader ← downloads; [2] guided API setup
+
+Undo:  Utilities > Undo Last Operation   |   vmgr --undo-organize [ID]   |   vmgr --list-undo
+Trash: Utilities > Empty Trash           |   vmgr --empty-trash
 ```
 
 ---
@@ -449,5 +455,5 @@ ffmpeg -v error -i "file.mp4" -f null - 2>&1
 
 ---
 
-**Video Manager Ultimate - Bash Edition v1.0.0**  
+**Video Manager Ultimate - Bash Edition v1.6.0**  
 *Making video collection management verbose and beautiful* ✨

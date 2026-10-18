@@ -12,7 +12,7 @@ Tab completion enables you to auto-complete commands, options, and paths by pres
 Press Tab after `vmgr` to see available commands:
 ```bash
 vmgr <Tab><Tab>
-# Shows: rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch --organize --undo-organize --list-undo
+# Shows: rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch reddit catalog catalog-list catalog-search catalog-duplicates catalog-report reddit-setup --organize --undo-organize --list-undo --empty-trash
 ```
 
 ### ✓ Option Completion
@@ -189,6 +189,10 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `--organize` - Organize files by subfolder names
 - `--undo-organize` - Undo organize operation
 - `--list-undo` - List available undo operations
+- `--empty-trash` - Permanently delete files moved to trash
+- `reddit` - Download from a subreddit; `reddit-setup` - guided Reddit API setup
+- `catalog <dir>` - Scan a drive or folder into the catalog (directory completion)
+- `catalog-list`, `catalog-search`, `catalog-duplicates`, `catalog-report` - Query the catalog
 
 ### Options
 - `--help`, `-h` - Show help

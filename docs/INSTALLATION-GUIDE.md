@@ -74,7 +74,7 @@ source ~/.bashrc
 ```bash
 # Test the script
 vmgr --version
-# Should show: Video Manager Ultimate - Bash Edition v1.0.0 (2025-10-19)
+# Should show: Video Manager Ultimate - Bash Edition v1.6.0 (2026-10-18)
 
 # Test with help
 vmgr --help
@@ -93,48 +93,47 @@ vmgr --help
 vmgr
 ```
 
-You'll see a beautiful menu:
+You'll see the main menu:
 
 ```
-╔═══════════════════════════════════════════════════════════════╗
-║  VIDEO MANAGER ULTIMATE - BASH EDITION                       ║
-║  Version 1.0.0 - 2025-10-19                                  ║
-╚═══════════════════════════════════════════════════════════════╝
+╭──────────────────────────────────────────────────────────────╮
+│ VIDEO MANAGER ULTIMATE                                v1.6.0 │
+│ ○ Dry run OFF                             no folder selected │
+╰──────────────────────────────────────────────────────────────╯
 
-MAIN MENU
+  ▍ MAIN MENU
 
-[1] Single Operations
-[2] Batch Processing
-[3] Automated Workflows
-[4] Duplicate Detection
-[5] Utilities
-[6] Settings
+   1   File Operations            Rename, organize, flatten
+   2   Subtitle Generation        Generate, edit, translate
+   3   Duplicate Detection        Find and remove duplicates
+   4   Multi-Drive Catalog        Scan drives, search media
+   5   Utilities                  Logs, system info, testing
+   6   Settings                   Options and preferences
+   7   Reddit Downloader          Images from a subreddit
 
-[Q] Quit
+   Q   Quit
 
-Select option:
+  ❯ Choose (press a key)
 ```
+
+Menus take a **single keypress** (no Enter), and `Esc` goes back. The header always shows whether **Dry run** is on.
 
 ### Your First Operation - Test Run
 
 Let's safely test the rename feature:
 
-1. **Press `6`** (Settings)
-2. **Press `1`** (Toggle Dry Run Mode - should turn ON)
-3. **Press `B`** (Back to Main Menu)
-4. **Press `1`** (Single Operations)
-5. **Press `1`** (Rename Files)
-6. **Enter a test directory path** (e.g., `/mnt/c/Users/Eric/Videos/TestFolder`)
-7. **Review the output** - it shows what WOULD be renamed (no actual changes)
-8. **Press Enter** to continue
+1. **Press `1`** (File Operations)
+2. **Press `D`** (Toggle Dry Run: the header changes to `● Dry run ON`)
+3. **Press `1`** (Rename Files). The directory browser opens
+4. **Choose a test folder.** Arrow keys move, `→` opens a folder, `←` goes up, `T` lets you type a path
+   (e.g. `/mnt/c/Users/Eric/Videos/TestFolder`), and `S` chooses the folder you are in
+5. **Review the preview.** It shows `○ old name` / `→ [New] name` for what WOULD be renamed, and a summary card (no actual changes)
+6. It asks **"Apply these changes?"**. Press `n` to stop here, or `y` to apply (it asks "Proceed?" once more)
 
-If the dry run results look good:
+If the preview looks right, press `y` twice. The files are renamed, and the summary tells you
+`Undo: N change(s) recorded`. Changed your mind? **Utilities → Undo Last Operation** puts every file back.
 
-1. **Press `1`** (Single Operations again)
-2. **Press `D`** (Toggle Dry Run - turn it OFF)
-3. **Press `1`** (Rename Files)
-4. **Enter the same directory**
-5. **Changes are now applied!**
+> Tip: the browser starts in your most recently used folder (`~/Videos`, `~/Movies` or your Windows `Videos` folder the first time).
 
 ---
 
@@ -161,37 +160,23 @@ vmgr --dry-run rename ~/vmgr-test
 
 Expected output:
 ```
-═══════════════════════════════════════════════════════════════
-★ Rename Files (Bracket Notation)
-═══════════════════════════════════════════════════════════════
-
+ℹ Dry run mode enabled
+  ▶ Rename Files (Bracket Notation)   DRY RUN
+  ──────────────────────────────────────────────────────────────
 ℹ Scanning directory: /home/user/vmgr-test
 ℹ Found 3 video files to process
-
-[DRY RUN] Would rename:
-  From: vixen.test.movie.mp4
-  To:   [Vixen] test.movie.mp4
-
-[DRY RUN] Would rename:
-  From: tushy.sample.mp4
-  To:   [Tushy] sample.mp4
-
-[DRY RUN] Would rename:
-  From: brazzers - scene - name.mp4
-  To:   [Brazzers] scene name.mp4
-
-───────────────────────────────────────────────────────────────
-Operation Complete: Rename Files (Bracket Notation)
-───────────────────────────────────────────────────────────────
-
-📊 Statistics:
-   Files Processed:  3
-   Files Renamed:    0
-   Files Moved:      0
-   Files Skipped:    0
-
-Duration: 0m 2s
-═══════════════════════════════════════════════════════════════
+  ○ tushy.sample.mp4
+    → [Tushy] sample.mp4
+  ○ vixen.test.movie.mp4
+    → [Vixen] test.movie.mp4
+  ○ brazzers - scene - name.mp4
+    → [Brazzers] scene name.mp4
+ℹ Dry run complete - no files were actually renamed
+╭─ ✓ Dry run complete ─────────────────────────────────────────╮
+│ Rename Files (Bracket Notation)                        0m 0s │
+│ Files processed                                            3 │
+│ Would change                                               3 │
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 ### Apply Changes
@@ -206,10 +191,18 @@ ls -la ~/vmgr-test
 
 You should see:
 ```
-[Vixen] test.movie.mp4
-[Tushy] sample.mp4
 [Brazzers] scene name.mp4
+[Tushy] sample.mp4
+[Vixen] test.movie.mp4
 ```
+
+The run ends with `Undo: 3 change(s) recorded`. To put the files back:
+
+```bash
+vmgr --undo-organize        # undoes the most recent logged operation
+```
+
+Output is quiet by default; add `--verbose` to see every intermediate step per file.
 
 ✅ **Success! The script is working perfectly.**
 
@@ -619,7 +612,7 @@ ls -lth
 
 ## 🎉 You're Ready!
 
-You now have a powerful, ultra-verbose video management system at your fingertips!
+You now have a safe, undoable video management system at your fingertips!
 
 **Quick Commands to Remember:**
 ```bash
@@ -641,7 +634,7 @@ vmgr --help             # Show help
 **Welcome to Video Manager Ultimate - Bash Edition!**  
 *Making video management verbose, safe, and beautiful.* ✨
 
-**Version:** 1.0.0  
+**Version:** 1.6.0  
 **Created:** October 19, 2025  
 **Author:** Built for Eric's Video Management System
 

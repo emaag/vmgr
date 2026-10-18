@@ -1,8 +1,8 @@
 # VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Complete User Guide
 
-**Version:** 1.0.0  
-**Date:** October 19, 2025  
+**Version:** 1.6.0  
+**Date:** October 2026  
 **Complements:** PowerShell Ultimate Edition
 
 ---
@@ -25,21 +25,23 @@
 
 ## Overview
 
-Video Manager Ultimate - Bash Edition is a comprehensive, ultra-verbose video file management system designed specifically for Linux and WSL (Windows Subsystem for Linux) environments. It complements the PowerShell Ultimate Edition by providing bash-native features with extensive real-time feedback and logging.
+Video Manager Ultimate - Bash Edition is a video file management system for Linux, macOS, WSL (Windows Subsystem for Linux) and Git Bash. It renames and organizes video collections, finds duplicates, generates subtitles with Whisper, catalogs your drives, and downloads from Reddit, with a dry-run preview and an undo log behind every change it makes to your files. It complements the PowerShell Ultimate Edition by providing bash-native features.
 
 ### Key Features
 
-✅ **Interactive Menu System** - Color-coded, user-friendly interface  
-✅ **Command-Line Arguments** - Full automation support  
-✅ **Real-Time Verbose Output** - See every operation as it happens  
-✅ **Comprehensive Logging** - Timestamped audit trail of all operations  
-✅ **Duplicate Detection** - SHA-256 hash-based exact duplicate finding  
-✅ **Directory Flattening** - Organize scattered video collections  
-✅ **Bracket Notation** - Standardized `[Studio] filename.ext` format  
-✅ **Dry Run Mode** - Test operations safely before applying  
-✅ **Statistics Tracking** - Detailed reports on all operations  
-✅ **WSL & Linux Support** - Works with both Windows and Unix paths  
-✅ **Batch Processing** - Handle multiple folders in one session  
+✅ **Interactive Menus** - single-key menus, a directory browser with a live preview, progress bars and a summary after every operation  
+✅ **Command-Line Mode** - every operation is scriptable; quiet by default, `--verbose` for every step  
+✅ **Dry Run First** - preview any operation, then apply it  
+✅ **Undo** - renames, dash/spacing fixes, flattening and organize runs are logged and can be put back  
+✅ **Duplicate Trash** - deleted duplicates go to an undoable trash; Empty Trash deletes them for good  
+✅ **Duplicate Detection** - SHA-256 exact matching, per folder or across every drive in the catalog  
+✅ **Bracket Notation & Cleanup** - standardized `[Studio] filename.ext`, dash removal, spacing fixes, flattening  
+✅ **Batch Processing** - queue many folders (or every subfolder with videos), with a per-folder results list  
+✅ **Subtitle Generation** - OpenAI Whisper, with filler cleanup and "no speech" detection  
+✅ **Multi-Drive Catalog** - incremental scans, search that works for unplugged drives, duplicates across drives  
+✅ **Reddit Downloader** - images, videos and (with the API) galleries, with a guided API setup  
+✅ **Comprehensive Logging** - a timestamped audit trail of everything the tool does  
+✅ **Cross-Platform** - Linux, macOS, WSL and Git Bash, with Windows or Unix paths  
 
 ### Supported Video Formats
 
@@ -102,11 +104,12 @@ On first run, the script will:
 ./video-manager-ultimate.sh
 ```
 
-Follow the color-coded menus to:
-1. Select operation type
-2. Enter directory path
-3. Review dry run results
-4. Apply changes
+Press a single key to choose (no Enter needed; `Esc` goes back). A typical rename looks like this:
+1. Press `1` (File Operations), then `D` to turn **Dry run** on (the header shows it).
+2. Press `1` (Rename Files). The directory browser opens: arrows to move, `→` to open a folder, `S` to choose the folder you are in, `T` to type a path.
+3. Read the preview (`○ old name` / `→ [New] name`) and the summary card. Nothing has changed yet.
+4. Answer `y` to "Apply these changes?" and `y` to "Proceed?". The files are renamed and the summary says how many changes were recorded.
+5. Changed your mind? **Utilities → Undo Last Operation** puts every file back.
 
 ### Command Line Mode (For Automation)
 
@@ -289,54 +292,34 @@ Identifies exact duplicates using SHA-256 cryptographic hashing.
 
 **Features:**
 - Hash-based exact matching (100% accurate)
-- Groups duplicates by hash
-- Calculates wasted space
-- Generates detailed reports
-- Optional automatic deletion
-- CSV export for analysis
+- Groups duplicates by hash and shows the wasted space
+- Scans are sorted, so the copy that is **kept** is always the first one alphabetically
+- Text and CSV reports, written to the logs folder (not into the folder you scanned)
+- Optional removal: **duplicates are moved to a hidden `.vmgr-trash` folder, not deleted**, so they can be put back (see *Undo and Trash* below)
 
 **Output:**
 - **Text Report:** `~/.video-manager-logs/duplicate-reports/FOLDER_TIMESTAMP/duplicates.txt`
 - **CSV Export:** `~/.video-manager-logs/duplicate-reports/FOLDER_TIMESTAMP/duplicates.csv`
 
-**Example Report:**
+**What you see:**
 ```
-DUPLICATE VIDEO FILES REPORT
-Generated: 2025-10-19 14:30:00
-Directory: /mnt/c/Users/Eric/Videos
-Total Duplicates: 5
-Space Wasted: 2,450 MB
+  Group 1  · 3 copies · 500MiB each
+    ✓ keep  movie.mp4
+    ✗ extra Backup/movie.mp4
+    ✗ extra Old/movie.mp4
+✓ Moved to trash: Backup/movie.mp4
+✓ Moved to trash: Old/movie.mp4
 
-========================================
-
-=== Duplicate Group #1 ===
-Hash: a1b2c3d4e5f6...
-File Size: 500 MB
-Original: /Videos/movie.mp4
-Duplicates:
-  - /Videos/Backup/movie.mp4
-  - /Videos/Old/movie.mp4
-
-=== Duplicate Group #2 ===
-...
+╭─ ✓ Complete ──────────────────────────────────────────────╮
+│ Find and Delete Duplicates                          0m 41s │
+│ Moved to trash                                           2 │
+│ To reclaim (empty trash)                           1000MiB │
+╰────────────────────────────────────────────────────────────╯
+  Undo: 2 change(s) recorded. Utilities > Undo Last Operation puts them back.
 ```
 
-**Verbose Output:**
-```
-ℹ Scanning for duplicate video files in: /Videos
-ℹ This may take a while for large collections...
-
-Processing: [15 files] Current: movie.mp4...
-ℹ Calculating SHA256 hash for: movie.mp4
-⚠ Duplicate found!
-  Hash: a1b2c3d4e5f6...
-  Original: /Videos/movie.mp4
-  Duplicate: /Videos/Backup/movie.mp4
-
-✓ Report generated: ~/.video-manager-logs/duplicate-reports/Videos_20251019-143000/duplicates.txt
-✓ CSV export: ~/.video-manager-logs/duplicate-reports/Videos_20251019-143000/duplicates.csv
-ℹ Total space wasted by duplicates: 2450 MB
-```
+The text report lists each group with its hash, size, the kept original and the duplicates. Paths in the on-screen groups are
+relative to the folder you scanned.
 
 ---
 
@@ -372,7 +355,7 @@ Processing**, or run `vmgr batch` from the command line.
 Preview all operations without making any changes.
 
 **Enable:**
-- **Interactive:** Toggle in Settings menu or Single Operations
+- **Interactive:** press `D` in File Operations, or Settings > Toggle Dry Run
 - **CLI:** Use `--dry-run` or `-d` flag
 
 **Output:**
@@ -389,6 +372,28 @@ Preview all operations without making any changes.
 - Review output carefully
 - Check for unexpected transformations
 - Verify conflict resolutions
+
+---
+
+### 8. Undo and Trash
+
+**What is recorded.** Rename Files, Remove Dashes, Fix Bracket Spacing, Flatten, "organize by subfolder", the batch versions of
+these, duplicate removal and the catalog's "move duplicates to trash" write an **undo log** as they work: one log per operation
+(a batch is one operation), listing every `original path | new path`. Logs live in `~/.video-manager-logs/undo-history/`. When an
+operation ends the summary tells you how many changes were recorded.
+
+**Putting things back.** *Utilities → Undo Last Operation* moves every file of the most recent operation back (asking first, and
+previewing when Dry run is on). *Utilities → List Undo Operations* shows each operation by name, date and file count, and
+`--undo-organize <ID>` undoes a specific one. Undo never overwrites: a file whose old name has been taken since is skipped.
+
+**The trash.** Removing duplicates moves the extra copies into a hidden `.vmgr-trash/<timestamp>/` folder inside the folder you
+scanned (on the same drive, so it is instant even for large videos), keeping each file's relative path. Every scan the tool runs
+(duplicates, flatten, image conversion, subtitles, organize, the catalog) skips `.vmgr-trash`. *Utilities → Empty Trash* (or
+`--empty-trash`) lists each trash with its size, asks, and then deletes for good; the undo logs that pointed into it are retired.
+
+**Limits.** Image conversion is not undoable. If you switch **Settings → Granular Controls → Undo System** off, nothing is recorded
+and duplicates are deleted permanently (with a typed `yes`). Undo restores files to their places but does not re-add them to the
+catalog: rescan the drive.
 
 ---
 
@@ -423,64 +428,48 @@ Preview all operations without making any changes.
 
 ---
 
-### Single Operations Menu
+### File Operations Menu
 
-Perfect for one-time tasks on a single directory.
+Main menu **[1]**. Every operation asks which folder to work on with the directory browser (see below), then:
+- With **Dry run on**, it runs a preview first (`○ old name` / `→ [New] name`), shows a summary card, and asks "Apply these changes?".
+- With Dry run off, it shows how many files will change and a sample, and asks "Proceed? [y/N]" before touching anything.
+- When it finishes you get a progress bar while it ran, a summary card (what was renamed or skipped, and how long it took), and a
+  note that the changes are recorded for undo.
 
-**Options:**
+These operations act on the files **directly inside the folder you choose** (Flatten is the exception, because it reaches into
+subfolders). If the folder only contains subfolders of videos, the prompt says so and suggests Flatten or picking a subfolder.
 
-**[1] Rename Files (Bracket Notation)**
-- Applies full cleanup pipeline
-- Removes dashes
-- Applies bracket notation
-- Fixes spacing
-
-**[2] Remove Dashes Only**
-- Only removes ` - ` patterns
-- Preserves all other formatting
-
-**[3] Fix Bracket Spacing Only**
-- Only fixes `]word` → `] word`
-- Preserves all other formatting
-
-**[4] Flatten Directory**
-- Moves all videos to top level
-- Handles conflicts automatically
-
-**[5] Full Cleanup (All Operations)**
-- Comprehensive transformation
-- All formatting fixes applied
-
-**[D] Toggle Dry Run Mode**
-- Quick toggle without menu navigation
-- Current state shown: ON/OFF
+**[1] Rename Files (Bracket Notation)**: dash removal, bracket notation and spacing fix in one pass
+**[2] Remove Dashes**: only the ` - ` patterns
+**[3] Fix Bracket Spacing**: only `]word` → `] word`
+**[4] Flatten Directory**: moves every video from the subfolders up into the folder (name conflicts get a `(1)` suffix)
+**[5] Full Cleanup**: rename, then a duplicate report
+**[6] Image Operations**: convert JPEG/PNG/WebP/HEIC (or all) to JPG; needs ImageMagick; has its own Recursive and Dry run toggles; not undoable
+**[7] Batch Processing**: the same operations over several folders (below)
+**[8] Automated Workflows**: multi-step clean-ups (below)
+**[D] Toggle Dry Run**: the header shows the state
 
 ---
 
 ### Batch Processing Menu
 
-Process multiple directories with same operation.
+File Operations **[7]**. Run one operation over several folders. All four options use the same queue screen: add folders with the
+browser (`A`), add **every subfolder that contains videos** (`S`), or type a path (`T`); remove one (`X`), clear (`C`), run (`Enter`),
+cancel (`Q`). Each folder gets a progress header and the run ends with a per-folder results list.
 
-**Options:**
+**[1] Batch Rename Multiple Folders**: bracket notation for each folder
+**[2] Batch Flatten Multiple Folders**: flatten each folder's subfolders
+**[3] Batch Full Cleanup**: rename and duplicate report for each folder
+**[4] Batch Find Duplicates**: report only, per folder (duplicates are not compared between folders; use the catalog for that)
 
-**[1] Batch Rename Multiple Folders**
-- Apply bracket notation to multiple directories
-- Build the list with the browser, "add every subfolder", or typed paths
-- Preview, confirm, then a per-folder results list
-
-**[2] Batch Flatten Multiple Folders**
-- Flatten multiple directory structures
-- Useful for organizing scattered collections
-
-**[3] Batch Full Cleanup**
-- Complete cleanup across multiple folders
-- Maximum efficiency for large collections
+With Dry run on it previews every folder and then asks whether to apply; with it off it asks for confirmation (it tells you how many
+folders and videos will change). One undo log covers the whole batch.
 
 ---
 
 ### Automated Workflows Menu
 
-Pre-configured multi-step operations.
+File Operations **[8]**. Pre-configured multi-step operations; both ask before running and show a summary card.
 
 **[1] New Collection Setup**
 - **Step 1:** Flatten directory structure
@@ -498,23 +487,35 @@ Pre-configured multi-step operations.
 
 ### Duplicate Detection Menu
 
-Find and optionally remove duplicates.
+Main menu **[3]**. Finds exact duplicates inside one folder (and its subfolders).
 
 **[1] Find Duplicates (Report Only)**
-- Generates text and CSV reports
-- No files deleted
-- Safe for exploration
+- Shows the groups and writes text and CSV reports to the logs folder
+- Nothing is moved or deleted
 
 **[2] Find and Delete Duplicates**
-- ⚠️ **WARNING: Deletes files!**
-- Requires explicit "yes" confirmation
-- Keeps original, deletes duplicates
-- Updates statistics with space saved
+- Moves the extra copies to the folder's hidden `.vmgr-trash` (see *Undo and Trash*): a single-key confirmation, fully undoable
+- Keeps the first copy alphabetically
+- If the Undo System is off, it deletes permanently and asks you to type `yes`
 
 **[3] Find Duplicates (Dry Run)**
-- Shows what would be deleted
-- No actual changes made
-- Perfect for testing
+- Shows what would be moved, changes nothing
+
+To compare **across drives**, use the catalog (below).
+
+---
+
+### Subtitle Generation Menu
+
+Main menu **[2]**. Needs Whisper (`pip install openai-whisper`); the full guide is in [SUBTITLE-FEATURE-GUIDE.md](SUBTITLE-FEATURE-GUIDE.md).
+
+**[1] Generate Subtitles** (one folder), **[2] Batch Generate Subtitles** (the folder queue screen, one results line per folder),
+**[3] Configure Subtitle Settings** (model, format, language, one key each), **[4] Advanced Settings** (GPU, parallel jobs, filters),
+**[5] Edit Existing Subtitle** (opens it in `$EDITOR`), **[6] Check Whisper Installation** (runs the command and reports a broken install).
+
+Existing subtitles are skipped. Whisper writes filler such as `.` over silence and music; those cues are removed, and a video with
+nothing but filler gets no subtitle file, is counted as **No speech found**, and is skipped on later runs (delete the hidden
+`.<name>.nospeech` file to retry).
 
 ---
 
@@ -541,7 +542,10 @@ included and shown with a hollow dot, so you can find out *which* drive a file i
 capped at 100 and say how many matched.
 
 **[4] Find Duplicate Files**: groups of files with the same hash across **all** drives, with the drive each copy is on. This
-reports only; use File Operations or Duplicate Detection to act on a single folder. It needs hashes, so leave *Include Hash* on.
+reports first, then offers **Clean up**: pick a drive and the extra copies on it are moved to that drive's own `.vmgr-trash` (undoable), but only
+copies that also exist on **another drive that is online right now**, and only if both files still match the size and modification
+time the catalog recorded (anything that changed since the scan is left alone with a note to rescan). It needs hashes, so leave
+*Include Hash* on.
 
 **[5] Catalog Several Drives**: the same queue screen as Batch Processing, one results line per drive.
 
@@ -566,59 +570,36 @@ vmgr --dry-run catalog /mnt/d             # preview: how many files would be add
 
 ### Utilities Menu
 
-System management and diagnostics.
+Main menu **[5]**. System management, diagnostics and undo.
 
-**[1] View Last 50 Log Entries**
-- Quick review of recent operations
-- Displays directly in terminal
-- Useful for troubleshooting
-
-**[2] Open Log Directory**
-- Opens file manager to log folder
-- Works in both WSL and native Linux
-- Easy access to full log files
-
-**Undo Last Operation**
-- Moves every file from the most recent renamed/flattened/organized operation back
-- Asks for confirmation; previews first when Dry Run is on
-
-**[3] Test Filename Transformation**
-- Interactive testing tool
-- Enter any filename
-- See transformation pipeline step-by-step
-- Perfect for verification
-
-**[4] Display System Information**
-- Script version
-- Bash version
-- Operating system details
-- Available tools check
-- Paths and configuration
+**[1] Organize by Subfolder Names**: moves files into the subfolder whose name they match (logged for undo)
+**[2] List Undo Operations**: each logged operation by name, date and file count, newest first
+**[3] Undo Last Operation**: puts back every file of the most recent renamed, flattened, organized or trashed operation; asks first, previews when Dry run is on
+**[4] View Last 50 Log Entries**
+**[5] Open Log Directory**: file manager on the logs folder (WSL and Linux)
+**[6] Test Filename Transformation**: type a filename and see each step of the pipeline
+**[7] Display System Information**: versions, paths and which optional tools are installed
+**[8] Empty Trash**: lists every `.vmgr-trash` the undo logs know about with its size and deletes the contents for good after you confirm
 
 ---
 
 ### Settings Menu
 
-Configure script behavior.
+Main menu **[6]**. Settings last for the session; save them as a profile to keep them.
 
 **Current Settings Display:**
 ```
-Dry Run Mode:    ENABLED / DISABLED
-Verbose Output:  ENABLED / DISABLED
-Log Directory:   /home/user/.video-manager-logs
+  Dry Run Mode           ● on
+  Verbose Output         ○ off
+  Log directory          /home/user/.video-manager-logs
 ```
 
-**[1] Toggle Dry Run Mode**
-- Persistent for entire session
-- Affects all operations
-
-**[2] Toggle Verbose Output**
-- Control detail level
-- Reduce output for large operations
-
+**[1] Toggle Dry Run Mode**: affects every operation (the header shows it)
+**[2] Toggle Verbose Output**: off by default; on shows every intermediate step per file
 **[3] View Supported Extensions**
-- List all recognized video formats
-- Current: mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
+**[4] Granular Controls**: per-file confirmation, preview and step-by-step modes; size, date and pattern filters; the **Undo System** switch; batch size; undo history
+**[5] Organize Settings**: default target and search paths, progress and logging for organize
+**[6] Save Configuration / [7] Load Configuration / [8] List Profiles / [9] Delete Profile**: named profiles in `~/.video-manager-config-<name>.conf`
 
 ---
 
@@ -746,15 +727,27 @@ subreddit that does not exist, 429 for rate limiting).
 
 ### Commands
 
-| Command | Description | Requires Directory |
-|---------|-------------|-------------------|
-| `rename` | Apply bracket notation | Yes |
-| `flatten` | Flatten directory structure | Yes |
-| `cleanup` | Full cleanup pipeline | Yes |
-| `duplicates` | Find duplicate files | Yes |
-| `workflow-new` | New collection setup | Yes |
-| `workflow-clean` | Deep clean workflow | Yes |
-| `batch` | Batch processing mode | No (prompts for input) |
+| Command | Description | Requires |
+|---------|-------------|----------|
+| `rename <dir>` | Apply bracket notation | directory |
+| `flatten <dir>` | Flatten directory structure | directory |
+| `cleanup <dir>` | Full cleanup pipeline | directory |
+| `duplicates <dir>` | Find duplicate files (report) | directory |
+| `subtitles <dir>` | Generate subtitles with Whisper | directory |
+| `workflow-new <dir>` | New collection setup workflow | directory |
+| `workflow-clean <dir>` | Deep clean workflow | directory |
+| `batch` | Batch rename; reads one directory per line when input is piped | none |
+| `--organize` | Organize files by subfolder names | none |
+| `--undo-organize [ID]` | Undo a logged operation (default: the most recent) | none |
+| `--list-undo` | List the logged operations | none |
+| `--empty-trash` | Permanently delete files moved to trash | none |
+| `catalog <dir>` | Scan a drive or folder into the catalog | directory |
+| `catalog-list` | Cataloged drives, online/offline | none |
+| `catalog-search <term> [type]` | Search the catalog (video, image or audio) | term |
+| `catalog-duplicates` | Duplicates across all cataloged drives | none |
+| `catalog-report [file]` | Text report of the catalog | none |
+| `reddit <sub> <dir> [max]` | Download from a subreddit | subreddit, directory |
+| `reddit-setup` | Guided Reddit API setup | terminal |
 
 ### Examples
 
@@ -910,12 +903,13 @@ The script accepts both Windows and Unix path formats:
 - `RENAME` - Rename operations
 - `MOVE` - File move operations
 - `DRYRUN` - Dry run previews
+- Everything the tool prints to the screen is also logged, including the verbose detail that is hidden by default
 
 ### Example Log Entries
 
 ```
 [2025-10-19 14:30:00] [INFO] ==========================================
-[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.0.0
+[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.6.0
 [2025-10-19 14:30:00] [INFO] Session started: 2025-10-19 14:30:00
 [2025-10-19 14:30:00] [INFO] ==========================================
 [2025-10-19 14:30:05] [OPERATION] Started: Rename Files (Bracket Notation)
@@ -1262,7 +1256,7 @@ done
 | **Platform** | Linux, WSL, macOS | Windows, PowerShell Core |
 | **Interactive Menu** | ✅ Color-coded | ✅ Color-coded |
 | **CLI Arguments** | ✅ Full support | ✅ Full support |
-| **Verbose Output** | ✅ Ultra-verbose | ✅ Comprehensive |
+| **Detailed Output** | ✅ Quiet by default, `--verbose` for every step | ✅ Comprehensive |
 | **Logging** | ✅ Timestamp & levels | ✅ Timestamp & levels |
 | **Duplicate Detection** | ✅ SHA-256 based | ✅ SHA-256 + metadata |
 | **Near-Duplicate Detection** | ❌ Not yet | ✅ ffprobe required |
@@ -1282,13 +1276,19 @@ done
 A: Yes! It should work on macOS with bash 4.0+. Install sha256sum if needed via Homebrew.
 
 **Q: Does this modify video files or just filenames?**  
-A: Only filenames. Video content is never touched.
+A: Only names and locations. Video content is never touched (image conversion creates new JPG files).
 
-**Q: What if I accidentally delete duplicates?**  
-A: Always backup first! But you can recover from the duplicate report CSV if needed.
+**Q: What if I accidentally remove duplicates?**  
+A: They are moved to a hidden `.vmgr-trash` folder, not deleted, so **Utilities → Undo Last Operation** puts them back. They are only gone for good after **Utilities → Empty Trash**, or if you switch the Undo System off.
 
 **Q: Can I undo renames?**  
-A: Yes. Renames, dash removal, spacing fixes, flattening and "organize by subfolder" are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. **Deleting duplicates moves them to a hidden `.vmgr-trash` folder inside the scanned folder** (same drive, so it is instant), and they can be put back the same way; **Utilities → Empty Trash** (or `--empty-trash`) deletes the trashed files for good and retires the undo logs that pointed at them. If you switch the Undo System off, duplicates are deleted permanently instead. Converting images cannot be undone, so back those up first.
+A: Yes. Renames, dash removal, spacing fixes, flattening, "organize by subfolder" and duplicate removal are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. Converting images cannot be undone, so back those up first.
+
+**Q: Can it find the same file on two different drives?**  
+A: Yes: scan each drive with the **Multi-Drive Catalog** ([4]); then *Find Duplicate Files* compares hashes across all of them, and the catalog can be searched even when a drive is unplugged.
+
+**Q: Why did the Reddit downloader skip galleries?**  
+A: Without API credentials Reddit's public feed does not list a gallery's images. Run **Reddit → Reddit API Setup** (or `vmgr reddit-setup`): it checks your login before saving it.
 
 **Q: Does this work with network drives?**  
 A: Yes, if mounted in your filesystem. Performance depends on network speed.
@@ -1296,27 +1296,36 @@ A: Yes, if mounted in your filesystem. Performance depends on network speed.
 **Q: Can I customize the bracket notation format?**  
 A: Yes, edit the `apply_bracket_notation()` function in the script.
 
-**Q: What about subtitle files (.srt, .sub)?**  
-A: Currently only processes video files. Subtitle support can be added by extending `DEFAULT_VIDEO_EXTENSIONS`.
+**Q: What about subtitle files (.srt, .vtt)?**  
+A: The tool can generate them with Whisper (Subtitle Generation, main menu [2]) and skips videos that already have one. It does not rename existing subtitle files along with their videos.
 
 **Q: Is this safe for my media library?**  
-A: Yes, when used with dry run first and backups. The script never modifies video content, only filenames and structure.
+A: Yes, when used with dry run first. The script never modifies video content, only names and locations, and nearly everything it changes can be undone; keep backups of irreplaceable media anyway.
 
 ---
 
 ## Version History
 
-### Version 1.0.0 (2025-10-19)
-- Initial release
-- Interactive menu system
-- CLI argument support
-- Comprehensive logging
-- Duplicate detection
-- Directory flattening
-- Bracket notation
-- Batch processing
-- Automated workflows
-- WSL/Linux support
+### Version 1.6.0 (October 2026)
+- Multi-drive catalog: incremental scans, search that works for unplugged drives, duplicates across drives (with undoable cleanup)
+- Guided Reddit API setup; Reddit downloader no longer leaves empty folders; log messages print Windows paths literally
+
+### Version 1.5.0 (October 2026)
+- Deleted duplicates go to an undoable trash; Empty Trash
+- Whisper filler cleanup and "no speech" detection; batch subtitle generation
+
+### Version 1.4.0 (October 2026)
+- New interface: framed header, single-key menus, themed directory browser, progress bars and summary cards
+- Undo for renames and flattens; Batch Processing and Workflows reachable from the menu; quiet output by default
+
+### Version 1.3.0 (December 2025)
+- Modular architecture, tab completion, automated test suite
+
+### Version 1.2.0 / 1.1.0 (November 2025)
+- Organize by subfolder with undo; Whisper subtitle generation with GPU and parallel jobs
+
+### Version 1.0.0 (October 2025)
+- Initial release: interactive menu, CLI, logging, duplicate detection, flattening, bracket notation, batch processing, workflows
 
 ---
 
@@ -1324,7 +1333,7 @@ A: Yes, when used with dry run first and backups. The script never modifies vide
 
 Created for Eric's Video Management System  
 Complements PowerShell Ultimate Edition  
-Built with bash, love, and verbose output ❤️
+Built with bash and a lot of dry runs ❤️
 
 ---
 
