@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Cross-drive cleanup candidates and the duplicate plan are much faster on big catalogs**: they now read the catalog text directly instead of loading it into jq. With 200,000 records the check takes about 6 s instead of 33 s and uses 13 MB instead of 368 MB, with identical results.
+- **The cross-drive duplicate report no longer loads the whole catalog**: it is built from the catalog text, so with 200,000 records it uses 13 MB instead of about 565 MB and the filtered report takes 13 s instead of 58 s. It prints the first 200 groups (`DUPLICATE_REPORT_GROUPS`) and says how many more there are; the totals always count every group.
 
 ---
 

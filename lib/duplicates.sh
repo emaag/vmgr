@@ -257,54 +257,89 @@ find_similar_images() {
     echo "$similar"
 }
 
+# Groups of identical files for the report, read from the catalog text (no JSON
+# parsing, so it stays quick and small on huge catalogs). Args: media filter (all,
+# video, image, audio). Output, fields separated by US:
+#   GROUP, copies, size of each copy, "", "", ""
+#   FILE, "", "", drive label, online|offline, relative path     (one per copy)
+#   SUMMARY, groups, extra copies, wasted bytes, "", ""          (last line, counts every group)
+# Only the first DUPLICATE_REPORT_GROUPS groups get GROUP/FILE lines.
+_catalog_duplicate_report_lines() {
+    local media="${1:-all}" map id mp label limit="${DUPLICATE_REPORT_GROUPS:-200}"
+    map="$(mktemp)"
+    local online_ids=" "
+    while IFS= read -r id; do online_ids+="$id "; done < <(_catalog_online_json | jq -r 'keys[]')
+    while IFS="$_CAT_SEP" read -r id label; do
+        printf '%s\037%s\037%s\n' "$id" "$label" "$([[ "$online_ids" == *" $id "* ]] && echo online || echo offline)"
+    done < <(jq -r '.drives[] | [.drive_id, .drive_label] | join("\u001f")' "$CATALOG_DRIVES_DB" 2>/dev/null) > "$map"
+
+    _catalog_hash_index | LC_ALL=C awk -F"$_CAT_SEP" -v media="$media" -v map="$map" -v limit="$limit" '
+        BEGIN {
+            while ((getline line < map) > 0) { split(line, f, "\037"); lab[f[1]] = f[2]; st[f[1]] = f[3] }
+            close(map)
+        }
+        function flush(   i, avg) {
+            if (n > 1) {
+                groups++; extra += n - 1; wasted += total - total / n
+                avg = int(total / n)
+                if (groups <= limit) {
+                printf "GROUP\037%d\037%d\037\037\037\n", n, avg
+                for (i = 1; i <= n; i++)
+                    printf "FILE\037\037\037%s\037%s\037%s\n", (D[i] in lab ? lab[D[i]] : "unknown"), (D[i] in st ? st[D[i]] : "offline"), R[i]
+                }
+            }
+            n = 0; total = 0
+        }
+        media != "all" && $7 != media { next }
+        { if (($1 "") != cur) { flush(); cur = $1 "" }     # string compare: see _catalog_duplicate_groups
+          n++; D[n] = $2; R[n] = $4; total += $5 }
+        END { flush(); printf "SUMMARY\037%d\037%d\037%d\037\037\n", groups, extra, int(wasted) }'
+    rm -f "$map"
+}
+
 # Display the cross-drive duplicate report: groups of files with the same hash,
 # across every cataloged drive (drives that are offline are included).
 show_duplicates_report() {
     local media_filter="${1:-all}"
 
     command -v jq >/dev/null 2>&1 || { log_error "The catalog needs jq"; return 1; }
+    init_catalog_db
 
-    local duplicates dup_count
-    duplicates="$(find_duplicates_in_catalog)"
-    [[ "$media_filter" != all ]] && duplicates="$(jq --arg m "$media_filter" \
-        'map(.files |= map(select(.media_type == $m)) | .count = (.files | length)) | map(select(.count > 1))' <<< "$duplicates")"
-    dup_count="$(jq 'length' <<< "$duplicates" 2>/dev/null)"
+    local n=0 kind count size label state rel dot color
+    local dup_count=0 copies=0 wasted=0 printed=false
+    while IFS=$'\x1f' read -r kind count size label state rel; do
+        case "$kind" in
+            GROUP)
+                n=$(( n + 1 ))
+                if [[ "$(type -t ui_dup_group)" == "function" ]]; then
+                    ui_dup_group "$n" "$count" "$(format_bytes "$size")"
+                else
+                    echo "Group $n: $count copies, $(format_bytes "$size") each"
+                fi
+                ;;
+            FILE)
+                if [[ "$state" == online ]]; then dot="${UI_DOT_ON:-*}"; color="${UI_OK:-$COLOR_GREEN}"
+                else dot="${UI_DOT_OFF:-o}"; color="${UI_DIM:-$COLOR_RED}"; fi
+                printf '    %s%s%s %s[%s]%s %s\n' "$color" "$dot" "$COLOR_RESET" "${UI_ACCENT:-$COLOR_CYAN}" "$label" "$COLOR_RESET" "$rel"
+                ;;
+            SUMMARY)
+                dup_count="$count"; copies="$size"; wasted="$label"
+                ;;
+        esac
+    done < <(_catalog_duplicate_report_lines "$media_filter")
 
-    if [[ -z "$dup_count" || "$dup_count" == "null" || "$dup_count" -eq 0 ]]; then
+    if (( dup_count == 0 )); then
         log_info "No duplicates found in the catalog"
-        if [[ "$(jq '[.videos[] | select((.hash // "") != "")] | length' "$CATALOG_DB" 2>/dev/null)" == "0" ]]; then
+        if ! LC_ALL=C grep -q '"hash":"[0-9a-fA-F]' "$CATALOG_DB" 2>/dev/null; then
             log_info "Nothing in the catalog has a hash yet. Turn on Include Hash in Catalog Settings and scan again."
         fi
         return 0
     fi
 
-    local online_json
-    online_json="$(_catalog_online_json)"
-
-    local n=0 line kind count size label state rel dot color
-    while IFS=$'\x1f' read -r kind count size label state rel; do
-        if [[ "$kind" == GROUP ]]; then
-            n=$(( n + 1 ))
-            if [[ "$(type -t ui_dup_group)" == "function" ]]; then
-                ui_dup_group "$n" "$count" "$(format_bytes "$size")"
-            else
-                echo "Group $n: $count copies, $(format_bytes "$size") each"
-            fi
-        else
-            if [[ "$state" == online ]]; then dot="${UI_DOT_ON:-*}"; color="${UI_OK:-$COLOR_GREEN}"
-            else dot="${UI_DOT_OFF:-o}"; color="${UI_DIM:-$COLOR_RED}"; fi
-            printf '    %s%s%s %s[%s]%s %s\n' "$color" "$dot" "$COLOR_RESET" "${UI_ACCENT:-$COLOR_CYAN}" "$label" "$COLOR_RESET" "$rel"
-        fi
-    done < <(jq -r --argjson online "$online_json" --slurpfile drives "$CATALOG_DRIVES_DB" '
-        ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $labels
-        | .[] | . as $g
-        | (["GROUP", ($g.count | tostring), (($g.total_size / $g.count) | floor | tostring), "", "", ""] | join("\u001f")),
-          ($g.files[] | ["FILE", "", "", ($labels[.drive_id] // "unknown"), (if $online[.drive_id] then "online" else "offline" end), .relative_path] | join("\u001f"))
-        ' <<< "$duplicates")
-
-    local wasted copies
-    wasted="$(jq '[.[] | (.total_size - (.total_size / .count))] | add | floor' <<< "$duplicates")"
-    copies="$(jq '[.[] | (.count - 1)] | add' <<< "$duplicates")"
+    if (( dup_count > n )); then
+        echo ""
+        log_info "Showing the first ${n} of ${dup_count} groups. Export Catalog Report lists them all; cleaning up duplicates covers every one."
+    fi
     echo ""
     log_info "${dup_count} duplicate group(s), ${copies} extra cop$([[ "$copies" == 1 ]] && echo y || echo ies), $(format_bytes "${wasted:-0}") wasted"
     STATS[duplicates_found]=$(( ${STATS[duplicates_found]:-0} + ${copies:-0} ))

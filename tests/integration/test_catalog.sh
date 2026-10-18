@@ -631,3 +631,20 @@ test_hashes_that_look_like_numbers_do_not_merge_groups() {
     assert_equals "0" "$(_catalog_duplicate_plan id-two | grep -c 'dup[AB].mp4')" "numeric-looking hashes: two copies on one drive are not offered"
     _teardown
 }
+
+test_the_duplicate_report_caps_the_groups_it_prints_but_counts_them_all() {
+    _setup
+    echo "one" > "$D1/Movies/a.mp4"; echo "one" > "$D2/Backup/a2.mp4"
+    echo "two" > "$D1/Movies/b.mp4"; echo "two" > "$D2/Backup/b2.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    catalog_drive "$D2" true >/dev/null 2>&1
+    DUPLICATE_REPORT_GROUPS=1
+    local out; out="$(show_duplicates_report 2>&1 | _strip)"
+    assert_equals "1" "$(grep -c 'Group [0-9]' <<< "$out")" "report cap: only one group is printed"
+    assert_contains "Showing the first 1 of 2 groups" "$out" "report cap: says it is a partial list"
+    assert_contains "2 duplicate group(s), 2 extra copies" "$out" "report cap: the summary still counts every group"
+    DUPLICATE_REPORT_GROUPS=200
+    out="$(show_duplicates_report 2>&1 | _strip)"
+    assert_equals "2" "$(grep -c 'Group [0-9]' <<< "$out")" "report: both groups printed under the default cap"
+    _teardown
+}

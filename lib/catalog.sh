@@ -819,7 +819,7 @@ search_catalog() {
     return 0
 }
 
-# Every hashed record as "hash US drive US video_id US relative_path US size US mtime",
+# Every hashed record as "hash US drive US video_id US relative_path US size US mtime US media_type",
 # sorted by hash (stable, so records of one hash keep their catalog order). Read from
 # the one-record-per-line catalog with awk; no JSON parsing.
 _catalog_hash_index() {
@@ -856,7 +856,8 @@ _catalog_hash_index() {
             rel   = unescape(strval("\"relative_path\":\""))
             size  = numval("\"file_size\":")
             mt    = numval("\"mtime\":")
-            printf "%s\037%s\037%s\037%s\037%s\037%s\n", h, drive, vid, rel, size, mt
+            media = strval("\"media_type\":\"")
+            printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\n", h, drive, vid, rel, size, mt, media
         }' | LC_ALL=C sort -s -t "$_CAT_SEP" -k1,1
 }
 
