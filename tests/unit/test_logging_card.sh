@@ -35,7 +35,7 @@ test_end_operation_shows_space_saved_in_mb() {
     reset_statistics 2>/dev/null
     STATS[duplicates_found]=2; STATS[space_saved]=$(( 5 * 1024 * 1024 ))
     CURRENT_OPERATION="Dupes"; START_TIME=$(date +%s)
-    assert_contains "5 MB" "$(end_operation 2>&1 | _strip)" "end_operation: space saved converted to MB"
+    assert_contains "MiB" "$(end_operation 2>&1 | _strip)" "end_operation: space saved shown with a unit"
 }
 
 test_start_operation_prints_name() {

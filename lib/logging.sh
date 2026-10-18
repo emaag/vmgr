@@ -167,7 +167,6 @@ end_operation() {
 # Args: $1 - duration text
 _print_summary_card() {
     local -a rows=()
-    local space_mb=$(( ${STATS[space_saved]:-0} / 1024 / 1024 ))
     [[ ${STATS[files_processed]:-0}       -gt 0 ]] && rows+=("Files processed" "${STATS[files_processed]}")
     [[ ${STATS[files_renamed]:-0}         -gt 0 ]] && rows+=("Files renamed" "${STATS[files_renamed]}")
     [[ ${STATS[files_previewed]:-0}       -gt 0 ]] && rows+=("Would rename" "${STATS[files_previewed]}")
@@ -178,7 +177,7 @@ _print_summary_card() {
     [[ ${STATS[low_confidence_count]:-0}  -gt 0 ]] && rows+=("Low confidence" "${STATS[low_confidence_count]}")
     [[ ${STATS[subtitles_failed]:-0}      -gt 0 ]] && rows+=("Subtitles failed" "${STATS[subtitles_failed]}")
     [[ ${STATS[duplicates_found]:-0}      -gt 0 ]] && rows+=("Duplicates found" "${STATS[duplicates_found]}")
-    [[ $space_mb -gt 0 ]]                           && rows+=("Space saved" "${space_mb} MB")
+    [[ ${STATS[space_saved]:-0}           -gt 0 ]] && rows+=("Space saved" "$(format_bytes "${STATS[space_saved]}")")
     [[ ${STATS[errors]:-0}                -gt 0 ]] && rows+=("Errors" "${STATS[errors]}")
     ui_summary_card "$CURRENT_OPERATION" "$1" "${STATS[errors]:-0}" "${rows[@]}"
 }

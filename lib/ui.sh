@@ -115,6 +115,7 @@ show_batch_menu() {
     ui_item 1 "Batch Rename" "Multiple Folders"
     ui_item 2 "Batch Flatten" "Multiple Folders"
     ui_item 3 "Batch Full Cleanup"
+    ui_item 4 "Batch Find Duplicates" "Report only, per folder"
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
@@ -583,6 +584,11 @@ _handle_batch_choice() {
             [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
+        4)
+            batch_duplicates_interactive
+            [[ $? -eq 2 ]] || ui_pause
+            return 0
+            ;;
         b|B) return 1 ;;
         *) return 2 ;;
     esac
@@ -639,6 +645,7 @@ _handle_duplicates_choice() {
                 start_operation "Find Duplicates (Report Only)"
                 find_duplicates "$TARGET_FOLDER" "report"
                 end_operation
+                ui_pause
             fi
             return 0
             ;;
@@ -665,6 +672,7 @@ _handle_duplicates_choice() {
                 start_operation "Find Duplicates (Dry Run)"
                 find_duplicates "$TARGET_FOLDER" "delete"
                 end_operation
+                ui_pause
             fi
             DRY_RUN="$old_dry_run"
             return 0
@@ -684,13 +692,14 @@ handle_duplicates() {
 _handle_subtitle_configure() {
     show_screen "Configure Subtitle Settings"
 
-    echo -e "${COLOR_WHITE}Select Whisper Model:${COLOR_RESET}"
-    echo "  [1] tiny   - Fastest, least accurate"
-    echo "  [2] base   - Balanced (default)"
-    echo "  [3] small  - Good accuracy"
-    echo "  [4] medium - Better accuracy"
-    echo "  [5] large  - Best accuracy, slowest"
-    ui_ask model_choice "Choice [1-5]"
+    ui_section "Whisper model (now: $WHISPER_MODEL)"
+    ui_item 1 "tiny"   "Fastest, least accurate"
+    ui_item 2 "base"   "Balanced (default)"
+    ui_item 3 "small"  "Good accuracy"
+    ui_item 4 "medium" "Better accuracy"
+    ui_item 5 "large"  "Best accuracy, slowest"
+    ui_prompt "Model"
+    ui_read_choice model_choice
     case "$model_choice" in
         1) WHISPER_MODEL="tiny" ;;
         2) WHISPER_MODEL="base" ;;
@@ -700,12 +709,13 @@ _handle_subtitle_configure() {
     esac
 
     echo ""
-    echo -e "${COLOR_WHITE}Select Output Format:${COLOR_RESET}"
-    echo "  [1] srt  - SubRip (default)"
-    echo "  [2] vtt  - WebVTT"
-    echo "  [3] txt  - Plain text"
-    echo "  [4] json - JSON format"
-    ui_ask format_choice "Choice [1-4]"
+    ui_section "Output format (now: $SUBTITLE_FORMAT)"
+    ui_item 1 "srt"  "SubRip (default)"
+    ui_item 2 "vtt"  "WebVTT"
+    ui_item 3 "txt"  "Plain text"
+    ui_item 4 "json" "JSON"
+    ui_prompt "Format"
+    ui_read_choice format_choice
     case "$format_choice" in
         1) SUBTITLE_FORMAT="srt" ;;
         2) SUBTITLE_FORMAT="vtt" ;;
@@ -714,8 +724,8 @@ _handle_subtitle_configure() {
     esac
 
     echo ""
-    echo -e "${COLOR_WHITE}Language (enter code or 'auto'):${COLOR_RESET}"
-    echo "  Examples: en (English), es (Spanish), fr (French), auto (detect)"
+    ui_section "Language (now: $SUBTITLE_LANGUAGE)"
+    printf '  %sA code such as en, es, fr, or auto to detect. Enter keeps the current one.%s\n' "$UI_DIM" "$COLOR_RESET"
     ui_ask lang_choice "Language"
     [[ -n "$lang_choice" ]] && SUBTITLE_LANGUAGE="$lang_choice"
 
@@ -981,14 +991,16 @@ _handle_subtitles_choice() {
 
             if check_whisper_installation; then
                 local whisper_cmd=$(get_whisper_command)
-                log_success "Whisper is installed: $whisper_cmd"
-
-                echo ""
-                echo -e "${COLOR_WHITE}Testing whisper command...${COLOR_RESET}"
-                if [[ "$whisper_cmd" == "whisper" ]]; then
-                    run_with_timeout 30 whisper --help 2>&1 | head -n 10
-                elif [[ "$whisper_cmd" == "whisper.cpp" ]]; then
-                    run_with_timeout 30 whisper.cpp --help 2>&1 | head -n 10
+                local whisper_out whisper_rc=0
+                echo -e "${COLOR_WHITE}Testing ${whisper_cmd}...${COLOR_RESET}"
+                whisper_out="$(run_with_timeout 30 "$whisper_cmd" --help 2>&1)" || whisper_rc=$?
+                if [[ $whisper_rc -eq 0 ]]; then
+                    log_success "Whisper is installed and working: $whisper_cmd"
+                else
+                    log_error "Found '$whisper_cmd', but it fails to run"
+                    printf '  %s%s%s\n' "$UI_DIM" "$(printf '%s\n' "$whisper_out" | sed '/^[[:space:]]*$/d' | tail -n 1)" "$COLOR_RESET"
+                    echo ""
+                    echo "  Reinstall it with:  pip install -U openai-whisper"
                 fi
             else
                 log_error "Whisper is not installed!"
@@ -1034,6 +1046,7 @@ _handle_catalog_choice() {
 
             if [[ -z "$mount_point" ]]; then
                 log_error "No mount point specified"
+                ui_pause
                 return 0
             fi
 
@@ -1053,6 +1066,7 @@ _handle_catalog_choice() {
             start_operation "List Cataloged Drives"
             list_cataloged_drives
             end_operation
+            ui_pause
             return 0
             ;;
         3)
@@ -1091,6 +1105,7 @@ _handle_catalog_choice() {
             start_operation "Find Duplicate Files"
             show_duplicates_report
             end_operation
+            ui_pause
             return 0
             ;;
         5)
@@ -1108,6 +1123,7 @@ _handle_catalog_choice() {
 
             if [[ ${#mount_points[@]} -eq 0 ]]; then
                 log_warning "No mount points specified"
+                ui_pause
                 return 0
             fi
 
@@ -1222,6 +1238,7 @@ handle_catalog() {
     if ! command -v jq >/dev/null 2>&1; then
         log_error "jq is not installed. Please install it first:"
         echo "  sudo apt-get install jq"
+        ui_pause
         return 1
     fi
 
@@ -1256,6 +1273,7 @@ _handle_utilities_choice() {
         2)
             clear
             list_undo_operations
+            ui_pause
             return 0
             ;;
         3)
@@ -1427,21 +1445,23 @@ _handle_settings_choice() {
             return 0
             ;;
         8)
-            clear
+            show_screen "Configuration Profiles"
             list_config_profiles
+            ui_pause
             return 0
             ;;
         9)
-            clear
+            show_screen "Delete Profile"
             list_config_profiles
             echo ""
             ui_ask profile_name "Enter profile name to delete"
             if [[ -n "$profile_name" ]]; then
-                ui_confirm "Are you sure?" || true
+                ui_confirm "Delete profile '$profile_name'?" || true
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     delete_config_profile "$profile_name"
                 fi
             fi
+            ui_pause
             return 0
             ;;
         b|B) return 1 ;;

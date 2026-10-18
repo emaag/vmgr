@@ -46,7 +46,8 @@ find_duplicates() {
         total_videos=$(( total_videos ))
     fi
 
-    # Find all video files and calculate hashes
+    # Find all video files and calculate hashes. The scan is sorted so the copy
+    # that is kept (the first one seen) is always the first alphabetically.
     local file_count=0
     while IFS= read -r -d '' file; do
         is_video_file "$file" || continue
@@ -84,7 +85,7 @@ find_duplicates() {
         else
             hash_map[$hash]="$file"
         fi
-    done < <(find "$directory" -type f -print0)
+    done < <(find "$directory" -type f -print0 | sort -z)
 
     echo -ne "\r\033[K" # Clear line
 
@@ -118,10 +119,16 @@ find_duplicates() {
         local size=$(get_file_size "$original")
         local size_mb=$((size / 1024 / 1024))
 
-        echo -e "${COLOR_MAGENTA}Duplicate Group #$group_num${COLOR_RESET}"
-        echo "  Hash: $hash"
-        echo -e "  ${COLOR_GREEN}Original:${COLOR_RESET} $original"
-        echo -e "  ${COLOR_RED}Duplicates:${COLOR_RESET}"
+        if [[ "$(type -t ui_dup_group)" == "function" ]]; then
+            local copies=$(( $(grep -c . <<< "$dupes") + 1 ))
+            ui_dup_group "$group_num" "$copies" "$(format_bytes "$size")"
+            ui_dup_line keep "${original#"$directory"/}"
+        else
+            echo -e "${COLOR_MAGENTA}Duplicate Group #$group_num${COLOR_RESET}"
+            echo "  Hash: $hash"
+            echo -e "  ${COLOR_GREEN}Original:${COLOR_RESET} $original"
+            echo -e "  ${COLOR_RED}Duplicates:${COLOR_RESET}"
+        fi
 
         {
             echo "=== Duplicate Group #$group_num ==="
@@ -133,7 +140,11 @@ find_duplicates() {
 
         while IFS= read -r dupe; do
             [[ -z "$dupe" ]] && continue
-            echo "    - $dupe"
+            if [[ "$(type -t ui_dup_line)" == "function" ]]; then
+                ui_dup_line extra "${dupe#"$directory"/}"
+            else
+                echo "    - $dupe"
+            fi
             echo "    - $dupe" >> "$report_file"
             echo "\"$hash\",\"$original\",\"$dupe\",$size" >> "$csv_file"
 
@@ -160,8 +171,7 @@ find_duplicates() {
     log_success "Report generated: $report_file"
     log_success "CSV export: $csv_file"
 
-    local space_mb=$((space_wasted / 1024 / 1024))
-    log_info "Total space wasted by duplicates: ${space_mb} MB"
+    log_info "Total space wasted by duplicates: $(format_bytes "$space_wasted")"
 }
 
 ################################################################################

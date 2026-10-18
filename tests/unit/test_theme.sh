@@ -217,3 +217,12 @@ test_progress_break_plain_fallback_prints_newline() {
     out="$(bash -c 'source "'"$LIB_DIR"'/core.sh"; progress_break' | wc -c)"
     assert_equals "1" "$(( out ))" "progress_break: a newline without the theme"
 }
+
+test_dup_group_and_lines() {
+    local out
+    out="$( { ui_dup_group 2 3 "1.0MiB"; ui_dup_line keep "a/one.mp4"; ui_dup_line extra "b/two.mp4"; } | _strip)"
+    assert_contains "Group 2" "$out" "dup: group number"
+    assert_contains "3 copies" "$out" "dup: copy count"
+    assert_contains "keep  a/one.mp4" "$out" "dup: the kept file"
+    assert_contains "extra b/two.mp4" "$out" "dup: the extra copy"
+}

@@ -337,6 +337,7 @@ _batch_interactive() {
 batch_rename_interactive()  { _batch_interactive "rename"  "Batch Rename Multiple Folders"; }
 batch_flatten_interactive() { _batch_interactive "flatten" "Batch Flatten Multiple Folders"; }
 batch_cleanup_interactive() { _batch_interactive "cleanup" "Batch Full Cleanup (Multiple Folders)"; }
+batch_duplicates_interactive() { _batch_interactive "duplicates" "Batch Find Duplicates (Multiple Folders)"; }
 
 ################################################################################
 # WORKFLOWS

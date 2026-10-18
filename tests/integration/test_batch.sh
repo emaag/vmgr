@@ -7,6 +7,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/helpers.sh"
 load_vmgr_core
 load_module_under_test "utils.sh"
 load_module_under_test "file-ops.sh"
+load_module_under_test "duplicates.sh"
 load_module_under_test "browser.sh"
 load_module_under_test "theme.sh"
 load_module_under_test "batch.sh"
@@ -88,5 +89,25 @@ test_non_interactive_batch_ignores_bad_paths() {
     _setup
     batch_rename_interactive < <(printf '%s\n%s\n\n' "$TEST_TMPDIR/missing" "$TEST_TMPDIR/b") >/dev/null 2>&1
     assert_equals "1" "${#BATCH_FOLDERS[@]}" "batch (piped): invalid directories are skipped"
+    _teardown
+}
+
+test_batch_duplicates_reports_per_folder() {
+    _setup
+    echo same > "$TEST_TMPDIR/a/one.mp4"; echo same > "$TEST_TMPDIR/a/two.mp4"
+    echo other > "$TEST_TMPDIR/b/solo.mp4"
+    batch_process_folders duplicates "$TEST_TMPDIR/a" "$TEST_TMPDIR/b" >/dev/null 2>&1
+    assert_contains "duplicate" "${BATCH_RESULT_NOTE[0]}" "batch duplicates: the folder with a copy reports it"
+    [[ "${BATCH_RESULT_NOTE[1]}" != *duplicate* ]]; assert_equals "0" "$?" "batch duplicates: the clean folder reports none"
+    assert_file_exists "$TEST_TMPDIR/a/one.mp4" "batch duplicates: report only, nothing deleted"
+    _teardown
+}
+
+test_duplicate_scan_keeps_the_first_alphabetically() {
+    _setup
+    echo same > "$TEST_TMPDIR/a/zzz.mp4"; echo same > "$TEST_TMPDIR/a/aaa.mp4"
+    DRY_RUN=false find_duplicates "$TEST_TMPDIR/a" delete >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/a/aaa.mp4" "duplicates: the alphabetically first copy is kept"
+    assert_file_not_exists "$TEST_TMPDIR/a/zzz.mp4" "duplicates: the later copy is the one removed"
     _teardown
 }

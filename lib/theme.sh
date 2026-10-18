@@ -246,6 +246,21 @@ ui_file_header() {
     fi
 }
 
+# ui_dup_group NUMBER COPIES SIZE: heading for one group of identical files.
+ui_dup_group() {
+    printf '\n  %sGroup %s%s  %s%s %s copies %s %s each%s\n' "$UI_TITLE" "$1" "$COLOR_RESET" \
+        "$UI_DIM" "$UI_SEP" "$2" "$UI_SEP" "$3" "$COLOR_RESET"
+}
+
+# ui_dup_line KIND PATH: one file in a group. KIND is keep or extra.
+ui_dup_line() {
+    if [[ "$1" == keep ]]; then
+        printf '    %s%s keep %s %s\n' "$UI_OK" "$SYMBOL_CHECK" "$COLOR_RESET" "$2"
+    else
+        printf '    %s%s extra%s %s%s%s\n' "$UI_ERR" "$SYMBOL_CROSS" "$COLOR_RESET" "$UI_DIM" "$2" "$COLOR_RESET"
+    fi
+}
+
 # ui_change OLD NEW [DRY]: a before/after pair on two lines. DRY is "true" to
 # mark it as a preview rather than something that happened.
 ui_change() {

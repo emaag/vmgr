@@ -307,8 +307,13 @@ run_menu_loop() {
             0) ;; # Continue loop
             1) break ;; # Exit loop
             2) # Invalid choice
-                [[ "$(type -t log_error)" == "function" ]] && log_error "Invalid option" || echo "Invalid option"
-                pause_for_key
+                if [[ "$(type -t log_error)" == "function" ]]; then
+                    log_error "Invalid option"
+                else
+                    echo "Invalid option"
+                fi
+                # On a terminal the message flashes and the menu redraws; elsewhere wait
+                if [[ -t 0 && -t 1 ]]; then sleep 1; else pause_for_key; fi
                 ;;
         esac
 

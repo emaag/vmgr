@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- More screens that flashed past and vanished now wait for a key: Duplicates report and dry run, catalog list/duplicates,
+  list undo operations, List/Delete Profiles, and error exits such as an empty mount point or a missing `jq`.
+- A mistyped menu key flashes "Invalid option" once and redraws; it was printed twice and needed an extra keypress.
+- The Whisper check runs the command and reports a broken install in one line instead of printing a Python traceback.
+- Duplicate scans are sorted, so the copy that is kept is always the first alphabetically; reports and the summary card show
+  sizes with units instead of whole megabytes.
 - Each operation now reports its own statistics: `start_operation` resets the counters, so an Apply step no longer
   inherits the dry run's numbers. The Apply step also runs with dry run off, so its banner and card no longer say dry run.
 - Log messages wipe a live progress bar first, so a stale `Processing ███ 66%` row no longer stays on screen.
@@ -38,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- Batch Processing gains **Batch Find Duplicates** (report only, per folder). Duplicate groups print as
+  `Group 1 · 3 copies · 2.9MiB each` with keep/extra lines and paths relative to the scanned folder (the full hash stays in the report file).
+- Subtitle settings choose the model and format with a single keypress, in the same style as the menus.
 - **Batch processing reworked**: it is now reachable from File Operations (7) as are Automated Workflows (8); both were
   previously unreachable from the menu. Batch builds a folder queue with live video counts (add with the browser, add every
   subfolder that has videos, or type a path), previews when dry run is on, asks for confirmation before changing files, shows a
