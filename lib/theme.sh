@@ -192,13 +192,13 @@ ui_prompt() {
 
 # ── Progress and results ─────────────────────────────────────────────────────
 
-# ui_progress CURRENT TOTAL [LABEL]: redraw one progress line in place
-#   Processing  ████████░░░░░░░░  50%  (25/50)
+# ui_progress CURRENT TOTAL [LABEL] [DETAIL]: redraw one progress line in place
+#   Processing  ████████░░░░░░░░  50%  (25/50)  current-file.mp4
 # Does nothing when stdout is not a terminal, so logs and pipes stay clean.
 # Call ui_progress_clear to wipe the line when you are done with it.
 ui_progress() {
     [[ -t 1 ]] || return 0
-    local current="$1" total="$2" label="${3:-Processing}" pct width filled bar_on bar_off
+    local current="$1" total="$2" label="${3:-Processing}" detail="${4:-}" pct width filled bar_on bar_off
     (( total > 0 )) || return 0
     (( current > total )) && current=$total
     _ui_measure
@@ -209,13 +209,36 @@ ui_progress() {
     filled=$(( pct * width / 100 ))
     _ui_repeat "$UI_BAR_FULL" "$filled" bar_on
     _ui_repeat "$UI_BAR_EMPTY" $(( width - filled )) bar_off
-    printf '\r  %s%s%s  %s%s%s%s%s%s %3d%%  %s(%d/%d)%s\033[K' \
+    [[ -n "$detail" ]] && detail="  ${detail:0:30}"
+    printf '\r  %s%s%s  %s%s%s%s%s%s %3d%%  %s(%d/%d)%s%s\033[K' \
         "$UI_DIM" "$label" "$COLOR_RESET" \
         "$UI_ACCENT" "$bar_on" "$COLOR_RESET" "$UI_DIM" "$bar_off" "$COLOR_RESET" \
-        "$pct" "$UI_DIM" "$current" "$total" "$COLOR_RESET"
+        "$pct" "$UI_DIM" "$current" "$total" "$detail" "$COLOR_RESET"
 }
 
 ui_progress_clear() { [[ -t 1 ]] && printf '\r\033[K'; return 0; }
+
+# ui_file_header NAME INDEX TOTAL ETA INFO: header for one item in a long batch.
+#   ▶ name.mp4  [3/10]  ETA 2m5s
+#     ████████░░░░░░░░░░░░  20%   model base · cpu · srt
+# INDEX is the item being started, so the bar shows the items finished before it.
+ui_file_header() {
+    local name="$1" idx="${2:-0}" total="${3:-0}" eta="${4:-}" info="${5:-}"
+    local counter="" etatxt="" width=20 filled pct bar_on bar_off
+    (( total > 0 )) && counter="  ${UI_TITLE}[${idx}/${total}]${COLOR_RESET}"
+    [[ -n "$eta" ]] && etatxt="  ${UI_DIM}ETA ${COLOR_RESET}${UI_ACCENT}${eta}${COLOR_RESET}"
+    printf '\n  %s%s%s %s%s%s%s%s\n' "$UI_ACCENT" "$UI_PLAY" "$COLOR_RESET" "$COLOR_BOLD" "$name" "$COLOR_RESET" "$counter" "$etatxt"
+    if (( total > 0 )); then
+        pct=$(( (idx - 1) * 100 / total ))
+        (( pct < 0 )) && pct=0
+        filled=$(( pct * width / 100 ))
+        _ui_repeat "$UI_BAR_FULL" "$filled" bar_on
+        _ui_repeat "$UI_BAR_EMPTY" $(( width - filled )) bar_off
+        printf '    %s%s%s%s%s%s %3d%%   %s%s%s\n' "$UI_ACCENT" "$bar_on" "$COLOR_RESET" "$UI_DIM" "$bar_off" "$COLOR_RESET" "$pct" "$UI_DIM" "$info" "$COLOR_RESET"
+    elif [[ -n "$info" ]]; then
+        printf '    %s%s%s\n' "$UI_DIM" "$info" "$COLOR_RESET"
+    fi
+}
 
 # ui_change OLD NEW [DRY]: a before/after pair on two lines. DRY is "true" to
 # mark it as a preview rather than something that happened.

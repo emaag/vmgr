@@ -190,3 +190,30 @@ test_operation_start_shows_dry_run() {
     out="$(DRY_RUN=false ui_operation_start "Rename" | _strip)"
     [[ "$out" != *"DRY RUN"* ]]; assert_equals "0" "$?" "start: no dry-run flag when off"
 }
+
+test_file_header_shows_counter_eta_and_bar() {
+    COLUMNS=100
+    local out; out="$(ui_file_header "Show S01E02.mkv" 3 10 "2m5s" "base - cpu" | _strip)"
+    assert_contains "Show S01E02.mkv" "$out" "file_header: item name"
+    assert_contains "[3/10]" "$out" "file_header: counter"
+    assert_contains "ETA 2m5s" "$out" "file_header: ETA"
+    assert_contains " 20%" "$out" "file_header: bar shows the items finished before this one"
+    assert_contains "base - cpu" "$out" "file_header: info line"
+}
+
+test_file_header_without_total_has_no_bar() {
+    local out; out="$(ui_file_header "a.mkv" 0 0 "" "info" | _strip)"
+    assert_contains "a.mkv" "$out" "file_header: name without a total"
+    [[ "$out" != *"%"* ]]; assert_equals "0" "$?" "file_header: no percentage without a total"
+}
+
+test_progress_break_is_silent_off_a_terminal_with_theme() {
+    local out; out="$(progress_break)"
+    assert_equals "" "$out" "progress_break: nothing printed off a tty when themed"
+}
+
+test_progress_break_plain_fallback_prints_newline() {
+    local out
+    out="$(bash -c 'source "'"$LIB_DIR"'/core.sh"; progress_break' | wc -c)"
+    assert_equals "1" "$(( out ))" "progress_break: a newline without the theme"
+}

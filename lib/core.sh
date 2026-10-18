@@ -264,6 +264,16 @@ pause_for_key() {
     fi
 }
 
+# Move off an in-place progress line before printing a message: wipes the bar
+# when the theme is loaded, a plain newline otherwise.
+progress_break() {
+    if [[ "$(type -t ui_progress_clear)" == "function" ]]; then
+        ui_progress_clear
+    else
+        echo ""
+    fi
+}
+
 # Generic menu loop handler
 # Reduces boilerplate for menu-based UI patterns
 # Args: $1 - menu display function, $2 - choice handler function

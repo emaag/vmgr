@@ -36,6 +36,16 @@ find_duplicates() {
 
     echo ""
 
+    # Count the videos first so the progress bar has a total (terminal only)
+    local total_videos=0
+    if [[ -t 1 ]]; then
+        total_videos=$(find "$directory" -type f \( \
+            -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
+            -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
+            -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \) 2>/dev/null | wc -l)
+        total_videos=$(( total_videos ))
+    fi
+
     # Find all video files and calculate hashes
     local file_count=0
     while IFS= read -r -d '' file; do
@@ -44,18 +54,23 @@ find_duplicates() {
         ((STATS[files_processed]++))
 
         local filename=$(basename "$file")
-        echo -ne "\r${COLOR_CYAN}Hashing: [$file_count files] Current: ${filename:0:50}...${COLOR_RESET}"
+        if [[ "$(type -t ui_progress)" == "function" && $total_videos -gt 0 ]]; then
+            ui_progress "$file_count" "$total_videos" "Hashing" "$filename"
+        else
+            echo -ne "\r${COLOR_CYAN}Hashing: [$file_count files] Current: ${filename:0:50}...${COLOR_RESET}"
+        fi
 
         local hash=$(calculate_file_hash "$file")
         if [[ -z "$hash" ]]; then
+            progress_break
             log_error "Failed to hash: $filename"
             continue
         fi
 
         if [[ -n "${hash_map[$hash]}" ]]; then
             # Duplicate found!
-            log_verbose ""
-            log_warning "Duplicate found!"
+            progress_break
+            log_warning "Duplicate found: $filename"
             log_verbose "  Hash: $hash"
             log_verbose "  Original: ${hash_map[$hash]}"
             log_verbose "  Duplicate: $file"

@@ -162,17 +162,23 @@ _generate_single_subtitle() {
     local file_start_time
     file_start_time=$(date +%s)
 
-    local eta_str=""
+    local eta_str="" eta_plain=""
     if [[ $files_done -gt 0 && $file_total -gt 0 ]]; then
         local avg=$(( elapsed_sum / files_done ))
         local remaining=$(( (file_total - file_idx) * avg ))
         if [[ $remaining -ge 60 ]]; then
-            eta_str="  ETA ${COLOR_CYAN}$(( remaining / 60 ))m$(( remaining % 60 ))s${COLOR_RESET}"
+            eta_plain="$(( remaining / 60 ))m$(( remaining % 60 ))s"
+            eta_str="  ETA ${COLOR_CYAN}${eta_plain}${COLOR_RESET}"
         elif [[ $remaining -gt 0 ]]; then
-            eta_str="  ETA ${COLOR_CYAN}${remaining}s${COLOR_RESET}"
+            eta_plain="${remaining}s"
+            eta_str="  ETA ${COLOR_CYAN}${eta_plain}${COLOR_RESET}"
         fi
     fi
 
+    if [[ "$(type -t ui_file_header)" == "function" ]]; then
+        ui_file_header "$filename" "$file_idx" "$file_total" "$eta_plain" \
+            "${model} ${UI_SEP:-·} ${device} ${UI_SEP:-·} ${format} ${UI_SEP:-·} ${file_size}" >&2
+    else
     {
         echo ""
         echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
@@ -185,6 +191,7 @@ _generate_single_subtitle() {
             "$model" "$device" "$format" "$file_size"
         echo -e "${COLOR_BRIGHT_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
     } >&2
+    fi
 
     log_message "INFO" "Processing: $filename [${counter_str:-?}] model=$model device=$device"
 

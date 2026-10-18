@@ -123,7 +123,11 @@ undo_organize_operation() {
         ((current++))
 
         if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-            printf "\r${COLOR_CYAN}[%d/%d]${COLOR_RESET} Undoing..." "$current" "$total_ops"
+            if [[ "$(type -t ui_progress)" == "function" ]]; then
+                ui_progress "$current" "$total_ops" "Undoing"
+            else
+                printf "\r${COLOR_CYAN}[%d/%d]${COLOR_RESET} Undoing..." "$current" "$total_ops"
+            fi
         fi
 
         # Check if destination still exists
@@ -369,8 +373,12 @@ organize_by_subfolder_names() {
 
                 # Show progress
                 if [[ "$ORGANIZE_SHOW_PROGRESS" == true && $total_files -gt 0 ]]; then
-                    local percent=$((processed * 100 / total_files))
-                    printf "\r${COLOR_CYAN}Progress: [%d/%d] %d%%${COLOR_RESET} " "$processed" "$total_files" "$percent"
+                    if [[ "$(type -t ui_progress)" == "function" ]]; then
+                        ui_progress "$processed" "$total_files" "Organizing"
+                    else
+                        local percent=$((processed * 100 / total_files))
+                        printf "\r${COLOR_CYAN}Progress: [%d/%d] %d%%${COLOR_RESET} " "$processed" "$total_files" "$percent"
+                    fi
                 fi
 
                 local filename=$(basename "$file")
@@ -379,7 +387,7 @@ organize_by_subfolder_names() {
                 # Check if destination already exists
                 if [[ -f "$dest" ]]; then
                     if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-                        echo "" # New line before warning
+                        progress_break
                     fi
                     log_warning "Destination already exists: $filename"
                     ((skipped_count++))
@@ -389,7 +397,7 @@ organize_by_subfolder_names() {
                 # Move file
                 if [[ "$DRY_RUN" == true ]]; then
                     if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-                        echo "" # New line before message
+                        progress_break
                     fi
                     echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would move: $filename → $subfolder_name/"
                     ((moved_count++))
@@ -401,13 +409,13 @@ organize_by_subfolder_names() {
                         fi
 
                         if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-                            echo "" # New line before success message
+                            progress_break
                         fi
                         log_success "Moved: $filename → $subfolder_name/"
                         ((moved_count++))
                     else
                         if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-                            echo "" # New line before error
+                            progress_break
                         fi
                         log_error "Failed to move: $filename"
                         ((skipped_count++))

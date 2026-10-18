@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose title reflects success or the error count, listing only the non-zero statistics and the duration. Rename-style
   loops show an in-place progress bar (terminal only) and compact `old → new` pairs instead of From/To blocks.
   `show_progress` uses the same bar. All of it falls back to the previous output when `theme.sh` is not loaded.
+- Duplicate hashing, organize and undo show the in-place progress bar (with the current file for hashing); the subtitle
+  run's per-file header is a compact `▶ name [3/10] ETA 2m5s` with a bar of the files finished so far.
 - The directory browser now matches: a framed header (location, folder and video counts, hidden-folder
   state), accent-colored highlight and preview, and dimmed key hints.
 - Menus take a single keypress (no Enter); `Esc` goes back, and arrow keys are ignored. End of input now
