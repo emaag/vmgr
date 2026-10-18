@@ -8,6 +8,7 @@ load_module_under_test "utils.sh"
 load_module_under_test "file-ops.sh"
 load_module_under_test "duplicates.sh"
 load_module_under_test "theme.sh"
+load_module_under_test "organize.sh"
 load_module_under_test "catalog.sh"
 load_module_under_test "batch.sh"
 load_module_under_test "browser.sh"
@@ -399,5 +400,128 @@ test_drive_identification_is_cached_per_mount_point() {
     catalog_drive "$D1" true >/dev/null 2>&1
     catalog_drive "$D1/Movies" true >/dev/null 2>&1
     assert_equals "1" "$(wc -l < "$calls" | tr -d ' ')" "cache: the drive is identified once, not once per scan"
+    _teardown
+}
+
+# ── Cleaning up duplicates across drives ──────────────────────────────────────
+
+# Same movie on both drives, plus one file only on drive two
+_dup_drives() {
+    echo "the same movie" > "$D1/Movies/Same.mp4"
+    echo "the same movie" > "$D2/Backup/Same copy.mp4"
+    echo "only on two"    > "$D2/Backup/unique.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    catalog_drive "$D2" true >/dev/null 2>&1
+    UNDO_LOG_DIR="$TEST_TMPDIR/undo"; ENABLE_UNDO=true; UNDO_CURRENT_LOG=""
+}
+_trash_files() { find "$1" -path '*/.vmgr-trash/*' -type f 2>/dev/null; }
+
+test_candidates_are_drives_with_copies_that_exist_elsewhere() {
+    _setup; _dup_drives
+    local out; out="$(catalog_duplicate_candidates)"
+    assert_equals "2" "$(echo "$out" | wc -l | tr -d ' ')" "candidates: both drives hold a copy that exists on the other"
+    assert_contains "Drive Two" "$out" "candidates: names the drive"
+    _teardown
+}
+
+test_trashing_duplicates_on_one_drive_keeps_the_other_copy() {
+    _setup; _dup_drives
+    start_operation "Duplicates to Trash" >/dev/null 2>&1
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_file_exists "$D1/Movies/Same.mp4" "trash dups: the copy on the other drive stays"
+    assert_file_not_exists "$D2/Backup/Same copy.mp4" "trash dups: the copy on this drive is gone from its folder"
+    assert_file_exists "$D2/Backup/unique.mp4" "trash dups: a file with no copy elsewhere is untouched"
+    assert_equals "1" "$(_trash_files "$D2" | wc -l | tr -d ' ')" "trash dups: it is in that drive's trash"
+    assert_equals "0" "$(_trash_files "$D1" | wc -l | tr -d ' ')" "trash dups: nothing is trashed on the other drive"
+    assert_equals "1" "${STATS[files_trashed]}" "trash dups: counted"
+    _teardown
+}
+
+test_trashing_duplicates_updates_the_catalog() {
+    _setup; _dup_drives
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_equals "0" "$(_count '[.videos[] | select(.filename == "Same copy.mp4")] | length')" "trash dups: the moved file leaves the catalog"
+    assert_equals "1" "$(jq '.drives[] | select(.drive_id == "id-two") | .file_count' "$CATALOG_DRIVES_DB")" "trash dups: the drive's file count is updated"
+    # and the duplicate is no longer reported
+    assert_equals "0" "$(jq 'length' <<< "$(find_duplicates_in_catalog)")" "trash dups: no duplicate group remains"
+    _teardown
+}
+
+test_trashed_duplicates_can_be_undone() {
+    _setup; _dup_drives
+    start_operation "Duplicates to Trash" >/dev/null 2>&1
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    undo_last_operation >/dev/null 2>&1
+    assert_file_exists "$D2/Backup/Same copy.mp4" "undo: the copy is back where it was"
+    assert_equals "0" "$(_trash_files "$D2" | wc -l | tr -d ' ')" "undo: the trash is empty again"
+    _teardown
+}
+
+test_a_file_changed_since_the_scan_is_left_alone() {
+    _setup; _dup_drives
+    echo "edited after the scan, so the hash is stale" > "$D2/Backup/Same copy.mp4"
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_file_exists "$D2/Backup/Same copy.mp4" "safety: a file that changed since the scan is not moved"
+    assert_equals "0" "${STATS[files_trashed]}" "safety: nothing counted as trashed"
+    assert_equals "1" "${STATS[files_skipped]}" "safety: counted as skipped"
+    _teardown
+}
+
+test_a_missing_or_changed_other_copy_stops_the_move() {
+    _setup; _dup_drives
+    echo "the other copy was replaced" > "$D1/Movies/Same.mp4"
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_file_exists "$D2/Backup/Same copy.mp4" "safety: not moved when the other copy changed"
+    rm -f "$D1/Movies/Same.mp4"
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_file_exists "$D2/Backup/Same copy.mp4" "safety: not moved when the other copy is gone"
+    _teardown
+}
+
+test_a_copy_only_on_an_offline_drive_does_not_count() {
+    _setup; _dup_drives
+    # Drive one is unplugged: its copy cannot be checked, so drive two's copy must stay
+    jq --arg m "$TEST_TMPDIR/unplugged" '(.drives[] | select(.drive_id == "id-one")).mount_point = $m' "$CATALOG_DRIVES_DB" > "$TEST_TMPDIR/x" && mv "$TEST_TMPDIR/x" "$CATALOG_DRIVES_DB"
+    assert_equals "" "$(catalog_duplicate_candidates)" "offline: no candidates when the other copy is on an offline drive"
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_file_exists "$D2/Backup/Same copy.mp4" "offline: nothing is moved"
+    _teardown
+}
+
+test_copies_all_on_one_drive_are_not_a_cross_drive_cleanup() {
+    _setup
+    echo "dup" > "$D2/Backup/a.mp4"; echo "dup" > "$D2/Backup/b.mp4"
+    catalog_drive "$D2" true >/dev/null 2>&1
+    assert_equals "" "$(catalog_duplicate_candidates)" "same drive: duplicates within one drive are not offered"
+    _teardown
+}
+
+test_trash_dry_run_moves_nothing() {
+    _setup; _dup_drives
+    DRY_RUN=true catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_file_exists "$D2/Backup/Same copy.mp4" "dry run: the copy stays"
+    assert_equals "1" "${STATS[files_previewed]}" "dry run: says how many would move"
+    assert_equals "1" "$(_count '[.videos[] | select(.filename == "Same copy.mp4")] | length')" "dry run: the catalog is unchanged"
+    _teardown
+}
+
+test_an_unwritable_drive_root_is_reported_and_nothing_moves() {
+    _setup; _dup_drives
+    if [[ "$(id -u)" == 0 ]]; then _teardown; return; fi
+    chmod a-w "$D2"
+    local rc=0
+    catalog_trash_duplicates id-two >/dev/null 2>&1 || rc=$?
+    chmod u+w "$D2"
+    assert_equals "1" "$rc" "unwritable: reported as a failure"
+    assert_file_exists "$D2/Backup/Same copy.mp4" "unwritable: the file is untouched"
+    _teardown
+}
+
+test_a_later_scan_ignores_the_drive_trash() {
+    _setup; _dup_drives
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    reset_statistics
+    catalog_drive "$D2" true >/dev/null 2>&1
+    assert_equals "0" "${STATS[catalog_added]}" "rescan: trashed files are not cataloged again"
     _teardown
 }

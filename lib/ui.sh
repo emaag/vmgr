@@ -1121,6 +1121,31 @@ _handle_catalog_choice() {
             # Find duplicate files across drives
             show_screen "Duplicates Across Drives"
             show_duplicates_report
+
+            # Offer to clean up: drives that hold copies of files that also exist on another online drive
+            local -a dup_drives=()
+            mapfile -t dup_drives < <(catalog_duplicate_candidates)
+            if (( ${#dup_drives[@]} > 0 )); then
+                echo ""
+                ui_section "Clean up"
+                printf '  %sMove the extra copies on one drive to its trash. Only copies that also exist on another online drive are touched.%s\n' "$UI_DIM" "$COLOR_RESET"
+                local d_id d_label d_mp d_copies d_bytes i=0
+                for (( i = 0; i < ${#dup_drives[@]} && i < 9; i++ )); do
+                    IFS=$'\x1f' read -r d_id d_label d_mp d_copies d_bytes <<< "${dup_drives[$i]}"
+                    ui_item $(( i + 1 )) "$d_label" "$d_copies cop$([[ $d_copies == 1 ]] && echo y || echo ies), $(format_bytes "$d_bytes") to reclaim"
+                done
+                ui_prompt "Pick a drive, or any other key to leave"
+                local dup_pick
+                ui_read_choice dup_pick
+                if [[ "$dup_pick" =~ ^[1-9]$ ]] && (( dup_pick <= ${#dup_drives[@]} )); then
+                    IFS=$'\x1f' read -r d_id d_label d_mp d_copies d_bytes <<< "${dup_drives[$(( dup_pick - 1 ))]}"
+                    if [[ "$DRY_RUN" == true ]] || ui_confirm "Move $d_copies cop$([[ $d_copies == 1 ]] && echo y || echo ies) ($(format_bytes "$d_bytes")) on $d_label to its trash? The copies on other drives stay."; then
+                        start_operation "Catalog: Duplicates to Trash ($d_label)"
+                        catalog_trash_duplicates "$d_id"
+                        end_operation
+                    fi
+                fi
+            fi
             ui_pause
             return 0
             ;;

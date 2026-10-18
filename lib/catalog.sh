@@ -215,6 +215,20 @@ _catalog_mount_online() {
     [[ -d "$1" ]] && [[ -n "$(ls -A "$1" 2>/dev/null | head -n 1)" ]]
 }
 
+# JSON object of the drives that are online right now: {"<drive_id>": true, ...}
+_catalog_online_json() {
+    local id mp
+    local -a on=()
+    while IFS="$_CAT_SEP" read -r id mp; do
+        _catalog_mount_online "$mp" && on+=("$id")
+    done < <(jq -r '.drives[] | [.drive_id, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB" 2>/dev/null)
+    if (( ${#on[@]} > 0 )); then
+        printf '%s\n' "${on[@]}" | jq -R '{(.): true}' | jq -s 'add'
+    else
+        echo '{}'
+    fi
+}
+
 # Candidate drives to offer in the menu: external and Windows drives.
 catalog_detect_mounts() {
     local m
@@ -593,13 +607,8 @@ search_catalog() {
         return 1
     fi
 
-    # Which drives are online right now
-    local id mp online_json='{}'
-    local -a on=()
-    while IFS="$_CAT_SEP" read -r id mp; do
-        _catalog_mount_online "$mp" && on+=("$id")
-    done < <(jq -r '.drives[] | [.drive_id, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB" 2>/dev/null)
-    (( ${#on[@]} > 0 )) && online_json="$(printf '%s\n' "${on[@]}" | jq -R '{(.): true}' | jq -s 'add')"
+    local online_json
+    online_json="$(_catalog_online_json)"
 
     local tmp; tmp="$(mktemp)"
     jq -r --arg t "$term" --arg mt "$media_filter" --argjson limit "$CATALOG_SEARCH_LIMIT" \
@@ -640,6 +649,129 @@ search_catalog() {
         log_info "$total match(es)"
     fi
     return 0
+}
+
+# Copies on drive $1 that have an identical copy (same hash) on another drive that
+# is online now. One line per copy, fields separated by US:
+#   video_id, relative_path, size, mtime, keeper_drive_id, keeper_relative_path, keeper_size, keeper_mtime
+_catalog_duplicate_plan() {
+    local drive="$1"
+    jq -r --arg x "$drive" --argjson online "$(_catalog_online_json)" '
+        [.videos[] | select((.hash // "") != "")] | group_by(.hash)[]
+        | . as $g
+        | ($g | map(select(.drive_id == $x))) as $mine
+        | ($g | map(select(.drive_id != $x and $online[.drive_id]))) as $others
+        | select(($mine | length) > 0 and ($others | length) > 0)
+        | $others[0] as $k
+        | $mine[]
+        | [.video_id, .relative_path, (.file_size | tostring), ((.mtime // 0) | tostring),
+           $k.drive_id, $k.relative_path, ($k.file_size | tostring), (($k.mtime // 0) | tostring)]
+        | join("\u001f")' "$CATALOG_DB" 2>/dev/null
+}
+
+# Online drives that hold removable duplicate copies, one per line:
+#   drive_id, label, mount_point, copies, bytes
+catalog_duplicate_candidates() {
+    _catalog_require_jq || return 1
+    init_catalog_db
+    local id label mp type files size scanned online copies bytes
+    online="$(_catalog_online_json)"
+    while IFS="$_CAT_SEP" read -r id label mp; do
+        [[ "$(jq -r --arg i "$id" '.[$i] // false' <<< "$online")" == true ]] || continue
+        read -r copies bytes < <(_catalog_duplicate_plan "$id" | awk -F"$_CAT_SEP" '{ n++; b += $3 } END { print n + 0, b + 0 }')
+        (( copies > 0 )) || continue
+        printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$id" "$label" "$mp" "$copies" "$bytes"
+    done < <(jq -r '.drives | sort_by(.drive_label | ascii_downcase)[] | [.drive_id, .drive_label, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB")
+}
+
+# Move the duplicate copies on one drive to that drive's trash (undoable). A copy
+# is moved only when an identical copy exists on another drive that is online, and
+# both files still match the size and modification time the catalog recorded.
+# Args: drive_id
+catalog_trash_duplicates() {
+    local drive="$1"
+    _catalog_require_jq || return 1
+    init_catalog_db
+
+    local root label
+    root="$(jq -r --arg d "$drive" '.drives[] | select(.drive_id == $d) | .mount_point' "$CATALOG_DRIVES_DB")"
+    label="$(jq -r --arg d "$drive" '.drives[] | select(.drive_id == $d) | .drive_label' "$CATALOG_DRIVES_DB")"
+    if [[ -z "$root" ]]; then
+        log_error "Unknown drive"
+        return 1
+    fi
+    if ! _catalog_mount_online "$root"; then
+        log_error "$label is not online"
+        return 1
+    fi
+    if [[ "$DRY_RUN" != true && ! -w "$root" ]]; then
+        log_error "Cannot create a trash on $label: $root is not writable"
+        return 1
+    fi
+
+    local -A mp=()
+    local id m
+    while IFS="$_CAT_SEP" read -r id m; do mp["$id"]="$m"; done < <(jq -r '.drives[] | [.drive_id, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB")
+
+    local work stamp vid rel size mtime kdrive krel ksize kmtime file keeper st kst
+    local moved=0 bytes=0 previewed=0 changed=0 keeper_gone=0 missing=0 failed=0
+    work="$(mktemp -d)" || return 1
+    : > "$work/removed"
+    stamp="$(date +%Y%m%d-%H%M%S)"
+
+    while IFS="$_CAT_SEP" read -r vid rel size mtime kdrive krel ksize kmtime; do
+        file="$root/$rel"
+        keeper="${mp["$kdrive"]}/$krel"
+
+        st="$(_catalog_stat "$file")" || { missing=$(( missing + 1 )); log_verbose "Gone since the scan: $rel"; continue; }
+        if [[ "${st% *}" != "$size" || "${st#* }" != "$mtime" ]]; then
+            changed=$(( changed + 1 )); log_warning "Changed since the scan, left alone (rescan first): $rel"; continue
+        fi
+        kst="$(_catalog_stat "$keeper")" || { keeper_gone=$(( keeper_gone + 1 )); log_warning "The other copy is gone, left alone: $rel"; continue; }
+        if [[ "${kst% *}" != "$ksize" || "${kst#* }" != "$kmtime" ]]; then
+            keeper_gone=$(( keeper_gone + 1 )); log_warning "The other copy changed since the scan, left alone: $rel"; continue
+        fi
+
+        if [[ "$DRY_RUN" == true ]]; then
+            previewed=$(( previewed + 1 )); bytes=$(( bytes + size ))
+            log_info "[DRY RUN] Would move to trash: $rel"
+            continue
+        fi
+        if trash_file "$file" "$root" "$stamp"; then
+            moved=$(( moved + 1 )); bytes=$(( bytes + size ))
+            printf '%s\n' "$vid" >> "$work/removed"
+            log_success "Moved to trash: $rel"
+        else
+            failed=$(( failed + 1 )); log_error "Could not move to trash: $rel"
+        fi
+    done < <(_catalog_duplicate_plan "$drive")
+
+    # The moved files are no longer at those paths: drop them from the catalog now
+    if (( moved > 0 )); then
+        jq --rawfile ids "$work/removed" --arg now "$(_catalog_now)" '
+            ($ids | split("\n") | map(select(length > 0) | {(.): true}) | add // {}) as $r
+            | .videos |= map(select($r[.video_id] | not)) | .last_updated = $now' "$CATALOG_DB" > "$work/db.json" \
+            && _catalog_commit "$CATALOG_DB" "$work/db.json"
+        local count size_total
+        read -r count size_total < <(jq -r --arg d "$drive" '[.videos[] | select(.drive_id == $d)] | "\(length) \(map(.file_size) | add // 0)"' "$CATALOG_DB")
+        jq --arg d "$drive" --argjson c "${count:-0}" --argjson s "${size_total:-0}" \
+            '(.drives[] | select(.drive_id == $d)) |= (.file_count = $c | .total_size = $s)' "$CATALOG_DRIVES_DB" > "$work/drives.json" \
+            && _catalog_commit "$CATALOG_DRIVES_DB" "$work/drives.json"
+    fi
+    rm -rf "$work"
+
+    STATS[files_trashed]=$(( ${STATS[files_trashed]:-0} + moved ))
+    STATS[space_trashed]=$(( ${STATS[space_trashed]:-0} + bytes ))
+    STATS[files_previewed]=$(( ${STATS[files_previewed]:-0} + previewed ))
+    STATS[files_skipped]=$(( ${STATS[files_skipped]:-0} + changed + keeper_gone + missing ))
+
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY RUN] Would move $previewed cop$([[ $previewed == 1 ]] && echo y || echo ies) ($(format_bytes "$bytes")) on $label to its trash"
+    else
+        log_info "$moved moved to the trash of $label ($(format_bytes "$bytes")); $(( changed + keeper_gone + missing )) skipped"
+        (( moved > 0 )) && log_info "Undo with Utilities > Undo Last Operation, or empty the trash for good with Utilities > Empty Trash"
+    fi
+    (( failed == 0 ))
 }
 
 # Write a plain-text report of the catalog. Prints the report path.

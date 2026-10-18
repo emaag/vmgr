@@ -278,12 +278,8 @@ show_duplicates_report() {
         return 0
     fi
 
-    local id mp online_json='{}'
-    local -a on=()
-    while IFS=$'\x1f' read -r id mp; do
-        _catalog_mount_online "$mp" && on+=("$id")
-    done < <(jq -r '.drives[] | [.drive_id, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB" 2>/dev/null)
-    (( ${#on[@]} > 0 )) && online_json="$(printf '%s\n' "${on[@]}" | jq -R '{(.): true}' | jq -s 'add')"
+    local online_json
+    online_json="$(_catalog_online_json)"
 
     local n=0 line kind count size label state rel dot color
     while IFS=$'\x1f' read -r kind count size label state rel; do
