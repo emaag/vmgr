@@ -398,7 +398,7 @@ Preview all operations without making any changes.
 
 ```
 ╭──────────────────────────────────────────────────────────────╮
-│ VIDEO MANAGER ULTIMATE                                v1.3.0 │
+│ VIDEO MANAGER ULTIMATE                                v1.4.0 │
 │ ○ Dry run OFF                             ~/Videos/Series    │
 ╰──────────────────────────────────────────────────────────────╯
 

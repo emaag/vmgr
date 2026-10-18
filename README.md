@@ -2,24 +2,25 @@
 
 **Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.**
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.3.0)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.4.0)
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)
-[![Tests](https://img.shields.io/badge/tests-200%2F200%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-359%2F359%20passing-success.svg)](tests/)
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
-### Status at a glance — v1.3.0: Modular Architecture + Subtitle Generation
+### Status at a glance — v1.4.0: New Interface, Undo, and Batch Processing
 
 | Change | State |
 |--------|-------|
-| 93% smaller main script (6,590 → 465 lines) | ✅ Shipped |
-| 12 independent modules for maintainability | ✅ Shipped |
-| All core functionality preserved from previous versions | ✅ Shipped |
-| Improved tab completion for all commands | ✅ Shipped |
+| Undo for renames and flattens (single and batch) | ✅ Shipped |
+| Batch Processing with a folder queue, preview, confirmation and per-folder results | ✅ Shipped |
+| Redesigned interface: framed header, single-key menus, themed directory browser | ✅ Shipped |
+| Progress bars and a summary card after every operation | ✅ Shipped |
+| Quiet output by default (`--verbose` for detail); `NO_COLOR` and ASCII fallbacks | ✅ Shipped |
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
-| 200-test automated suite (full integration coverage) | ✅ Shipped |
+| 359-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
 
 [See the changelog →](CHANGELOG.md)
 
@@ -55,11 +56,11 @@ chmod +x video-manager-ultimate.sh
 
 ### Core Operations (Implemented)
 
-- **File Renaming** — bracket notation formatting (`[Studio] filename.mp4`)
-- **Directory Flattening** — move files from subdirectories to top level
-- **Duplicate Detection** — SHA-256 hash-based with detailed reports
+- **File Renaming** — bracket notation formatting (`[Studio] filename.mp4`), with undo
+- **Directory Flattening** — move files from subdirectories to top level, with undo
+- **Duplicate Detection** — SHA-256 hash-based; reports are written to `~/.video-manager-logs/duplicate-reports/`
 - **File Organization** — automatic sorting by subfolder names with undo functionality
-- **Batch Processing** — multi-directory operations with accumulated statistics
+- **Batch Processing** — queue several folders (or every subfolder with videos), preview, confirm, and get a per-folder results list
 - **Image Conversion** — convert PNG/WebP/HEIC to JPG (requires ImageMagick)
 - **Subtitle Generation** — OpenAI Whisper backend; GPU acceleration, parallel jobs, skip-existing, dry-run, size/date filters, interactive editing. Requires `pip install openai-whisper` (or whisper.cpp)
 
@@ -78,16 +79,19 @@ chmod +x video-manager-ultimate.sh
 
 ### Interface
 
-- Interactive menu system
+- Single-key menus (no Enter); `Esc` goes back
+- Directory browser with a live preview pane, recent folders and typed paths
+- Progress bars, `old → new` rename pairs and a summary card for every operation
+- Quiet by default; `--verbose` shows every intermediate step
+- `NO_COLOR` and `TERM=dumb` give plain output; non-UTF-8 locales use ASCII glyphs
 - Command-line interface for automation
-- Color-coded output
-- Real-time progress indicators
 - Comprehensive logging
 - Dry run mode
 
 ### Safety
 
-- Dry run preview mode
+- Dry run preview mode, and a confirmation before real changes
+- Undo log for renames, flattens and organize runs
 - Conflict resolution
 - Error handling and recovery
 - Path validation
@@ -239,6 +243,16 @@ Or use command-line flags:
 
 <details>
 <summary>Version history — click to expand</summary>
+
+### v1.4.0 (October 2026)
+- Undo for renames and flattens, single and batch
+- Batch Processing reachable from the menu, with a folder queue, preview, confirmation and results list
+- Redesigned interface: framed header, single-key menus, themed directory browser, progress bars, summary card
+- Quiet by default (`--verbose`), `NO_COLOR` and ASCII fallbacks
+- Duplicate reports moved out of the scanned folder
+
+### v1.3.0 (December 2025)
+- Modular architecture (12 modules), tab completion, 200-test suite
 
 ### v1.2.0 (November 2025)
 - File organization by subfolder names
