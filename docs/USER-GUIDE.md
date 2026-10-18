@@ -1,7 +1,7 @@
 # VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Complete User Guide
 
-**Version:** 1.7.0  
+**Version:** 1.8.0  
 **Date:** October 2026  
 **Complements:** PowerShell Ultimate Edition
 
@@ -403,7 +403,7 @@ catalog: rescan the drive.
 
 ```
 ╭──────────────────────────────────────────────────────────────╮
-│ VIDEO MANAGER ULTIMATE                                v1.7.0 │
+│ VIDEO MANAGER ULTIMATE                                v1.8.0 │
 │ ○ Dry run OFF                             ~/Videos/Series    │
 ╰──────────────────────────────────────────────────────────────╯
 
@@ -909,7 +909,7 @@ The script accepts both Windows and Unix path formats:
 
 ```
 [2025-10-19 14:30:00] [INFO] ==========================================
-[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.7.0
+[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.8.0
 [2025-10-19 14:30:00] [INFO] Session started: 2025-10-19 14:30:00
 [2025-10-19 14:30:00] [INFO] ==========================================
 [2025-10-19 14:30:05] [OPERATION] Started: Rename Files (Bracket Notation)
@@ -1305,6 +1305,9 @@ A: Yes, when used with dry run first. The script never modifies video content, o
 ---
 
 ## Version History
+
+### Version 1.8.0 (October 2026)
+- Download several subreddits in one run; catalog freshness warnings
 
 ### Version 1.7.0 (October 2026)
 - Catalog scales to large libraries; first scan of 20,000 files takes about 20 seconds
