@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Image conversion can be undone**: JPEG to JPG renames are recorded, and PNG, WebP and HEIC conversions now move the original to the folder's `.vmgr-trash` instead of deleting it. Utilities > Undo Last Operation puts the originals back and moves the converted .jpg files out of the way. Empty Trash deletes the originals for good.
 
+### Changed
+- **Cross-drive cleanup candidates and the duplicate plan are much faster on big catalogs**: they now read the catalog text directly instead of loading it into jq. With 200,000 records the check takes about 6 s instead of 33 s and uses 13 MB instead of 368 MB, with identical results.
+
 ---
 
 ## [1.8.0] - 2026-10-18

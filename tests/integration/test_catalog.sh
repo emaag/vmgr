@@ -610,3 +610,24 @@ test_drives_not_scanned_for_a_while_are_flagged() {
     assert_contains "never scanned" "$(list_cataloged_drives 2>&1 | _strip)" "list: a drive with no scan is flagged"
     _teardown
 }
+
+test_hashes_that_look_like_numbers_do_not_merge_groups() {
+    _setup
+    echo "a" > "$D2/Backup/dupA.mp4"; echo "b" > "$D2/Backup/dupB.mp4"
+    echo "c" > "$D2/Backup/third.mp4"; echo "d" > "$D1/Movies/third elsewhere.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    catalog_drive "$D2" true >/dev/null 2>&1
+    # Two copies on one drive share a hash that reads as a number (6115002e8885 is
+    # 6115002 x 10^8885); the next hash in sort order is shared across both drives.
+    local h1="00000000000000000000000000000000000000000000000000006115002e8885"
+    local h2="000000000000000000000000000000000000000000000000000061159e660236"
+    jq -r --arg h1 "$h1" --arg h2 "$h2" '
+        .videos |= map(if .filename == "dupA.mp4" or .filename == "dupB.mp4" then .hash = $h1
+                       elif .filename == "third.mp4" or .filename == "third elsewhere.mp4" then .hash = $h2
+                       else . end) | '"$_CAT_FMT" "$CATALOG_DB" > "$CATALOG_DB.tmp" && mv "$CATALOG_DB.tmp" "$CATALOG_DB"
+    local out; out="$(catalog_duplicate_candidates | tr '\037' '|')"
+    assert_contains "|Drive Two|" "$out" "numeric-looking hashes: drive two still offered"
+    assert_equals "1" "$(_catalog_duplicate_plan id-two | grep -c 'third.mp4')" "numeric-looking hashes: the cross-drive copy is found"
+    assert_equals "0" "$(_catalog_duplicate_plan id-two | grep -c 'dup[AB].mp4')" "numeric-looking hashes: two copies on one drive are not offered"
+    _teardown
+}

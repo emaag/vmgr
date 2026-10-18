@@ -819,22 +819,84 @@ search_catalog() {
     return 0
 }
 
+# Every hashed record as "hash US drive US video_id US relative_path US size US mtime",
+# sorted by hash (stable, so records of one hash keep their catalog order). Read from
+# the one-record-per-line catalog with awk; no JSON parsing.
+_catalog_hash_index() {
+    LC_ALL=C grep -F '"hash":"' "$CATALOG_DB" 2>/dev/null | LC_ALL=C awk "
+        $_CAT_AWK_UNESCAPE"'
+        # The raw text of a string value ("key" includes the opening quote), found with
+        # index() instead of a regex: much faster than backtracking on long records.
+        function strval(key,   p, rest, q, i, n) {
+            p = index($0, key)
+            if (!p) return ""
+            rest = substr($0, p + length(key))
+            q = index(rest, "\"")
+            while (q > 1) {                                 # skip quotes preceded by a backslash
+                n = 0; i = q - 1
+                while (i > 0 && substr(rest, i, 1) == "\\") { n++; i-- }
+                if (n % 2 == 0) break
+                i = index(substr(rest, q + 1), "\"")
+                if (!i) return ""
+                q += i
+            }
+            return q ? substr(rest, 1, q - 1) : ""
+        }
+        function numval(key,   p, rest) {
+            p = index($0, key)
+            if (!p) return 0
+            rest = substr($0, p + length(key))
+            return match(rest, /^[0-9]+/) ? substr(rest, 1, RLENGTH) : 0
+        }
+        /^\{"video_id"/ {
+            h = strval("\"hash\":\"")
+            if (h == "") next
+            drive = unescape(strval("\"drive_id\":\""))
+            vid   = unescape(strval("\"video_id\":\""))
+            rel   = unescape(strval("\"relative_path\":\""))
+            size  = numval("\"file_size\":")
+            mt    = numval("\"mtime\":")
+            printf "%s\037%s\037%s\037%s\037%s\037%s\n", h, drive, vid, rel, size, mt
+        }' | LC_ALL=C sort -s -t "$_CAT_SEP" -k1,1
+}
+
+# Groups of identical files (same hash) read from _catalog_hash_index. A copy on drive X
+# is removable when the same hash exists on another drive that is online now.
+# Args: mode (plan|count), target drive (plan only)
+#   plan:  one line per removable copy on the target drive:
+#          video_id, relative_path, size, mtime, keeper_drive, keeper_path, keeper_size, keeper_mtime
+#   count: "drive_id US copies US bytes" for every online drive with removable copies
+_catalog_duplicate_groups() {
+    local mode="$1" target="$2" on="" id
+    while IFS= read -r id; do on+="$_CAT_SEP$id"; done < <(_catalog_online_json | jq -r 'keys[]')
+    on+="$_CAT_SEP"
+    _catalog_hash_index | LC_ALL=C awk -F"$_CAT_SEP" -v mode="$mode" -v target="$target" -v on="$on" '
+        function online(d) { return index(on, "\037" d "\037") > 0 }
+        function flush(   i, j, k, x) {
+            if (n < 2) { n = 0; return }
+            for (i = 1; i <= n; i++) {
+                x = D[i]
+                if (mode == "plan" ? x != target : !online(x)) continue
+                k = 0
+                for (j = 1; j <= n; j++) if (D[j] != x && online(D[j])) { k = j; break }
+                if (!k) continue
+                if (mode == "plan")
+                    printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", V[i], R[i], S[i], M[i], D[k], R[k], S[k], M[k]
+                else { cnt[x]++; bytes[x] += S[i] }
+            }
+            n = 0
+        }
+        { # string compare: a hash such as 61e5002e8885 would otherwise be read as a number
+          if (($1 "") != cur) { flush(); cur = $1 "" }
+          n++; D[n] = $2; V[n] = $3; R[n] = $4; S[n] = $5; M[n] = $6 }
+        END { flush(); if (mode == "count") for (x in cnt) printf "%s\037%d\037%d\n", x, cnt[x], bytes[x] }'
+}
+
 # Copies on drive $1 that have an identical copy (same hash) on another drive that
 # is online now. One line per copy, fields separated by US:
 #   video_id, relative_path, size, mtime, keeper_drive_id, keeper_relative_path, keeper_size, keeper_mtime
 _catalog_duplicate_plan() {
-    local drive="$1"
-    jq -r --arg x "$drive" --argjson online "$(_catalog_online_json)" '
-        [.videos[] | select((.hash // "") != "")] | group_by(.hash)[]
-        | . as $g
-        | ($g | map(select(.drive_id == $x))) as $mine
-        | ($g | map(select(.drive_id != $x and $online[.drive_id]))) as $others
-        | select(($mine | length) > 0 and ($others | length) > 0)
-        | $others[0] as $k
-        | $mine[]
-        | [.video_id, .relative_path, (.file_size | tostring), ((.mtime // 0) | tostring),
-           $k.drive_id, $k.relative_path, ($k.file_size | tostring), (($k.mtime // 0) | tostring)]
-        | join("\u001f")' "$CATALOG_DB" 2>/dev/null
+    _catalog_duplicate_groups plan "$1"
 }
 
 # Online drives that hold removable duplicate copies, one per line:
@@ -842,13 +904,14 @@ _catalog_duplicate_plan() {
 catalog_duplicate_candidates() {
     _catalog_require_jq || return 1
     init_catalog_db
-    local id label mp type files size scanned online copies bytes
-    online="$(_catalog_online_json)"
+    local id label mp copies bytes
+    local -A ncopies=() nbytes=()
+    while IFS="$_CAT_SEP" read -r id copies bytes; do
+        ncopies["$id"]="$copies"; nbytes["$id"]="$bytes"
+    done < <(_catalog_duplicate_groups count)
     while IFS="$_CAT_SEP" read -r id label mp; do
-        [[ "$(jq -r --arg i "$id" '.[$i] // false' <<< "$online")" == true ]] || continue
-        read -r copies bytes < <(_catalog_duplicate_plan "$id" | awk -F"$_CAT_SEP" '{ n++; b += $3 } END { print n + 0, b + 0 }')
-        (( copies > 0 )) || continue
-        printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$id" "$label" "$mp" "$copies" "$bytes"
+        (( ${ncopies[$id]:-0} > 0 )) || continue
+        printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\n' "$id" "$label" "$mp" "${ncopies[$id]}" "${nbytes[$id]}"
     done < <(jq -r '.drives | sort_by(.drive_label | ascii_downcase)[] | [.drive_id, .drive_label, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB")
 }
 
