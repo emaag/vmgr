@@ -486,3 +486,44 @@ test_setup_needs_a_terminal() {
     assert_contains "needs a terminal" "$out" "setup: says why and how to do it by hand"
     _cfg_teardown
 }
+
+test_split_names_cleans_dedupes_and_flags_bad() {
+    local out
+    out="$(_reddit_split_names 'EarthPorn, r/CityPorn  earthporn,/r/pics/ bad-name!' | tr '\n' ' ')"
+    assert_equals "EarthPorn CityPorn pics !bad-name! " "$out" "split: normalised, deduplicated, bad names flagged"
+}
+
+test_batch_runs_each_subreddit_into_its_own_folder_and_reports() {
+    _dl_setup
+    local saved; saved="$(declare -f download_subreddit_images)"
+    CALLS=()
+    download_subreddit_images() {
+        CALLS+=("$1|$2|$3")
+        [[ "$1" == "empty" ]] && return 1
+        ((STATS[files_downloaded]+=2))
+        return 0
+    }
+    local out rc
+    out="$(download_subreddits_batch /base 5 'one, empty two,!!' 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"; rc=$?
+    # run again without the subshell to capture the calls
+    CALLS=(); STATS[files_downloaded]=0
+    download_subreddits_batch /base 5 'one, empty two' >/dev/null 2>&1; rc=$?
+    assert_equals "one|/base/one|5 empty|/base/empty|5 two|/base/two|5" "${CALLS[*]}" "batch: one folder per subreddit under the base"
+    assert_equals "1" "$rc" "batch: fails overall when one subreddit gave nothing"
+    assert_contains "r/one" "$out" "batch: results list names each subreddit"
+    assert_contains "2 downloaded" "$out" "batch: results list shows the counts"
+    assert_contains "nothing downloaded" "$out" "batch: results list marks the empty one"
+    assert_contains "not a valid subreddit name" "$out" "batch: invalid names are reported"
+    eval "$saved"
+    unset CALLS
+    _dl_teardown
+}
+
+test_batch_with_no_valid_names_fails() {
+    _dl_setup
+    local out rc
+    out="$(download_subreddits_batch /base 5 '!!, ??' 2>&1)"; rc=$?
+    assert_equals "1" "$rc" "batch: no valid names fails"
+    assert_contains "No valid subreddit names" "$out" "batch: says why"
+    _dl_teardown
+}

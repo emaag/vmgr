@@ -741,4 +741,62 @@ download_subreddit_images() {
     return 0
 }
 
+# Split a list of subreddits typed as "a, b c,r/d" into one cleaned name per line
+# (duplicates dropped, order kept). Names that are not valid are printed with a
+# leading "!" so the caller can report them.
+_reddit_split_names() {
+    local raw="$1" n seen=" "
+    raw="${raw//,/ }"
+    for n in $raw; do
+        n="$(_reddit_normalize_name "$n")"
+        if ! _reddit_valid_name "$n"; then printf '!%s\n' "$n"; continue; fi
+        [[ "${seen,,}" == *" ${n,,} "* ]] && continue
+        seen+="$n "
+        printf '%s\n' "$n"
+    done
+}
+
+# Download several subreddits in one run, each into its own folder under a base
+# folder, then print a result line per subreddit.
+# Args: $1 - base directory, $2 - max items per subreddit, $3 - names (comma/space separated),
+#       $4 - sort (default hot), $5 - time window
+download_subreddits_batch() {
+    local base="$1" max="${2:-200}" names="$3" sort="${4:-hot}" window="$5"
+    local list=() bad=() n
+    while IFS= read -r n; do
+        [[ -z "$n" ]] && continue
+        if [[ "$n" == !* ]]; then bad+=("${n#!}"); else list+=("$n"); fi
+    done < <(_reddit_split_names "$names")
+
+    for n in "${bad[@]}"; do log_warning "Skipping \"${n}\": not a valid subreddit name"; done
+    if (( ${#list[@]} == 0 )); then
+        log_error "No valid subreddit names given"
+        return 1
+    fi
+
+    local names_done=() status=() note=() before ok=0 i
+    for (( i = 0; i < ${#list[@]}; i++ )); do
+        n="${list[$i]}"
+        log_info "[$(( i + 1 ))/${#list[@]}] r/$n"
+        before="${STATS[files_downloaded]:-0}"
+        if download_subreddit_images "$n" "$base/$n" "$max" "$sort" "$window"; then
+            status+=(ok); note+=("$(( ${STATS[files_downloaded]:-0} - before )) downloaded"); ok=$(( ok + 1 ))
+        else
+            status+=(fail); note+=("nothing downloaded (see above)")
+        fi
+        names_done+=("$n")
+        echo ""
+    done
+
+    if [[ "$(type -t ui_section)" == "function" ]]; then ui_section "Results"; fi
+    for (( i = 0; i < ${#names_done[@]}; i++ )); do
+        if [[ "${status[$i]}" == ok ]]; then
+            printf '  %s%s%s %-24.24s %s%s%s\n' "${UI_OK:-}" "${SYMBOL_CHECK:-+}" "$COLOR_RESET" "r/${names_done[$i]}" "${UI_DIM:-}" "${note[$i]}" "$COLOR_RESET"
+        else
+            printf '  %s%s%s %-24.24s %s%s%s\n' "${UI_ERR:-}" "${SYMBOL_CROSS:-x}" "$COLOR_RESET" "r/${names_done[$i]}" "${UI_DIM:-}" "${note[$i]}" "$COLOR_RESET"
+        fi
+    done
+    (( ok == ${#names_done[@]} ))
+}
+
 return 0

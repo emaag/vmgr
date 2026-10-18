@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Download several subreddits in one run**: Reddit menu > Download Several Subreddits (or `vmgr reddit a,b,c <dir>`). Each subreddit goes into its own folder, one failing subreddit doesn't stop the others, and a results list at the end shows what each one downloaded.
 - **Catalog freshness warnings**: the catalog menu and Cataloged Drives list flag any drive that hasn't been scanned for 30 days (or ever), with how long ago it was last scanned. The limit is `CATALOG_STALE_DAYS` in the config.
 
 ---

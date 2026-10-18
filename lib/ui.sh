@@ -1628,6 +1628,7 @@ show_reddit_menu() {
     else
         ui_item 2 "Reddit API Setup" "Not set up: no galleries, slow"
     fi
+    ui_item 3 "Download Several Subreddits" "One folder each, one results list"
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
@@ -1674,6 +1675,26 @@ _handle_reddit_choice() {
             echo ""
             start_operation "Reddit Download: r/${subreddit}"
             download_subreddit_images "$subreddit" "$output_dir" "$max_images"
+            end_operation
+            ui_pause
+            return 0
+            ;;
+        3)
+            show_screen "Download Several Subreddits"
+            ui_ask subreddits "Subreddits, separated by commas or spaces (e.g. EarthPorn, CityPorn)"
+            if [[ -z "$subreddits" ]]; then
+                log_error "No subreddits specified"
+                ui_pause
+                return 0
+            fi
+            local base_dir
+            ui_ask base_dir "Folder to put them in [$HOME/Pictures/reddit]"
+            [[ -z "$base_dir" ]] && base_dir="$HOME/Pictures/reddit"
+            ui_ask max_images "Max items per subreddit [200]"
+            [[ -z "$max_images" || ! "$max_images" =~ ^[0-9]+$ ]] && max_images=200
+            echo ""
+            start_operation "Reddit Download: several subreddits"
+            download_subreddits_batch "$base_dir" "$max_images" "$subreddits"
             end_operation
             ui_pause
             return 0

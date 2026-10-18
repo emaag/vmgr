@@ -162,6 +162,9 @@ Left column = folders, right column = preview of the highlighted folder (subfold
 # r/name, name, or a pasted URL all work; max defaults to 200
 vmgr reddit EarthPorn ~/Pictures/earthporn 100
 vmgr reddit pics ~/Pictures/pics 50 --sort top --time week
+
+# Several subreddits at once: one folder each under the target
+vmgr reddit EarthPorn,CityPorn,pics ~/Pictures/reddit 100
 ```
 
 - Without `~/.vmgr-reddit.conf` it uses the public RSS feed: slower (~1 request/min) and **galleries are skipped**.

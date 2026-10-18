@@ -135,6 +135,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     catalog-duplicates      Find duplicate files across all cataloged drives
     catalog-report [file]   Write a text report of the catalog
     reddit <subreddit> <dir> [max]  Download images from a subreddit
+                            (a,b,c = several, one folder each under <dir>)
     reddit-setup            Guided setup of Reddit API credentials (galleries, full speed)
 
 ${COLOR_BOLD}REDDIT OPTIONS:${COLOR_RESET}
@@ -493,7 +494,12 @@ parse_arguments() {
                 exit 1
             fi
             start_operation "Reddit Image Download"
-            download_subreddit_images "$REDDIT_SUBREDDIT" "$directory" "${REDDIT_MAX_IMAGES:-200}" "${REDDIT_SORT:-hot}" "${REDDIT_TIME:-}"
+            if [[ "$REDDIT_SUBREDDIT" == *,* ]]; then
+                # reddit a,b,c <dir>: one folder per subreddit under <dir>
+                download_subreddits_batch "$directory" "${REDDIT_MAX_IMAGES:-200}" "$REDDIT_SUBREDDIT" "${REDDIT_SORT:-hot}" "${REDDIT_TIME:-}"
+            else
+                download_subreddit_images "$REDDIT_SUBREDDIT" "$directory" "${REDDIT_MAX_IMAGES:-200}" "${REDDIT_SORT:-hot}" "${REDDIT_TIME:-}"
+            fi
             end_operation
             ;;
     esac
