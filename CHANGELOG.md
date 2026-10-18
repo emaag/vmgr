@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.9.0] - 2026-10-18
+
+Image conversions can be undone, cataloging shows live progress, and the duplicate tools stay quick on very large catalogs.
+
 ### Added
 - **Image conversion can be undone**: JPEG to JPG renames are recorded, and PNG, WebP and HEIC conversions now move the original to the folder's `.vmgr-trash` instead of deleting it. Utilities > Undo Last Operation puts the originals back and moves the converted .jpg files out of the way. Empty Trash deletes the originals for good.
 - **Live progress while cataloging**: a count of media files found while a drive is listed, hashing and record preparation with a time-left estimate (updated every second, also for very large files), and an "Updating the catalog" step. Hashing now works in batches of 32 files so the bar keeps moving on big videos.
