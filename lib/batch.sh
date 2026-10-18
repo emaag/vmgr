@@ -25,26 +25,38 @@ BATCH_RESULT_STATUS=()
 BATCH_RESULT_NOTE=()
 
 # Snapshot the counters a batch cares about:
-# "processed renamed moved dupes errors previewed"
+# "processed renamed moved dupes errors previewed generated skipped no_speech failed"
 _batch_snapshot() {
-    printf '%s %s %s %s %s %s' "${STATS[files_processed]:-0}" "${STATS[files_renamed]:-0}" \
+    printf '%s %s %s %s %s %s %s %s %s %s' "${STATS[files_processed]:-0}" "${STATS[files_renamed]:-0}" \
         "${STATS[files_moved]:-0}" "${STATS[duplicates_found]:-0}" "${STATS[errors]:-0}" \
-        "${STATS[files_previewed]:-0}"
+        "${STATS[files_previewed]:-0}" "${STATS[subtitles_generated]:-0}" "${STATS[files_skipped]:-0}" \
+        "${STATS[subtitles_no_speech]:-0}" "${STATS[subtitles_failed]:-0}"
 }
 
-# Describe what changed between two snapshots ($1 before, $2 after).
+# Describe what changed between two snapshots ($1 before, $2 after). $3 is the
+# operation; subtitle runs also report skipped / no-speech / failed videos.
 # Sets _BATCH_NOTE and _BATCH_ERRORS.
 _batch_describe() {
     local -a b a
     read -r -a b <<< "$1"; read -r -a a <<< "$2"
+    local op="${3:-}"
     local checked=$(( a[0] - b[0] )) renamed=$(( a[1] - b[1] )) moved=$(( a[2] - b[2] ))
     local dupes=$(( a[3] - b[3] )) errors=$(( a[4] - b[4] )) previewed=$(( a[5] - b[5] ))
     local -a parts=()
-    (( previewed > 0 )) && parts+=("$previewed would be renamed")
+    if (( previewed > 0 )); then
+        if [[ "$op" == subtitles ]]; then parts+=("$previewed would be transcribed"); else parts+=("$previewed would be renamed"); fi
+    fi
     (( renamed > 0 )) && parts+=("$renamed renamed")
     (( moved > 0 ))   && parts+=("$moved moved")
     (( dupes > 0 ))   && parts+=("$dupes duplicates")
     (( errors > 0 ))  && parts+=("$errors error(s)")
+    if [[ "$op" == subtitles ]]; then
+        local generated=$(( a[6] - b[6] )) skipped=$(( a[7] - b[7] )) nospeech=$(( a[8] - b[8] )) failed=$(( a[9] - b[9] ))
+        (( generated > 0 )) && parts+=("$generated generated")
+        (( nospeech > 0 ))  && parts+=("$nospeech no speech")
+        (( failed > 0 ))    && { parts+=("$failed failed"); errors=$(( errors + failed )); }
+        (( skipped > 0 ))   && parts+=("$skipped already done")
+    fi
     if (( ${#parts[@]} == 0 )); then
         _BATCH_NOTE="$checked checked, no changes"
     else
@@ -104,6 +116,7 @@ batch_process_folders() {
             "flatten")    flatten_directory "$folder" "$DRY_RUN" || rc=1 ;;
             "cleanup")    workflow_deep_clean "$folder" || rc=1 ;;
             "duplicates") find_duplicates "$folder" "report" || rc=1 ;;
+            "subtitles")  generate_subtitles_in_directory "$folder" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN" || rc=1 ;;
             *)
                 log_error "Unknown operation: $operation"
                 rc=1
@@ -111,7 +124,7 @@ batch_process_folders() {
         esac
 
         after="$(_batch_snapshot)"
-        _batch_describe "$before" "$after"
+        _batch_describe "$before" "$after" "$operation"
         status=ok
         (( _BATCH_ERRORS > 0 )) && status=warn
         if (( rc != 0 )); then status=fail; ((failed++)); else ((success++)); fi
@@ -324,7 +337,8 @@ _batch_interactive() {
             end_operation
         fi
     else
-        if ui_confirm "Run on ${#folders[@]} folder(s), ${total} video(s)? This changes files"; then
+        # Subtitles only add files next to the videos, so they need no confirmation
+        if [[ "$operation" == subtitles ]] || ui_confirm "Run on ${#folders[@]} folder(s), ${total} video(s)? This changes files"; then
             start_operation "$title"
             batch_process_folders "$operation" "${folders[@]}"
             end_operation
@@ -337,6 +351,17 @@ _batch_interactive() {
 batch_rename_interactive()  { _batch_interactive "rename"  "Batch Rename Multiple Folders"; }
 batch_flatten_interactive() { _batch_interactive "flatten" "Batch Flatten Multiple Folders"; }
 batch_cleanup_interactive() { _batch_interactive "cleanup" "Batch Full Cleanup (Multiple Folders)"; }
+# Batch subtitle generation: the same folder queue and results list as the other
+# batch operations. Whisper is checked once up front rather than per folder.
+batch_subtitles_interactive() {
+    if ! check_whisper_installation; then
+        log_error "Whisper is not installed"
+        echo ""
+        echo "  Install it with:  pip install -U openai-whisper"
+        return 1
+    fi
+    _batch_interactive "subtitles" "Batch Subtitle Generation"
+}
 batch_duplicates_interactive() { _batch_interactive "duplicates" "Batch Find Duplicates (Multiple Folders)"; }
 
 ################################################################################

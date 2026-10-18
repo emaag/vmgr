@@ -957,10 +957,8 @@ _handle_subtitles_choice() {
             return 0
             ;;
         2)
-            start_operation "Batch Subtitle Generation"
             batch_generate_subtitles
-            end_operation
-            ui_pause
+            [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
         3)

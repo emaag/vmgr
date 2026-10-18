@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Batch Subtitle Generation** uses the folder-queue screen and per-folder results list of Batch Processing (browse, add every
+  subfolder with videos, or type a path) instead of the old `[B] Browse [T] Type` prompt. Whisper is checked once up front, and
+  each folder's summary line counts only that folder (it used to repeat the running total). A dry run previews and then offers to
+  generate.
+
 ### Added
 - Subtitle generation removes filler cues (`.`, `...`, punctuation only) that Whisper writes over silence and music. When nothing
   but filler is left, no subtitle file is written, the video is counted under "No speech found" on the summary card, and a

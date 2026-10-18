@@ -85,11 +85,14 @@ bash ./models/download-ggml-model.sh base
    ./video-manager-ultimate.sh
    ```
 
-2. Select option `[5] Subtitle Generation`
+2. Select option `[2] Subtitle Generation`
 
 3. Choose from:
    - Generate Subtitles (Single Directory)
-   - Batch Generate Subtitles (Multiple Directories)
+   - Batch Generate Subtitles (Multiple Directories): build a folder queue with the browser, "add every subfolder with
+     videos", or typed paths (the same screen as Batch Processing), then run. Each folder gets a progress header and the
+     run ends with a per-folder results list (`✓ Season1  3 generated`, `✓ Extras  1 no speech`, ...). With Dry Run on it
+     previews first and then offers to generate.
    - Configure Subtitle Settings
    - Check Whisper Installation
 

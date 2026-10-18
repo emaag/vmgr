@@ -111,3 +111,88 @@ test_duplicate_scan_keeps_the_first_alphabetically() {
     assert_file_not_exists "$TEST_TMPDIR/a/zzz.mp4" "duplicates: the later copy is the one removed"
     _teardown
 }
+
+# ── Batch subtitles ───────────────────────────────────────────────────────────
+
+_setup_batch_subtitles() {
+    _setup
+    load_module_under_test "subtitles.sh"
+    mkdir -p "$TEST_TMPDIR/bin" "$TEST_TMPDIR/s1" "$TEST_TMPDIR/s2"
+    cat > "$TEST_TMPDIR/bin/whisper" <<'MOCK'
+#!/usr/bin/env bash
+input=""; out="."; fmt="srt"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --output_dir) out="$2"; shift 2 ;;
+        --output_format) fmt="$2"; shift 2 ;;
+        --model|--language|--device|--verbose|--fp16) shift 2 ;;
+        *) input="$1"; shift ;;
+    esac
+done
+base="$(basename "${input%.*}")"
+if [[ "$base" == quiet* ]]; then
+    printf '1\n00:00:00,000 --> 00:00:07,000\n.\n' > "$out/$base.$fmt"
+else
+    printf '1\n00:00:00,000 --> 00:00:02,000\nHello there\n' > "$out/$base.$fmt"
+fi
+MOCK
+    chmod +x "$TEST_TMPDIR/bin/whisper"
+    _SAVED_PATH="$PATH"; export PATH="$TEST_TMPDIR/bin:$PATH"
+    touch "$TEST_TMPDIR/s1/talk one.mp4" "$TEST_TMPDIR/s1/talk two.mp4" "$TEST_TMPDIR/s2/quiet.mp4"
+    SUBTITLE_PARALLEL_JOBS=1; SUBTITLE_SKIP_EXISTING=true; SUBTITLE_RECURSIVE=false
+    SUBTITLE_MIN_SIZE_MB=0; SUBTITLE_MAX_SIZE_MB=0; SUBTITLE_MODIFIED_DAYS=0; SUBTITLE_MAX_FILES=0
+    SUBTITLE_USE_GPU=false; SUBTITLE_SHOW_DIR_STATS=false; SUBTITLE_INTERACTIVE_EDIT=false
+    SUBTITLE_AUTO_PUNCTUATION=false; SUBTITLE_INTERACTIVE_SELECT=false
+    WHISPER_MODEL=base; SUBTITLE_FORMAT=srt; SUBTITLE_LANGUAGE=auto
+}
+_teardown_batch_subtitles() { export PATH="$_SAVED_PATH"; _teardown; }
+
+test_batch_subtitles_reports_each_folder() {
+    _setup_batch_subtitles
+    batch_process_folders subtitles "$TEST_TMPDIR/s1" "$TEST_TMPDIR/s2" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/s1/talk one.srt" "batch subtitles: first folder processed"
+    assert_equals "2 generated" "${BATCH_RESULT_NOTE[0]}" "batch subtitles: first folder note"
+    assert_equals "1 no speech" "${BATCH_RESULT_NOTE[1]}" "batch subtitles: a silent video is reported as no speech"
+    assert_file_not_exists "$TEST_TMPDIR/s2/quiet.srt" "batch subtitles: no filler subtitle written"
+    _teardown_batch_subtitles
+}
+
+test_batch_subtitles_second_run_reports_already_done() {
+    _setup_batch_subtitles
+    batch_process_folders subtitles "$TEST_TMPDIR/s1" >/dev/null 2>&1
+    batch_process_folders subtitles "$TEST_TMPDIR/s1" >/dev/null 2>&1
+    assert_equals "2 already done" "${BATCH_RESULT_NOTE[0]}" "batch subtitles: existing subtitles are reported as already done"
+    _teardown_batch_subtitles
+}
+
+test_batch_subtitles_dry_run_previews() {
+    _setup_batch_subtitles
+    DRY_RUN=true batch_process_folders subtitles "$TEST_TMPDIR/s1" >/dev/null 2>&1
+    assert_equals "2 would be transcribed" "${BATCH_RESULT_NOTE[0]}" "batch subtitles dry run: says how many would be transcribed"
+    assert_file_not_exists "$TEST_TMPDIR/s1/talk one.srt" "batch subtitles dry run: nothing written"
+    _teardown_batch_subtitles
+}
+
+test_batch_subtitles_without_whisper_fails_up_front() {
+    _setup_batch_subtitles
+    export PATH="$TEST_TMPDIR/empty_bin"; mkdir -p "$TEST_TMPDIR/empty_bin"
+    local rc=0
+    batch_subtitles_interactive >/dev/null 2>&1 < /dev/null || rc=$?
+    export PATH="$_SAVED_PATH"
+    assert_equals "1" "$rc" "batch subtitles: a missing Whisper is reported once, before any folder is queued"
+    _teardown_batch_subtitles
+}
+
+test_subtitle_summary_line_counts_only_its_own_folder() {
+    _setup_batch_subtitles
+    source "$LIB_DIR/logging.sh"; LOG_FILE=/dev/null   # the summary is a log_info line; stubs print nothing
+    STATS[subtitles_generated]=0; STATS[files_skipped]=0; STATS[subtitles_no_speech]=0
+    local out1 out2
+    out1="$(generate_subtitles_in_directory "$TEST_TMPDIR/s1" base srt auto false 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
+    STATS[subtitles_generated]=2
+    out2="$(generate_subtitles_in_directory "$TEST_TMPDIR/s2" base srt auto false 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
+    assert_contains "complete: 2 generated, 0 skipped" "$out1" "subtitle summary: first folder"
+    assert_contains "complete: 0 generated, 0 skipped, 1 with no speech" "$out2" "subtitle summary: the second folder does not repeat the first folder's total"
+    stub_logging
+    _teardown_batch_subtitles
+}
