@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anything that changed since the scan, or whose other copy is gone, is left alone with a note to rescan. Copies that exist only on
   one drive, or only on an offline drive, are never offered. Dry run previews it.
 
+### Changed
+- **Catalog scales to large libraries**: scanning, searching and merging were reworked after a stress test with 20,000 real files and a 200,000-record catalog. First scan of 20,000 files dropped from about 320 s to about 20 s; an unchanged rescan takes about 2 s and leaves the catalog file untouched. Hashing is batched, files are classified in a single awk pass, and the catalog is stored one record per line (still valid JSON; older catalogs are converted automatically). Searching is about 10x faster and merging a small scan into 200,000 records uses about 5 MB instead of about 394 MB.
+
 ### Documentation
 - The user guide, installation guide and quick reference were brought in line with 1.6.0: new overview and feature list, a quick
   start and first-run walkthrough for the current interface (single-key menus, directory browser, dry-run then apply, undo), a File

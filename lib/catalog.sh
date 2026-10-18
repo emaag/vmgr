@@ -110,11 +110,22 @@ detect_drive_type() {
 # UTC timestamp in a form jq can parse (date -I is not available everywhere)
 _catalog_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+# jq expression that writes the catalog with ONE RECORD PER LINE (still valid
+# JSON). A line per record lets grep pre-filter a search and awk total a drive
+# without parsing the whole file, and it keeps the file small. Every writer ends
+# its jq program with "| <this>" and runs jq with -r. (It emits one output line per
+# record; building one big string with join is quadratic in jq 1.6.)
+_CAT_FMT='"{\"videos\":[", ((.videos | length) as $n | .videos as $v | range(0; $n) as $i | ($v[$i] | tojson) + (if $i < $n - 1 then "," else "" end)), ("],\"last_updated\":" + (.last_updated | tojson) + ",\"version\":" + ((.version // "1.0") | tojson) + "}")'
+
 # Initialize catalog database
 init_catalog_db() {
     if [[ ! -f "$CATALOG_DB" ]]; then
-        echo '{"videos":[],"last_updated":"'"$(_catalog_now)"'","version":"1.0"}' > "$CATALOG_DB"
+        printf '{"videos":[\n\n],"last_updated":"%s","version":"1.0"}\n' "$(_catalog_now)" > "$CATALOG_DB"
         log_verbose "Created catalog database: $CATALOG_DB"
+    elif [[ "$(head -n 1 "$CATALOG_DB" 2>/dev/null)" != '{"videos":[' ]] && command -v jq >/dev/null 2>&1; then
+        # A catalog written in another layout (pretty-printed, or on one line): rewrite it once
+        local tmp; tmp="$(mktemp)" && jq -r "$_CAT_FMT" "$CATALOG_DB" > "$tmp" 2>/dev/null && _catalog_commit "$CATALOG_DB" "$tmp"
+        rm -f "$tmp" 2>/dev/null
     fi
 
     if [[ ! -f "$CATALOG_DRIVES_DB" ]]; then
@@ -237,13 +248,56 @@ catalog_detect_mounts() {
     done
 }
 
+# Media type from a file extension, left in CAT_TYPE (video, image, audio or
+# other). Sets a variable instead of printing so the scan loop forks nothing.
+_catalog_media_type_set() {
+    local ext="${1,,}" e
+    for e in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do [[ "$e" == "$ext" ]] && { CAT_TYPE=video; return; }; done
+    for e in "${DEFAULT_IMAGE_EXTENSIONS[@]}"; do [[ "$e" == "$ext" ]] && { CAT_TYPE=image; return; }; done
+    for e in "${DEFAULT_AUDIO_EXTENSIONS[@]}"; do [[ "$e" == "$ext" ]] && { CAT_TYPE=audio; return; }; done
+    CAT_TYPE=other
+}
+
 # Media type from a file extension: video, image, audio or other.
 _catalog_media_type() {
-    local ext="${1,,}" e
-    for e in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do [[ "$e" == "$ext" ]] && { echo video; return; }; done
-    for e in "${DEFAULT_IMAGE_EXTENSIONS[@]}"; do [[ "$e" == "$ext" ]] && { echo image; return; }; done
-    for e in "${DEFAULT_AUDIO_EXTENSIONS[@]}"; do [[ "$e" == "$ext" ]] && { echo audio; return; }; done
-    echo other
+    _catalog_media_type_set "$1"
+    echo "$CAT_TYPE"
+}
+
+# SHA-256 of many files with a handful of processes instead of one per file.
+# $1 = file with NUL-separated absolute paths, $2 = how many there are.
+# Fills the global CAT_HASHES (path -> hash); a file that could not be hashed is
+# simply missing and the caller falls back to hashing it on its own.
+declare -gA CAT_HASHES=()
+_catalog_hash_files() {
+    local list="$1" total="$2" line h f n=0
+    CAT_HASHES=()
+
+    if command -v sha256sum >/dev/null 2>&1 && printf x | sha256sum -z >/dev/null 2>&1; then
+        # -z: NUL-terminated records and no escaping of unusual names
+        while IFS= read -r -d '' line; do
+            h="${line%% *}"; f="${line#*  }"
+            CAT_HASHES["$f"]="$h"
+            n=$(( n + 1 ))
+            if (( n % 100 == 0 )) && [[ "$(type -t ui_progress)" == "function" ]]; then
+                ui_progress "$n" "$total" "Hashing" "${f##*/}"
+            fi
+        done < <(xargs -0 -n 128 sha256sum -z -- < "$list" 2>/dev/null)
+    else
+        local tool=(sha256sum)
+        command -v sha256sum >/dev/null 2>&1 || tool=(shasum -a 256)
+        # Newline-terminated; names that needed escaping (a leading backslash on
+        # the hash) are skipped and hashed individually by the caller.
+        while IFS= read -r line; do
+            h="${line%% *}"; f="${line#*  }"
+            [[ "$h" == \\* ]] && continue
+            CAT_HASHES["$f"]="$h"
+            n=$(( n + 1 ))
+            if (( n % 100 == 0 )) && [[ "$(type -t ui_progress)" == "function" ]]; then
+                ui_progress "$n" "$total" "Hashing" "${f##*/}"
+            fi
+        done < <(xargs -0 -n 128 "${tool[@]}" -- < "$list" 2>/dev/null)
+    fi
 }
 
 # Fill CAT_FIND_NAME_ARGS with a find filter for the enabled media types.
@@ -261,9 +315,10 @@ _catalog_find_args() {
     done
 }
 
-# Stream "relative path, size, mtime" for every matching file under $1 as
-# NUL-separated fields. $2 = true to recurse. Uses GNU find -printf when it
-# exists (one process); otherwise one stat per file.
+# Stream "relative path <TAB> size <TAB> mtime" lines for every matching file
+# under $1. $2 = true to recurse. Uses GNU find -printf when it exists (one
+# process); otherwise one stat per file. A name containing a newline or tab
+# does not parse as three fields and is counted and skipped by the caller.
 _catalog_inventory() {
     local dir="$1" recursive="$2"
     local -a depth=()
@@ -271,12 +326,12 @@ _catalog_inventory() {
 
     if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then
         find "$dir" "${depth[@]}" -type f ! -path "*/${VMGR_TRASH_DIR:-.vmgr-trash}/*" \
-            \( "${CAT_FIND_NAME_ARGS[@]}" \) -printf '%P\0%s\0%T@\0' 2>/dev/null
+            \( "${CAT_FIND_NAME_ARGS[@]}" \) -printf '%P\t%s\t%T@\n' 2>/dev/null
     else
         local f st
         while IFS= read -r -d '' f; do
             st="$(_catalog_stat "$f")" || continue
-            printf '%s\0%s\0%s\0' "${f#"$dir"/}" "${st% *}" "${st#* }"
+            printf '%s\t%s\t%s\n' "${f#"$dir"/}" "${st% *}" "${st#* }"
         done < <(find "$dir" "${depth[@]}" -type f ! -path "*/${VMGR_TRASH_DIR:-.vmgr-trash}/*" \
                     \( "${CAT_FIND_NAME_ARGS[@]}" \) -print0 2>/dev/null)
     fi
@@ -373,82 +428,59 @@ catalog_drive() {
 
     log_info "Cataloging $drive_label ($drive_type): $path"
 
-    # What the catalog already knows about this part of the drive
-    local -A known_size=() known_mtime=() known_hash=() seen=()
-    local rel sz mt hs
-    while IFS="$_CAT_SEP" read -r rel sz mt hs; do
-        [[ -n "$rel" ]] || continue
-        known_size["$rel"]="$sz"; known_mtime["$rel"]="$mt"; known_hash["$rel"]="$hs"
-    done < <(jq -r --arg d "$drive_id" --arg p "$prefix" '
-        .videos[] | select(.drive_id == $d and (.relative_path | startswith($p)))
-        | [.relative_path, (.file_size | tostring), ((.mtime // 0) | tostring), (.hash // "")]
-        | join("\u001f")' "$CATALOG_DB" 2>/dev/null)
-
     local work
     work="$(mktemp -d)" || { log_error "Could not create a temporary directory"; return 1; }
-    : > "$work/keep"; : > "$work/new"
+    : > "$work/keep"; : > "$work/todo"
+
+    # What the catalog already knows about this part of the drive
+    _catalog_known_index "$drive_id" "$prefix" > "$work/known"
 
     _catalog_inventory "$path" "$recursive" > "$work/inventory"
-    local total=$(( $(tr -cd '\0' < "$work/inventory" | wc -c) / 3 ))
-    log_verbose "Found $total media file(s) to look at"
 
-    local added=0 updated=0 unchanged=0 removed=0 skipped=0 n=0
-    local relpath ext type hash now size mtime
+    # Sort every file into "unchanged" or "needs work" in one awk pass (a file is
+    # unchanged when its size and modification time match the catalog's record and,
+    # if hashing is on, it already has a hash).
+    local need_hash=0
+    [[ "$CATALOG_INCLUDE_HASH" == true ]] && need_hash=1
+    local added updated unchanged removed skipped total
+    local relpath ext hash size mtime now
     now="$(_catalog_now)"
-
-    while IFS= read -r -d '' rel && IFS= read -r -d '' size && IFS= read -r -d '' mtime; do
-        n=$(( n + 1 ))
-        mtime="${mtime%.*}"
-        relpath="${prefix}${rel}"
-
-        if [[ "$relpath" == *$'\n'* || "$relpath" == *"$_CAT_SEP"* ]]; then
-            skipped=$(( skipped + 1 )); continue
-        fi
-        seen["$relpath"]=1
-
-        if [[ -n "${known_size["$relpath"]+x}" && "${known_size["$relpath"]}" == "$size" \
-              && "${known_mtime["$relpath"]}" == "$mtime" \
-              && ( "$CATALOG_INCLUDE_HASH" != true || -n "${known_hash["$relpath"]}" ) ]]; then
-            printf '%s\n' "$relpath" >> "$work/keep"
-            unchanged=$(( unchanged + 1 ))
-            continue
-        fi
-
-        if [[ -n "${known_size["$relpath"]+x}" ]]; then updated=$(( updated + 1 )); else added=$(( added + 1 )); fi
-        [[ "$DRY_RUN" == true ]] && continue
-
-        ext="${rel##*.}"; [[ "$rel" == *.* ]] || ext=""
-        type="$(_catalog_media_type "$ext")"
-        hash=""
-        if [[ "$CATALOG_INCLUDE_HASH" == true ]]; then
-            hash="$(calculate_file_hash "$path/$rel")"
-        fi
-        _catalog_metadata "$path/$rel" "$type"
-
-        printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' \
-            "$relpath" "$size" "$mtime" "$hash" "$type" "${ext,,}" \
-            "$CAT_DURATION" "$CAT_RES" "$CAT_DIMS" "$CAT_CODEC" "$CAT_CAMERA" "$CAT_DATE" >> "$work/new"
-
-        if (( (added + updated) % 10 == 1 || total <= 200 )); then
-            if [[ "$(type -t ui_progress)" == "function" ]]; then
-                ui_progress "$n" "$total" "Cataloging" "$(basename "$rel")"
-            fi
-        fi
-    done < "$work/inventory"
-    progress_break
-
-    # Anything the catalog has under this folder that is no longer on disk
-    local k
-    for k in "${!known_size[@]}"; do
-        [[ -n "${seen["$k"]+x}" ]] || removed=$(( removed + 1 ))
-    done
+    read -r added updated unchanged removed skipped total < <(LC_ALL=C awk -F'\t' \
+        -v prefix="$prefix" -v needhash="$need_hash" -v known="$work/known" \
+        -v keepf="$work/keep" -v todof="$work/todo" '
+        BEGIN {
+            US = "\037"
+            while ((getline line < known) > 0) {
+                n = split(line, f, US)
+                if (n < 3) continue
+                ks[f[1]] = f[2]; km[f[1]] = f[3]; kh[f[1]] = (n >= 4 ? f[4] : "")
+            }
+            close(known)
+        }
+        {
+            if (NF != 3 || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+(\.[0-9]*)?$/ || index($1, US)) { bad++; next }
+            total++
+            rel = $1; sz = $2; mt = $3; sub(/\..*$/, "", mt)
+            rp = prefix rel
+            seen[rp] = 1
+            if ((rp in ks) && ks[rp] == sz && km[rp] == mt && (needhash != 1 || kh[rp] != "")) {
+                print rp > keepf; same++; next
+            }
+            if (rp in ks) upd++; else add++
+            print rel US sz US mt > todof
+        }
+        END {
+            for (k in ks) if (!(k in seen)) rem++
+            printf "%d %d %d %d %d %d\n", add + 0, upd + 0, same + 0, rem + 0, bad + 0, total + 0
+        }' "$work/inventory")
+    log_verbose "Found $total media file(s) to look at"
 
     STATS[files_processed]=$(( STATS[files_processed] + total ))
     STATS[catalog_added]=$(( ${STATS[catalog_added]:-0} + added ))
     STATS[catalog_updated]=$(( ${STATS[catalog_updated]:-0} + updated ))
     STATS[catalog_removed]=$(( ${STATS[catalog_removed]:-0} + removed ))
     STATS[catalog_unchanged]=$(( ${STATS[catalog_unchanged]:-0} + unchanged ))
-    (( skipped > 0 )) && log_warning "Skipped $skipped file(s) whose names contain a newline"
+    (( skipped > 0 )) && log_warning "Skipped $skipped line(s) of the file list: a name with a newline or tab in it cannot be cataloged"
 
     if [[ "$DRY_RUN" == true ]]; then
         STATS[files_previewed]=$(( ${STATS[files_previewed]:-0} + added + updated ))
@@ -457,10 +489,62 @@ catalog_drive() {
         return 0
     fi
 
-    # Merge into the catalog in one pass: keep unchanged records, drop the rest of
-    # this folder's records, add the new ones.
-    jq -R -s --arg d "$drive_id" --arg now "$now" '
-        split("\n") | map(select(length > 0) | split("\u001f") | {
+    # Phase 2: hash everything that needs it, many files per process
+    CAT_HASHES=()
+    local todo_count=$(( added + updated ))
+    if [[ "$DRY_RUN" != true && "$CATALOG_INCLUDE_HASH" == true && $todo_count -gt 0 ]]; then
+        LC_ALL=C awk -F'\037' -v p="$path/" '{ print p $1 }' "$work/todo" | tr '\n' '\0' > "$work/hashlist"
+        _catalog_hash_files "$work/hashlist" "$todo_count"
+    fi
+
+    # Phase 3: build the records (metadata, when switched on, costs one probe per file)
+    local total_todo=$todo_count i=0 vanished=0
+    while IFS="$_CAT_SEP" read -r rel size mtime; do
+        i=$(( i + 1 ))
+        # a file that disappeared since the listing (or a name that did not parse) is skipped
+        if [[ ! -f "$path/$rel" ]]; then vanished=$(( vanished + 1 )); continue; fi
+        relpath="${prefix}${rel}"
+        ext="${rel##*.}"; [[ "$rel" == *.* ]] || ext=""
+        _catalog_media_type_set "$ext"
+        hash=""
+        if [[ "$CATALOG_INCLUDE_HASH" == true ]]; then
+            hash="${CAT_HASHES["$path/$rel"]-}"
+            [[ -n "$hash" ]] || hash="$(calculate_file_hash "$path/$rel")"   # the rare file the batch missed
+        fi
+        _catalog_metadata "$path/$rel" "$CAT_TYPE"
+
+        printf '%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\x1f%s\n' \
+            "$relpath" "$size" "$mtime" "$hash" "$CAT_TYPE" "${ext,,}" \
+            "$CAT_DURATION" "$CAT_RES" "$CAT_DIMS" "$CAT_CODEC" "$CAT_CAMERA" "$CAT_DATE"
+
+        if [[ "$CATALOG_INCLUDE_METADATA" == true ]] && (( i % 10 == 1 || total_todo <= 200 )) \
+           && [[ "$(type -t ui_progress)" == "function" ]]; then
+            ui_progress "$i" "$total_todo" "Reading metadata" "${rel##*/}"
+        fi
+    done < "$work/todo" > "$work/new"
+    progress_break
+    (( vanished > 0 )) && log_verbose "$vanished file(s) vanished while scanning"
+
+    local drive_known=false
+    jq -e --arg d "$drive_id" '.drives[] | select(.drive_id == $d)' "$CATALOG_DRIVES_DB" >/dev/null 2>&1 && drive_known=true
+
+    if (( added + updated + removed == 0 )) && $drive_known; then
+        # Nothing changed: the catalog file is left alone, only the drive's timestamps move
+        jq --arg id "$drive_id" --arg now "$now" '
+            (.drives[] | select(.drive_id == $id)) |= (.last_seen = $now | .last_scanned = $now)
+            | .last_updated = $now' "$CATALOG_DRIVES_DB" > "$work/drives.json" \
+            && _catalog_commit "$CATALOG_DRIVES_DB" "$work/drives.json"
+        rm -rf "$work"
+        log_success "Catalog is up to date: ${unchanged} file(s) unchanged"
+        return 0
+    fi
+
+    # Merge into the catalog as a text pass: keep the records of other drives and
+    # folders and this folder's unchanged records, drop the rest of this folder's
+    # records, add the new ones. Nothing is parsed, so memory stays small however
+    # large the catalog is.
+    jq -R -c --arg d "$drive_id" --arg now "$now" '
+        split("\u001f") | {
             video_id: ($d + ":" + .[0]),
             drive_id: $d,
             filename: (.[0] | split("/") | .[-1]),
@@ -477,25 +561,35 @@ catalog_drive() {
             camera: (.[10] | if . == "" then null else . end),
             date_taken: (.[11] | if . == "" then null else . end),
             last_scanned: $now
-        })' "$work/new" > "$work/new.json"
+        }' "$work/new" > "$work/new.ndjson" || { log_error "Could not build the new records"; rm -rf "$work"; return 1; }
 
-    jq --arg d "$drive_id" --arg p "$prefix" --arg now "$now" \
-       --rawfile keep "$work/keep" --slurpfile new "$work/new.json" '
-        ($keep | split("\n") | map(select(length > 0) | {(.): true}) | add // {}) as $k
-        | .videos |= (map(select(.drive_id != $d
-                                 or ((.relative_path | startswith($p)) | not)
-                                 or $k[.relative_path])) + $new[0])
-        | .last_updated = $now' "$CATALOG_DB" > "$work/db.json" \
-        && _catalog_commit "$CATALOG_DB" "$work/db.json" || {
-            log_error "Could not update the catalog database"
-            rm -rf "$work"
-            return 1
-        }
+    {
+        LC_ALL=C awk -v d="$drive_id" -v p="$prefix" -v keepf="$work/keep" "
+            $_CAT_AWK_UNESCAPE"'
+            BEGIN { while ((getline l < keepf) > 0) k[l] = 1; close(keepf); needle = "\"drive_id\":\"" d "\"" }
+            /^\{"video_id"/ {
+                line = $0; sub(/,$/, "", line)
+                if (index(line, needle) == 0 || !match(line, /"relative_path":"([^"\\]|\\.)*"/)) { print line; next }
+                rel = unescape(substr(line, RSTART + 17, RLENGTH - 18))
+                if (substr(rel, 1, length(p)) != p) { print line; next }
+                if (rel in k) print line
+            }' "$CATALOG_DB"
+        cat "$work/new.ndjson"
+    } | sed '$!s/$/,/' > "$work/records"
+    {
+        echo '{"videos":['
+        cat "$work/records"
+        printf '],"last_updated":"%s","version":"1.0"}\n' "$now"
+    } > "$work/db.json"
+    _catalog_commit "$CATALOG_DB" "$work/db.json" || {
+        log_error "Could not update the catalog database"
+        rm -rf "$work"
+        return 1
+    }
 
     # Drive record: totals recomputed from the catalog
     local count size_total
-    read -r count size_total < <(jq -r --arg d "$drive_id" \
-        '[.videos[] | select(.drive_id == $d)] | "\(length) \(map(.file_size) | add // 0)"' "$CATALOG_DB")
+    read -r count size_total < <(_catalog_drive_totals "$drive_id")
     jq --arg id "$drive_id" --arg dlabel "$drive_label" --arg dtype "$drive_type" --arg mp "$mount_point" \
        --arg now "$now" --argjson count "${count:-0}" --argjson size "${size_total:-0}" '
         ((.drives[] | select(.drive_id == $id) | .first_seen) // $now) as $first
@@ -541,23 +635,74 @@ catalog_prune_offline() {
                                     or ((now - ((.last_seen // $now) | fromdateiso8601)) <= ($days * 86400))))
           else . end' "$CATALOG_DRIVES_DB" > "$tmp_d" || { rm -f "$tmp_d" "$tmp_c"; return 1; }
 
-    # Drop the files of any drive that was just forgotten
-    jq --slurpfile drives "$tmp_d" '
-        ($drives[0].drives | map(.drive_id)) as $keep
-        | .videos |= map(select(.drive_id as $i | $keep | map(. == $i) | any))' "$CATALOG_DB" > "$tmp_c" || { rm -f "$tmp_d" "$tmp_c"; return 1; }
-
+    # Only when a drive was actually forgotten does the (large) catalog file need rewriting
+    local before after
+    before="$(jq '.drives | length' "$CATALOG_DRIVES_DB")"
+    after="$(jq '.drives | length' "$tmp_d")"
+    if [[ "$after" != "$before" ]]; then
+        jq -r --slurpfile drives "$tmp_d" '
+            ($drives[0].drives | map(.drive_id)) as $keep
+            | .videos |= map(select(.drive_id as $i | $keep | map(. == $i) | any)) | '"$_CAT_FMT" "$CATALOG_DB" > "$tmp_c" || { rm -f "$tmp_d" "$tmp_c"; return 1; }
+        _catalog_commit "$CATALOG_DB" "$tmp_c"
+    fi
     _catalog_commit "$CATALOG_DRIVES_DB" "$tmp_d"
-    _catalog_commit "$CATALOG_DB" "$tmp_c"
     rm -f "$tmp_d" "$tmp_c"
+}
+
+# awk function text: undo the JSON string escapes jq writes in a path (\\ and \" and
+# \/). Other escapes (control characters) are left as they are, so such a file simply
+# looks new on the next scan; that is harmless.
+_CAT_AWK_UNESCAPE='
+    function unescape(s,   out, i, n, c) {
+        if (index(s, "\\") == 0) return s            # the common case: nothing to undo
+        out = ""; n = length(s)
+        for (i = 1; i <= n; i++) {
+            c = substr(s, i, 1)
+            if (c == "\\" && i < n) {
+                i++; c = substr(s, i, 1)
+                if (c == "\"" || c == "\\" || c == "/") out = out c; else out = out "\\" c
+            } else out = out c
+        }
+        return out
+    }'
+
+# Print "relative_path US size US mtime US hash" for this drive's records under a
+# folder prefix, straight from the catalog text (no JSON parsing). Args: drive_id, prefix
+_catalog_known_index() {
+    LC_ALL=C grep -F "\"drive_id\":\"$1\"" "$CATALOG_DB" 2>/dev/null | LC_ALL=C awk -v p="$2" "
+        $_CAT_AWK_UNESCAPE"'
+        /^\{"video_id"/ {
+            if (!match($0, /"relative_path":"([^"\\]|\\.)*"/)) next
+            rel = unescape(substr($0, RSTART + 17, RLENGTH - 18))
+            if (substr(rel, 1, length(p)) != p) next
+            size = 0; mt = 0; h = ""
+            if (match($0, /"file_size":[0-9]+/)) size = substr($0, RSTART + 12, RLENGTH - 12)
+            if (match($0, /"mtime":[0-9]+/)) mt = substr($0, RSTART + 8, RLENGTH - 8)
+            if (match($0, /"hash":"[0-9a-fA-F]+"/)) h = substr($0, RSTART + 8, RLENGTH - 9)
+            printf "%s\037%s\037%s\037%s\n", rel, size, mt, h
+        }'
+}
+
+# "count bytes" for one drive, read from the one-record-per-line catalog with
+# grep and awk (no JSON parsing).
+_catalog_drive_totals() {
+    LC_ALL=C grep -F "\"drive_id\":\"$1\"" "$CATALOG_DB" 2>/dev/null | LC_ALL=C awk '
+        { if (match($0, /"file_size":[0-9]+/)) { n++; b += substr($0, RSTART + 12, RLENGTH - 12) } }
+        END { printf "%d %.0f\n", n, b }'
+}
+
+# "video 120 · image 3" for one drive (media types and their counts).
+_catalog_type_counts() {
+    LC_ALL=C grep -F "\"drive_id\":\"$1\"" "$CATALOG_DB" 2>/dev/null | LC_ALL=C awk '
+        { if (match($0, /"media_type":"[a-z]+"/)) c[substr($0, RSTART + 14, RLENGTH - 15)]++ }
+        END { for (t in c) print t, c[t] }' | sort | awk '{ printf "%s%s %d", (NR > 1 ? " · " : ""), $1, $2 } END { if (NR) print "" }'
 }
 
 # "drives files bytes" for the whole catalog (0 0 0 when empty or jq is missing).
 catalog_stats() {
-    command -v jq >/dev/null 2>&1 && [[ -f "$CATALOG_DB" && -f "$CATALOG_DRIVES_DB" ]] || { echo "0 0 0"; return; }
-    local d f
-    d="$(jq '.drives | length' "$CATALOG_DRIVES_DB" 2>/dev/null)"
-    f="$(jq -r '"\(.videos | length) \([.videos[].file_size] | add // 0)"' "$CATALOG_DB" 2>/dev/null)"
-    echo "${d:-0} ${f:-0 0}"
+    command -v jq >/dev/null 2>&1 && [[ -f "$CATALOG_DRIVES_DB" ]] || { echo "0 0 0"; return; }
+    # The drive records carry their own totals, so the (large) catalog file is not read
+    jq -r '"\(.drives | length) \([.drives[].file_count] | add // 0) \([.drives[].total_size] | add // 0)"' "$CATALOG_DRIVES_DB" 2>/dev/null || echo "0 0 0"
 }
 
 # List cataloged drives with their status and totals.
@@ -577,9 +722,7 @@ list_cataloged_drives() {
         else
             status="offline"; dot="${UI_DOT_OFF:-o}"; color="${UI_DIM:-$COLOR_RED}"
         fi
-        kinds="$(jq -r --arg d "$id" '
-            [.videos[] | select(.drive_id == $d)] | group_by(.media_type)
-            | map("\(.[0].media_type) \(length)") | join(" · ")' "$CATALOG_DB" 2>/dev/null)"
+        kinds="$(_catalog_type_counts "$id")"
         printf '  %s%s%s %s%s%s  %s%s%s\n' "$color" "$dot" "$COLOR_RESET" "$COLOR_BOLD" "$label" "$COLOR_RESET" "$color" "$status" "$COLOR_RESET"
         printf '      %s%s %s %s file(s) %s %s%s\n' "${UI_DIM:-}" "$type" "${UI_SEP:-·}" "$count" "${UI_SEP:-·}" "$(format_bytes "$size")" "$COLOR_RESET"
         [[ -n "$kinds" ]] && printf '      %s%s%s\n' "${UI_DIM:-}" "$kinds" "$COLOR_RESET"
@@ -610,12 +753,22 @@ search_catalog() {
     local online_json
     online_json="$(_catalog_online_json)"
 
-    local tmp; tmp="$(mktemp)"
-    jq -r --arg t "$term" --arg mt "$media_filter" --argjson limit "$CATALOG_SEARCH_LIMIT" \
+    # Pre-filter: the catalog has one record per line, so grep can cut it down to the
+    # records that mention the term anywhere (a superset of the real matches) before
+    # jq does the exact matching. A term with a quote or backslash is written
+    # differently inside the JSON, so it skips the pre-filter.
+    local tmp cand
+    tmp="$(mktemp)"; cand="$(mktemp)"
+    if [[ "$term" == *\"* || "$term" == *\\* ]]; then
+        grep '^{"video_id"' "$CATALOG_DB" | sed 's/,$//' > "$cand"
+    else
+        grep -iF -- "$term" "$CATALOG_DB" | grep '^{"video_id"' | sed 's/,$//' > "$cand"
+    fi
+    jq -r -s --arg t "$term" --arg mt "$media_filter" --argjson limit "$CATALOG_SEARCH_LIMIT" \
           --argjson online "$online_json" --slurpfile drives "$CATALOG_DRIVES_DB" '
         ($t | ascii_downcase) as $q
         | ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $labels
-        | [.videos[]
+        | [.[]
            | select($mt == "all" or .media_type == $mt)
            | select(((.relative_path | ascii_downcase) | contains($q))
                     or (($q | test("^[0-9a-f]{6,}$")) and ((.hash // "") | startswith($q)))
@@ -626,7 +779,8 @@ search_catalog() {
           ($all[:$limit][] | [($labels[.drive_id] // "unknown"),
                               (if $online[.drive_id] then "online" else "offline" end),
                               .relative_path, (.file_size | tostring), .media_type, (.resolution // .dimensions // "")]
-                            | join("\u001f"))' "$CATALOG_DB" > "$tmp" 2>/dev/null
+                            | join("\u001f"))' "$cand" > "$tmp" 2>/dev/null
+    rm -f "$cand"
 
     local total=0 label state rel size mtype res shown=0
     while IFS="$_CAT_SEP" read -r label state rel size mtype res; do
@@ -748,12 +902,12 @@ catalog_trash_duplicates() {
 
     # The moved files are no longer at those paths: drop them from the catalog now
     if (( moved > 0 )); then
-        jq --rawfile ids "$work/removed" --arg now "$(_catalog_now)" '
+        jq -r --rawfile ids "$work/removed" --arg now "$(_catalog_now)" '
             ($ids | split("\n") | map(select(length > 0) | {(.): true}) | add // {}) as $r
-            | .videos |= map(select($r[.video_id] | not)) | .last_updated = $now' "$CATALOG_DB" > "$work/db.json" \
+            | .videos |= map(select($r[.video_id] | not)) | .last_updated = $now | '"$_CAT_FMT" "$CATALOG_DB" > "$work/db.json" \
             && _catalog_commit "$CATALOG_DB" "$work/db.json"
         local count size_total
-        read -r count size_total < <(jq -r --arg d "$drive" '[.videos[] | select(.drive_id == $d)] | "\(length) \(map(.file_size) | add // 0)"' "$CATALOG_DB")
+        read -r count size_total < <(_catalog_drive_totals "$drive")
         jq --arg d "$drive" --argjson c "${count:-0}" --argjson s "${size_total:-0}" \
             '(.drives[] | select(.drive_id == $d)) |= (.file_count = $c | .total_size = $s)' "$CATALOG_DRIVES_DB" > "$work/drives.json" \
             && _catalog_commit "$CATALOG_DRIVES_DB" "$work/drives.json"
@@ -790,23 +944,25 @@ catalog_export_report() {
             | "\(.drive_label)  [\(.drive_type)]  \(.mount_point)\n  files: \(.file_count)   size: \(.total_size) bytes   last scanned: \(.last_scanned // "never")"' "$CATALOG_DRIVES_DB"
         echo ""
         echo "=== TOTALS ==="
-        jq -r '"Files: \(.videos | length)   Size: \([.videos[].file_size] | add // 0) bytes"' "$CATALOG_DB"
-        echo ""
-        echo "By media type:"
-        jq -r '.videos | group_by(.media_type) | map("  \(.[0].media_type): \(length) files, \(map(.file_size) | add) bytes")[]' "$CATALOG_DB"
-        echo ""
-        echo "By extension (top 15):"
-        jq -r '.videos | group_by(.extension) | map({e: .[0].extension, n: length}) | sort_by(-.n) | .[:15][] | "  .\(.e): \(.n)"' "$CATALOG_DB"
-        echo ""
-        echo "Largest files (top 10):"
+        # One pass over the catalog for every section below
         jq -r --slurpfile drives "$CATALOG_DRIVES_DB" '
             ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $l
-            | .videos | sort_by(-.file_size) | .[:10][]
-            | "  \(.file_size) bytes  [\($l[.drive_id] // "unknown")] \(.relative_path)"' "$CATALOG_DB"
-        echo ""
-        echo "=== DUPLICATES ==="
-        jq -r '[.videos[] | select((.hash // "") != "")] | group_by(.hash) | map(select(length > 1))
-            | "Groups: \(length)   Extra copies: \(map(length - 1) | add // 0)   Wasted: \(map((length - 1) * .[0].file_size) | add // 0) bytes"' "$CATALOG_DB"
+            | .videos as $v
+            | "Files: \($v | length)   Size: \([$v[].file_size] | add // 0) bytes",
+              "",
+              "By media type:",
+              ($v | group_by(.media_type) | map("  \(.[0].media_type): \(length) files, \(map(.file_size) | add) bytes")[]),
+              "",
+              "By extension (top 15):",
+              ($v | group_by(.extension) | map({e: .[0].extension, n: length}) | sort_by(-.n) | .[:15][] | "  .\(.e): \(.n)"),
+              "",
+              "Largest files (top 10):",
+              ($v | sort_by(-.file_size) | .[:10][] | "  \(.file_size) bytes  [\($l[.drive_id] // "unknown")] \(.relative_path)"),
+              "",
+              "=== DUPLICATES ===",
+              ([$v[] | select((.hash // "") != "")] | group_by(.hash) | map(select(length > 1))
+               | "Groups: \(length)   Extra copies: \(map(length - 1) | add // 0)   Wasted: \(map((length - 1) * .[0].file_size) | add // 0) bytes")
+            ' "$CATALOG_DB"
     } > "$out"
 
     echo "$out"

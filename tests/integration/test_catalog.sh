@@ -23,6 +23,9 @@ fi
 
 _strip() { sed 's/\x1b\[[0-9;]*m//g'; }
 
+# Keep a copy of the real batch hasher so tests can count how many files reach it
+eval "$(declare -f _catalog_hash_files | sed '1s/_catalog_hash_files/_orig_catalog_hash_files/')"
+
 _setup() {
     TEST_TMPDIR="$(mktemp -d)"
     mkdir -p "$TEST_TMPDIR/d1/Movies/Show" "$TEST_TMPDIR/d1/Photos" "$TEST_TMPDIR/d2/Backup"
@@ -48,6 +51,8 @@ _setup() {
     get_drive_id() { case "$1" in "$D1") echo id-one ;; "$D2") echo id-two ;; "/") echo id-root ;; *) echo "id-$(basename "$1")" ;; esac; }
     get_drive_label() { case "$1" in "$D1") echo "Drive One" ;; "$D2") echo "Drive Two" ;; *) basename "$1" ;; esac; }
     detect_drive_type() { echo Local; }
+    # every file the scan asks to be hashed is logged, one per line
+    _catalog_hash_files() { tr '\0' '\n' < "$1" >> "$HASH_CALLS"; _orig_catalog_hash_files "$@"; }
     calculate_file_hash() { echo "$1" >> "$HASH_CALLS"; _catalog_hash_string "$(cat "$1")"; }
 }
 _teardown() { [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPDIR"; }
@@ -523,5 +528,66 @@ test_a_later_scan_ignores_the_drive_trash() {
     reset_statistics
     catalog_drive "$D2" true >/dev/null 2>&1
     assert_equals "0" "${STATS[catalog_added]}" "rescan: trashed files are not cataloged again"
+    _teardown
+}
+
+# ── Timestamps ────────────────────────────────────────────────────────────────
+
+_is_iso() { [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; }
+
+test_a_scan_stamps_the_catalog_and_the_drive() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    _is_iso "$(jq -r '.last_updated' "$CATALOG_DB")";                      assert_equals "0" "$?" "timestamps: the catalog has a last_updated"
+    _is_iso "$(jq -r '.videos[0].last_scanned' "$CATALOG_DB")";            assert_equals "0" "$?" "timestamps: each record has last_scanned"
+    _is_iso "$(jq -r '.drives[0].last_scanned' "$CATALOG_DRIVES_DB")";     assert_equals "0" "$?" "timestamps: the drive has last_scanned"
+    _is_iso "$(jq -r '.drives[0].last_seen' "$CATALOG_DRIVES_DB")";        assert_equals "0" "$?" "timestamps: the drive has last_seen"
+    _is_iso "$(jq -r '.drives[0].first_seen' "$CATALOG_DRIVES_DB")";       assert_equals "0" "$?" "timestamps: the drive has first_seen"
+    _teardown
+}
+
+test_an_unchanged_rescan_still_moves_the_drive_timestamps() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    jq '.drives[0].last_seen = "2001-01-01T00:00:00Z" | .drives[0].last_scanned = "2001-01-01T00:00:00Z"' "$CATALOG_DRIVES_DB" > "$TEST_TMPDIR/x" && mv "$TEST_TMPDIR/x" "$CATALOG_DRIVES_DB"
+    local before_db; before_db="$(cat "$CATALOG_DB")"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    _is_iso "$(jq -r '.drives[0].last_seen' "$CATALOG_DRIVES_DB")"
+    assert_equals "0" "$?" "unchanged rescan: last_seen is refreshed to a real time"
+    assert_not_equals "2001-01-01T00:00:00Z" "$(jq -r '.drives[0].last_scanned' "$CATALOG_DRIVES_DB")" "unchanged rescan: last_scanned moves"
+    assert_equals "$before_db" "$(cat "$CATALOG_DB")" "unchanged rescan: the catalog file itself is not rewritten"
+    _teardown
+}
+
+test_the_catalog_file_has_one_record_per_line_and_is_valid_json() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    jq -e . "$CATALOG_DB" >/dev/null 2>&1; assert_equals "0" "$?" "layout: valid JSON"
+    assert_equals "4" "$(grep -c '^{"video_id"' "$CATALOG_DB")" "layout: one record per line"
+    assert_equals '{"videos":[' "$(head -n 1 "$CATALOG_DB")" "layout: the first line opens the array"
+    _teardown
+}
+
+test_a_catalog_in_another_layout_is_converted_once() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    jq . "$CATALOG_DB" > "$TEST_TMPDIR/pretty" && mv "$TEST_TMPDIR/pretty" "$CATALOG_DB"      # pretty-printed
+    init_catalog_db
+    assert_equals '{"videos":[' "$(head -n 1 "$CATALOG_DB")" "convert: a pretty-printed catalog is rewritten"
+    assert_equals "4" "$(grep -c '^{"video_id"' "$CATALOG_DB")" "convert: every record survives"
+    _teardown
+}
+
+test_names_with_quotes_and_backslashes_are_found() {
+    _setup
+    echo "q" > "$D1/Movies/say \"hello\" now.mp4"
+    echo "b" > "$D1/Movies/back\\slash.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    assert_contains 'say "hello" now.mp4' "$(search_catalog 'say "hello"' all 2>&1 | _strip)" "search: a term with a quote still matches"
+    assert_contains 'back\slash.mp4' "$(search_catalog 'back\slash' all 2>&1 | _strip)" "search: a term with a backslash still matches"
+    # and a rescan recognises the file instead of treating it as new
+    reset_statistics
+    catalog_drive "$D1" true >/dev/null 2>&1
+    assert_equals "0" "${STATS[catalog_added]}" "rescan: odd names are recognised as unchanged"
     _teardown
 }
