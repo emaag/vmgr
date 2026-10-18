@@ -546,9 +546,17 @@ browse_directory() {
         return $?
     fi
 
+    # Keep the tty non-canonical for the whole session. `read -n` only does that
+    # while it runs, so a key arriving mid-redraw would otherwise be handled by
+    # the line discipline (a backspace is swallowed as "erase").
+    local saved_tty
+    saved_tty="$(stty -g 2>/dev/null)" || saved_tty=""
+    [[ -n "$saved_tty" ]] && stty -icanon -echo min 1 time 0 2>/dev/null
+
     printf '\033[?25l'
     _browser_interactive "$current_dir"
     local rc=$?
+    [[ -n "$saved_tty" ]] && stty "$saved_tty" 2>/dev/null
     trap - WINCH
     printf '\033[?25h\033[2J\033[H'
     return $rc
