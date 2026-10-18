@@ -391,7 +391,7 @@ scanned (on the same drive, so it is instant even for large videos), keeping eac
 (duplicates, flatten, image conversion, subtitles, organize, the catalog) skips `.vmgr-trash`. *Utilities → Empty Trash* (or
 `--empty-trash`) lists each trash with its size, asks, and then deletes for good; the undo logs that pointed into it are retired.
 
-**Limits.** Image conversion is not undoable. If you switch **Settings → Granular Controls → Undo System** off, nothing is recorded
+**Limits.** If you switch **Settings → Granular Controls → Undo System** off, nothing is recorded
 and duplicates are deleted permanently (with a typed `yes`). Undo restores files to their places but does not re-add them to the
 catalog: rescan the drive.
 
@@ -444,7 +444,7 @@ subfolders). If the folder only contains subfolders of videos, the prompt says s
 **[3] Fix Bracket Spacing**: only `]word` → `] word`
 **[4] Flatten Directory**: moves every video from the subfolders up into the folder (name conflicts get a `(1)` suffix)
 **[5] Full Cleanup**: rename, then a duplicate report
-**[6] Image Operations**: convert JPEG/PNG/WebP/HEIC (or all) to JPG; needs ImageMagick; has its own Recursive and Dry run toggles; not undoable
+**[6] Image Operations**: convert JPEG/PNG/WebP/HEIC (or all) to JPG; needs ImageMagick; has its own Recursive and Dry run toggles
 **[7] Batch Processing**: the same operations over several folders (below)
 **[8] Automated Workflows**: multi-step clean-ups (below)
 **[D] Toggle Dry Run**: the header shows the state
@@ -1282,7 +1282,7 @@ A: Only names and locations. Video content is never touched (image conversion cr
 A: They are moved to a hidden `.vmgr-trash` folder, not deleted, so **Utilities → Undo Last Operation** puts them back. They are only gone for good after **Utilities → Empty Trash**, or if you switch the Undo System off.
 
 **Q: Can I undo renames?**  
-A: Yes. Renames, dash removal, spacing fixes, flattening, "organize by subfolder" and duplicate removal are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. Converting images cannot be undone, so back those up first.
+A: Yes. Renames, dash removal, spacing fixes, flattening, "organize by subfolder" and duplicate removal are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. Image conversions are recorded too: Undo puts the originals back from the folder's `.vmgr-trash`.
 
 **Q: Can it find the same file on two different drives?**  
 A: Yes: scan each drive with the **Multi-Drive Catalog** ([4]); then *Find Duplicate Files* compares hashes across all of them, and the catalog can be searched even when a drive is unplugged.

@@ -8,7 +8,7 @@
 #
 # Dependencies: core.sh, logging.sh
 # Module: config.sh
-# Version: 1.2.0
+# Version: 1.9.0
 # Date: November 8, 2025
 #
 ################################################################################
