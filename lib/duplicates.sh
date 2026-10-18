@@ -204,10 +204,8 @@ find_duplicates() {
 find_duplicates_in_catalog() {
     init_catalog_db
 
-    local catalog_json=$(cat "$CATALOG_DB")
-
     # Group by hash and filter only groups with more than 1 file
-    local duplicates=$(echo "$catalog_json" | jq -r '
+    local duplicates=$(jq -r '
         [.videos[] | select(.hash != null and .hash != "")] |
         group_by(.hash) |
         map(select(length > 1)) |
@@ -227,7 +225,7 @@ find_duplicates_in_catalog() {
                 last_scanned: .last_scanned
             })
         })
-    ')
+    ' "$CATALOG_DB")
 
     echo "$duplicates"
 }
@@ -236,10 +234,8 @@ find_duplicates_in_catalog() {
 find_similar_images() {
     init_catalog_db
 
-    local catalog_json=$(cat "$CATALOG_DB")
-
     # Group images by dimensions
-    local similar=$(echo "$catalog_json" | jq -r '
+    local similar=$(jq -r '
         [.videos[] | select(.media_type == "image" and .dimensions != null and .dimensions != "")] |
         group_by(.dimensions) |
         map(select(length > 1)) |
@@ -256,86 +252,67 @@ find_similar_images() {
                 date_taken: .date_taken
             })
         })
-    ')
+    ' "$CATALOG_DB")
 
     echo "$similar"
 }
 
-# Display duplicate report
+# Display the cross-drive duplicate report: groups of files with the same hash,
+# across every cataloged drive (drives that are offline are included).
 show_duplicates_report() {
     local media_filter="${1:-all}"
 
-    log_info "Scanning for duplicates..."
+    command -v jq >/dev/null 2>&1 || { log_error "The catalog needs jq"; return 1; }
 
-    local duplicates=$(find_duplicates_in_catalog)
-    local dup_count=$(echo "$duplicates" | jq 'length')
+    local duplicates dup_count
+    duplicates="$(find_duplicates_in_catalog)"
+    [[ "$media_filter" != all ]] && duplicates="$(jq --arg m "$media_filter" \
+        'map(.files |= map(select(.media_type == $m)) | .count = (.files | length)) | map(select(.count > 1))' <<< "$duplicates")"
+    dup_count="$(jq 'length' <<< "$duplicates" 2>/dev/null)"
 
-    if [[ "$dup_count" -eq 0 ]] || [[ "$dup_count" == "null" ]]; then
-        log_info "No duplicates found"
+    if [[ -z "$dup_count" || "$dup_count" == "null" || "$dup_count" -eq 0 ]]; then
+        log_info "No duplicates found in the catalog"
+        if [[ "$(jq '[.videos[] | select((.hash // "") != "")] | length' "$CATALOG_DB" 2>/dev/null)" == "0" ]]; then
+            log_info "Nothing in the catalog has a hash yet. Turn on Include Hash in Catalog Settings and scan again."
+        fi
         return 0
     fi
 
+    local id mp online_json='{}'
+    local -a on=()
+    while IFS=$'\x1f' read -r id mp; do
+        _catalog_mount_online "$mp" && on+=("$id")
+    done < <(jq -r '.drives[] | [.drive_id, .mount_point] | join("\u001f")' "$CATALOG_DRIVES_DB" 2>/dev/null)
+    (( ${#on[@]} > 0 )) && online_json="$(printf '%s\n' "${on[@]}" | jq -R '{(.): true}' | jq -s 'add')"
+
+    local n=0 line kind count size label state rel dot color
+    while IFS=$'\x1f' read -r kind count size label state rel; do
+        if [[ "$kind" == GROUP ]]; then
+            n=$(( n + 1 ))
+            if [[ "$(type -t ui_dup_group)" == "function" ]]; then
+                ui_dup_group "$n" "$count" "$(format_bytes "$size")"
+            else
+                echo "Group $n: $count copies, $(format_bytes "$size") each"
+            fi
+        else
+            if [[ "$state" == online ]]; then dot="${UI_DOT_ON:-*}"; color="${UI_OK:-$COLOR_GREEN}"
+            else dot="${UI_DOT_OFF:-o}"; color="${UI_DIM:-$COLOR_RED}"; fi
+            printf '    %s%s%s %s[%s]%s %s\n' "$color" "$dot" "$COLOR_RESET" "${UI_ACCENT:-$COLOR_CYAN}" "$label" "$COLOR_RESET" "$rel"
+        fi
+    done < <(jq -r --argjson online "$online_json" --slurpfile drives "$CATALOG_DRIVES_DB" '
+        ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $labels
+        | .[] | . as $g
+        | (["GROUP", ($g.count | tostring), (($g.total_size / $g.count) | floor | tostring), "", "", ""] | join("\u001f")),
+          ($g.files[] | ["FILE", "", "", ($labels[.drive_id] // "unknown"), (if $online[.drive_id] then "online" else "offline" end), .relative_path] | join("\u001f"))
+        ' <<< "$duplicates")
+
+    local wasted copies
+    wasted="$(jq '[.[] | (.total_size - (.total_size / .count))] | add | floor' <<< "$duplicates")"
+    copies="$(jq '[.[] | (.count - 1)] | add' <<< "$duplicates")"
     echo ""
-    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}${COLOR_YELLOW}  DUPLICATE FILES REPORT${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo ""
-
-    local group_num=0
-    echo "$duplicates" | jq -c '.[]' | while IFS= read -r group; do
-        ((group_num++))
-
-        local hash=$(echo "$group" | jq -r '.hash' | cut -c1-16)
-        local count=$(echo "$group" | jq -r '.count')
-        local total_size=$(echo "$group" | jq -r '.total_size')
-        local wasted_size=$((total_size - total_size / count))
-
-        echo -e "${COLOR_BOLD}${COLOR_YELLOW}${SYMBOL_WARN} Duplicate Group #$group_num${COLOR_RESET}"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Hash: ${COLOR_WHITE}$hash...${COLOR_RESET}"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Copies: ${COLOR_RED}$count files${COLOR_RESET}"
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(format_bytes $wasted_size)${COLOR_RESET}"
-        echo ""
-
-        local file_num=0
-        echo "$group" | jq -c '.files[]' | while IFS= read -r file; do
-            ((file_num++))
-
-            local filename=$(echo "$file" | jq -r '.filename')
-            local media_type=$(echo "$file" | jq -r '.media_type')
-            local size=$(echo "$file" | jq -r '.file_size')
-            local drive_id=$(echo "$file" | jq -r '.drive_id')
-
-            # Get drive info
-            local drive_label=$(cat "$CATALOG_DRIVES_DB" | jq -r --arg id "$drive_id" \
-                '.drives[] | select(.drive_id == $id) | .drive_label' 2>/dev/null || echo "Unknown")
-
-            # Media type icon
-            local type_icon="📄"
-            case "$media_type" in
-                video) type_icon="🎬" ;;
-                image) type_icon="🖼️" ;;
-                audio) type_icon="🎵" ;;
-            esac
-
-            echo -e "    ${COLOR_BRIGHT_GREEN}[$file_num]${COLOR_RESET} $type_icon ${COLOR_WHITE}$filename${COLOR_RESET}"
-            echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Drive: ${COLOR_WHITE}$drive_label${COLOR_RESET}"
-            echo -e "        ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} Size: ${COLOR_WHITE}$(format_bytes $size)${COLOR_RESET}"
-        done
-
-        echo ""
-    done
-
-    # Calculate total wasted space
-    local total_wasted=$(echo "$duplicates" | jq '[.[] | (.total_size - (.total_size / .count))] | add')
-    local total_dupes=$(echo "$duplicates" | jq '[.[] | .count] | add')
-
-    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}${COLOR_WHITE}Summary:${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Duplicate Groups: ${COLOR_RED}$dup_count${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Total Duplicate Files: ${COLOR_RED}$total_dupes${COLOR_RESET}"
-    echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} Wasted Space: ${COLOR_RED}$(format_bytes $total_wasted)${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}${COLOR_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo ""
+    log_info "${dup_count} duplicate group(s), ${copies} extra cop$([[ "$copies" == 1 ]] && echo y || echo ies), $(format_bytes "${wasted:-0}") wasted"
+    STATS[duplicates_found]=$(( ${STATS[duplicates_found]:-0} + ${copies:-0} ))
+    return 0
 }
 
 ################################################################################

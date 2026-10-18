@@ -9,7 +9,7 @@ _vmgr_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Main commands
-    local commands="rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch"
+    local commands="rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch catalog catalog-list catalog-search catalog-duplicates catalog-report"
 
     # Special commands (prefixed with --)
     local special_commands="--organize --undo-organize --list-undo"
@@ -36,6 +36,7 @@ _vmgr_completion() {
         --organize-search
         --undo-organize
         --list-undo
+        --empty-trash
     "
 
     # Whisper models
@@ -74,7 +75,7 @@ _vmgr_completion() {
             COMPREPLY=( $(compgen -W "${commands} ${options}" -- ${cur}) )
             return 0
             ;;
-        rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean)
+        rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|catalog)
             # After a command, offer directory completion
             COMPREPLY=( $(compgen -d -- ${cur}) )
             return 0

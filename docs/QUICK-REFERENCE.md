@@ -292,6 +292,21 @@ vmgr
 
 ---
 
+## 🗂️ Multi-Drive Catalog
+
+```bash
+vmgr catalog /mnt/d                    # scan a drive or folder (incremental)
+vmgr catalog-list                      # drives: online/offline, totals
+vmgr catalog-search "name" [video|image|audio]   # also: hash prefix, 1920x1080, camera
+vmgr catalog-duplicates                # same hash on different drives
+vmgr catalog-report [file]             # text report
+```
+
+Needs `jq`. Rescans skip unchanged files; offline drives stay searchable. Data: `~/.video-manager-catalog.json`,
+`~/.video-manager-drives.json`.
+
+---
+
 ## 🔗 Key File Locations
 
 ```bash

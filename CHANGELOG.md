@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Multi-Drive Catalog** (previously a stub): scan a drive or folder into a catalog of every media file with its size, modification
+  time, SHA-256 hash and metadata (video/audio resolution, codec and duration via `ffprobe`; image dimensions and camera via
+  `exiftool` or ImageMagick). Scans are **incremental**: files whose size and modification time are unchanged are not hashed or
+  probed again, and the run reports `new / updated / removed / unchanged`. A scan only changes records under the folder scanned.
+  Drives are identified once (UUID, Windows volume ID, or a hash of the mount point) and paths are stored relative to the mount
+  point.
+- **Cataloged Drives** lists each drive as online or offline with type, totals, a per-media-type breakdown and last scan.
+  **Search** matches names and folders, a hash prefix, an exact resolution or a camera, and includes drives that are offline (marked
+  with a hollow dot). **Duplicates** are found across every drive and name the drive each copy is on. **Export** writes a text
+  report. Offline drives are forgotten after `CATALOG_OFFLINE_RETENTION` days (0 keeps them).
+- **Catalog Several Drives** uses the Batch Processing queue screen and per-drive results list; the scan screen lists detected
+  drives (`/mnt/*`, `/media`, `/Volumes`) with free space.
+- Command line: `catalog <dir>`, `catalog-list`, `catalog-search <term> [video|image|audio]`, `catalog-duplicates`,
+  `catalog-report [file]` (with tab completion). `--dry-run catalog` previews the counts without writing.
+
+### Fixed
+- Drive detection: a mount point of `/` was typed "Network" (the check grepped `mount` for `/`, which matches every line) and
+  labelled `/`; it is now matched exactly and called "System drive". The drive-id fallback no longer needs `md5sum` (absent on macOS).
+
 ---
 
 ## [1.5.0] - 2026-10-18

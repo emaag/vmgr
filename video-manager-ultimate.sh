@@ -129,6 +129,11 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     --undo-organize [id]    Undo a logged operation (default: the most recent)
     --list-undo             List available undo operations
     --empty-trash           Permanently delete files the tool moved to trash
+    catalog <dir>           Scan a drive or folder into the catalog (incremental)
+    catalog-list            List cataloged drives (online/offline, totals)
+    catalog-search <term> [video|image|audio]   Search the catalog, offline drives included
+    catalog-duplicates      Find duplicate files across all cataloged drives
+    catalog-report [file]   Write a text report of the catalog
     reddit <subreddit> <dir> [max]  Download images from a subreddit
 
 ${COLOR_BOLD}REDDIT OPTIONS:${COLOR_RESET}
@@ -168,6 +173,10 @@ ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
 
     # List all available undo operations
     $0 --list-undo
+
+    # Catalog a drive, then search it even when the drive is unplugged
+    $0 catalog /mnt/d
+    $0 catalog-search "season 2" video
 
 ${COLOR_BOLD}SUPPORTED VIDEO FORMATS:${COLOR_RESET}
     mp4, mkv, avi, mov, wmv, flv, webm, m4v, mpg, mpeg, 3gp
@@ -311,6 +320,21 @@ parse_arguments() {
                 command="empty-trash"
                 shift
                 ;;
+            catalog-list|catalog-duplicates)
+                command="$1"
+                shift
+                ;;
+            catalog-search)
+                command="catalog-search"
+                shift
+                if [[ -n "$1" && "$1" != -* ]]; then CATALOG_CLI_TERM="$1"; shift; fi
+                if [[ -n "$1" && "$1" =~ ^(all|video|image|audio)$ ]]; then CATALOG_CLI_TYPE="$1"; shift; fi
+                ;;
+            catalog-report)
+                command="catalog-report"
+                shift
+                if [[ -n "$1" && "$1" != -* ]]; then CATALOG_CLI_FILE="$1"; shift; fi
+                ;;
             reddit)
                 command="reddit"
                 shift
@@ -351,7 +375,7 @@ parse_arguments() {
                     shift
                 fi
                 ;;
-            rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch)
+            rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch|catalog)
                 command="$1"
                 shift
                 if [[ -n "$1" && "$1" != -* ]]; then
@@ -374,7 +398,7 @@ parse_arguments() {
     fi
 
     # Validate directory for commands that need it
-    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
+    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "catalog-list" && "$command" != "catalog-search" && "$command" != "catalog-duplicates" && "$command" != "catalog-report" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
             show_usage
@@ -433,6 +457,27 @@ parse_arguments() {
             ;;
         empty-trash)
             empty_trash
+            ;;
+        catalog)
+            start_operation "Catalog: $(basename "$directory")"
+            catalog_drive "$directory" true
+            end_operation
+            ;;
+        catalog-list)
+            list_cataloged_drives
+            ;;
+        catalog-search)
+            if [[ -z "${CATALOG_CLI_TERM:-}" ]]; then
+                log_error "Usage: vmgr catalog-search <term> [video|image|audio]"
+                exit 1
+            fi
+            search_catalog "$CATALOG_CLI_TERM" "${CATALOG_CLI_TYPE:-all}"
+            ;;
+        catalog-duplicates)
+            show_duplicates_report
+            ;;
+        catalog-report)
+            catalog_export_report "${CATALOG_CLI_FILE:-}"
             ;;
         reddit)
             if [[ -z "$REDDIT_SUBREDDIT" || -z "$directory" ]]; then

@@ -25,12 +25,14 @@ BATCH_RESULT_STATUS=()
 BATCH_RESULT_NOTE=()
 
 # Snapshot the counters a batch cares about:
-# "processed renamed moved dupes errors previewed generated skipped no_speech failed"
+# "processed renamed moved dupes errors previewed generated skipped no_speech failed
+#  cat_added cat_updated cat_removed cat_unchanged"
 _batch_snapshot() {
-    printf '%s %s %s %s %s %s %s %s %s %s' "${STATS[files_processed]:-0}" "${STATS[files_renamed]:-0}" \
+    printf '%s %s %s %s %s %s %s %s %s %s %s %s %s %s' "${STATS[files_processed]:-0}" "${STATS[files_renamed]:-0}" \
         "${STATS[files_moved]:-0}" "${STATS[duplicates_found]:-0}" "${STATS[errors]:-0}" \
         "${STATS[files_previewed]:-0}" "${STATS[subtitles_generated]:-0}" "${STATS[files_skipped]:-0}" \
-        "${STATS[subtitles_no_speech]:-0}" "${STATS[subtitles_failed]:-0}"
+        "${STATS[subtitles_no_speech]:-0}" "${STATS[subtitles_failed]:-0}" \
+        "${STATS[catalog_added]:-0}" "${STATS[catalog_updated]:-0}" "${STATS[catalog_removed]:-0}" "${STATS[catalog_unchanged]:-0}"
 }
 
 # Describe what changed between two snapshots ($1 before, $2 after). $3 is the
@@ -44,12 +46,23 @@ _batch_describe() {
     local dupes=$(( a[3] - b[3] )) errors=$(( a[4] - b[4] )) previewed=$(( a[5] - b[5] ))
     local -a parts=()
     if (( previewed > 0 )); then
-        if [[ "$op" == subtitles ]]; then parts+=("$previewed would be transcribed"); else parts+=("$previewed would be renamed"); fi
+        case "$op" in
+            subtitles) parts+=("$previewed would be transcribed") ;;
+            catalog)   parts+=("$previewed would be cataloged") ;;
+            *)         parts+=("$previewed would be renamed") ;;
+        esac
     fi
     (( renamed > 0 )) && parts+=("$renamed renamed")
     (( moved > 0 ))   && parts+=("$moved moved")
     (( dupes > 0 ))   && parts+=("$dupes duplicates")
     (( errors > 0 ))  && parts+=("$errors error(s)")
+    if [[ "$op" == catalog ]]; then
+        local c_new=$(( a[10] - b[10] )) c_upd=$(( a[11] - b[11] )) c_rem=$(( a[12] - b[12] )) c_same=$(( a[13] - b[13] ))
+        (( c_new > 0 ))  && parts+=("$c_new new")
+        (( c_upd > 0 ))  && parts+=("$c_upd updated")
+        (( c_rem > 0 ))  && parts+=("$c_rem removed")
+        if (( c_new + c_upd + c_rem == 0 && c_same > 0 )); then parts+=("up to date ($c_same files)"); fi
+    fi
     if [[ "$op" == subtitles ]]; then
         local generated=$(( a[6] - b[6] )) skipped=$(( a[7] - b[7] )) nospeech=$(( a[8] - b[8] )) failed=$(( a[9] - b[9] ))
         (( generated > 0 )) && parts+=("$generated generated")
@@ -116,6 +129,7 @@ batch_process_folders() {
             "flatten")    flatten_directory "$folder" "$DRY_RUN" || rc=1 ;;
             "cleanup")    workflow_deep_clean "$folder" || rc=1 ;;
             "duplicates") find_duplicates "$folder" "report" || rc=1 ;;
+            "catalog")    catalog_drive "$folder" true || rc=1 ;;
             "subtitles")  generate_subtitles_in_directory "$folder" "$WHISPER_MODEL" "$SUBTITLE_FORMAT" "$SUBTITLE_LANGUAGE" "$DRY_RUN" || rc=1 ;;
             *)
                 log_error "Unknown operation: $operation"
@@ -187,12 +201,22 @@ _batch_draw_queue() {
     for (( i = 0; i < n && i < shown; i++ )); do
         _ui_short_path "${BATCH_FOLDERS[$i]}" 44 short
         _browser_pad "$short" 44 short
-        printf '  %s%2d%s  %s %s%s video(s)%s\n' "$UI_ACCENT" $(( i + 1 )) "$COLOR_RESET" \
-            "$short" "$UI_DIM" "${BATCH_VIDEO_COUNTS[${BATCH_FOLDERS[$i]}]:-0}" "$COLOR_RESET"
+        if [[ "${BATCH_SHOW_COUNTS:-true}" == true ]]; then
+            printf '  %s%2d%s  %s %s%s video(s)%s\n' "$UI_ACCENT" $(( i + 1 )) "$COLOR_RESET" \
+                "$short" "$UI_DIM" "${BATCH_VIDEO_COUNTS[${BATCH_FOLDERS[$i]}]:-0}" "$COLOR_RESET"
+        else
+            printf '  %s%2d%s  %s\n' "$UI_ACCENT" $(( i + 1 )) "$COLOR_RESET" "$short"
+        fi
     done
     (( n > shown )) && printf '  %s… and %d more%s\n' "$UI_DIM" $(( n - shown )) "$COLOR_RESET"
     for (( i = 0; i < n; i++ )); do total=$(( total + ${BATCH_VIDEO_COUNTS[${BATCH_FOLDERS[$i]}]:-0} )); done
-    (( n > 0 )) && printf '\n  %s%d folder(s), %d video(s) in total%s\n' "$UI_DIM" "$n" "$total" "$COLOR_RESET"
+    if (( n > 0 )); then
+        if [[ "${BATCH_SHOW_COUNTS:-true}" == true ]]; then
+            printf '\n  %s%d folder(s), %d video(s) in total%s\n' "$UI_DIM" "$n" "$total" "$COLOR_RESET"
+        else
+            printf '\n  %s%d folder(s) queued%s\n' "$UI_DIM" "$n" "$COLOR_RESET"
+        fi
+    fi
 
     echo ""
     local UI_HINT_INDENT="  "
@@ -337,8 +361,8 @@ _batch_interactive() {
             end_operation
         fi
     else
-        # Subtitles only add files next to the videos, so they need no confirmation
-        if [[ "$operation" == subtitles ]] || ui_confirm "Run on ${#folders[@]} folder(s), ${total} video(s)? This changes files"; then
+        # Subtitles and catalog scans never change the user's files, so they need no confirmation
+        if [[ "$operation" == subtitles || "$operation" == catalog ]] || ui_confirm "Run on ${#folders[@]} folder(s), ${total} video(s)? This changes files"; then
             start_operation "$title"
             batch_process_folders "$operation" "${folders[@]}"
             end_operation
@@ -361,6 +385,12 @@ batch_subtitles_interactive() {
         return 1
     fi
     _batch_interactive "subtitles" "Batch Subtitle Generation"
+}
+# Catalog several drives or folders at once, using the same queue screen.
+batch_catalog_interactive() {
+    _catalog_require_jq || return 1
+    local BATCH_SHOW_COUNTS=false
+    _batch_interactive "catalog" "Batch Catalog Drives"
 }
 batch_duplicates_interactive() { _batch_interactive "duplicates" "Batch Find Duplicates (Multiple Folders)"; }
 

@@ -65,11 +65,8 @@ chmod +x video-manager-ultimate.sh
 - **File Organization** — automatic sorting by subfolder names with undo functionality
 - **Batch Processing** — queue several folders (or every subfolder with videos), preview, confirm, and get a per-folder results list
 - **Image Conversion** — convert PNG/WebP/HEIC to JPG (requires ImageMagick)
+- **Multi-Drive Catalog** — scan drives into a catalog (incremental, with hashes and metadata), search it even when a drive is unplugged, and find duplicates across drives. Requires `jq`
 - **Subtitle Generation** — OpenAI Whisper backend; GPU acceleration, parallel jobs, skip-existing, dry-run, size/date filters, interactive editing. Requires `pip install openai-whisper` (or whisper.cpp)
-
-### Planned Features (Not Yet Implemented)
-
-- **Multi-Drive Catalog** — index and search media across drives; UI exists but scanning is a stub.
 
 ### Organization Features
 

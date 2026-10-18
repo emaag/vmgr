@@ -518,6 +518,52 @@ Find and optionally remove duplicates.
 
 ---
 
+### Multi-Drive Catalog Menu
+
+Main menu **[4]**. The catalog is an index of every media file on your drives (name, folder, size, hash, and for video/audio
+the resolution, codec and duration; for images the dimensions and camera). It lives in `~/.video-manager-catalog.json` (files)
+and `~/.video-manager-drives.json` (drives), needs `jq`, and keeps working when a drive is unplugged.
+
+**[1] Scan & Catalog Drive**: pick a detected drive (`/mnt/d`, `/media/...`, `/Volumes/...`), browse for a folder, or type a path.
+- Scans are **incremental**: a file whose size and modification time are unchanged is not hashed or probed again, so rescanning a
+  large drive takes seconds. The result reads `3 new, 1 updated, 0 removed, 120 unchanged`.
+- Files that disappeared from the scanned folder are removed from the catalog. A scan only touches records **under the folder
+  you scanned**, so scanning one subfolder never forgets the rest of the drive.
+- Paths are stored relative to the drive's mount point, so the same file found through different folders lines up.
+- The trash folder (`.vmgr-trash`) is never cataloged. A file name containing a newline is skipped with a warning.
+
+**[2] Cataloged Drives**: each drive with `online` / `offline`, type (Local, USB, NAS, Network), file count, size, a per-media-type
+breakdown, mount point and last scan.
+
+**[3] Search Catalog**: type a name or folder (case-insensitive), a **hash prefix** (6+ hex characters), an exact **resolution**
+such as `1920x1080`, or a **camera** name, optionally limited to video, images or audio. Files on drives that are offline are
+included and shown with a hollow dot, so you can find out *which* drive a file is on before plugging it in. Long result lists are
+capped at 100 and say how many matched.
+
+**[4] Find Duplicate Files**: groups of files with the same hash across **all** drives, with the drive each copy is on. This
+reports only; use File Operations or Duplicate Detection to act on a single folder. It needs hashes, so leave *Include Hash* on.
+
+**[5] Catalog Several Drives**: the same queue screen as Batch Processing, one results line per drive.
+
+**[6] Export Catalog Report**: a text report (drives, totals by type and extension, the ten largest files, duplicate summary)
+written to your home folder.
+
+**[7] Catalog Settings**: which media types to catalog, whether to read metadata (needs `ffprobe`; `exiftool` or ImageMagick for
+images), whether to hash files (slower, but required for duplicate detection), and how many days an offline drive is remembered
+(0 keeps it forever).
+
+From the command line:
+```bash
+vmgr catalog /mnt/d                       # scan (incremental)
+vmgr catalog-list                         # drives and status
+vmgr catalog-search "season 2" video      # search, offline drives included
+vmgr catalog-duplicates                   # duplicates across all drives
+vmgr catalog-report [file]                # write a text report
+vmgr --dry-run catalog /mnt/d             # preview: how many files would be added or updated
+```
+
+---
+
 ### Utilities Menu
 
 System management and diagnostics.

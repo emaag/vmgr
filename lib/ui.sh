@@ -186,27 +186,23 @@ show_catalog_menu() {
 
     ui_title "MULTI-DRIVE CATALOG"
 
-    # Check if jq is available
     if ! command -v jq >/dev/null 2>&1; then
         echo -e "${COLOR_YELLOW}${SYMBOL_WARN} jq is not installed. Install with: ${COLOR_WHITE}sudo apt-get install jq${COLOR_RESET}"
         echo ""
     fi
 
-    # Show catalog stats
-    if [[ -f "$CATALOG_DRIVES_DB" ]]; then
-        local drive_count=$(cat "$CATALOG_DRIVES_DB" 2>/dev/null | jq '.drives | length' 2>/dev/null || echo "0")
-        local video_count=$(cat "$CATALOG_DB" 2>/dev/null | jq '.videos | length' 2>/dev/null || echo "0")
-        ui_section "Catalog Status"
-        ui_kv "Cataloged Drives" "$drive_count"
-        ui_kv "Total Media Files" "$video_count"
-        echo ""
-    fi
+    local drives files bytes
+    read -r drives files bytes <<< "$(catalog_stats)"
+    ui_section "Catalog Status"
+    ui_kv "Cataloged Drives" "$drives"
+    ui_kv "Total Media Files" "$files$([[ "${files:-0}" -gt 0 ]] && echo " ($(format_bytes "$bytes"))")"
+    echo ""
 
-    ui_item 1 "Scan & Catalog Drive"
-    ui_item 2 "List All Cataloged Drives"
-    ui_item 3 "Search Catalog"
-    ui_item 4 "Find Duplicate Files"
-    ui_item 5 "Batch Catalog Multiple Drives"
+    ui_item 1 "Scan & Catalog Drive"    "Index a drive or folder"
+    ui_item 2 "Cataloged Drives"        "Status and totals"
+    ui_item 3 "Search Catalog"          "Works for offline drives too"
+    ui_item 4 "Find Duplicate Files"    "Across every drive"
+    ui_item 5 "Catalog Several Drives"  "Queue and scan in one go"
     ui_item 6 "Export Catalog Report"
     ui_item 7 "Catalog Settings"
     echo ""
@@ -1040,42 +1036,58 @@ _handle_catalog_choice() {
     local choice="$1"
     case "$choice" in
         1)
-            # Scan & catalog a drive
+            # Scan & catalog a drive or folder
+            _catalog_require_jq || { ui_pause; return 0; }
             show_screen "Scan & Catalog a Drive"
-            echo "Available mount points:"
-            echo "  /mnt/c  - Windows C: drive"
-            echo "  /mnt/d  - Windows D: drive"
-            echo "  /media/* - USB drives (if mounted)"
-            echo ""
-            ui_ask mount_point "Enter mount point to catalog"
-
-            if [[ -z "$mount_point" ]]; then
-                log_error "No mount point specified"
-                ui_pause
-                return 0
+            local -a mounts=()
+            mapfile -t mounts < <(catalog_detect_mounts)
+            ui_section "Drives found"
+            if (( ${#mounts[@]} == 0 )); then
+                printf '  %s(none detected: browse for a folder or type a path)%s\n' "$UI_DIM" "$COLOR_RESET"
             fi
+            local i space
+            for (( i = 0; i < ${#mounts[@]} && i < 9; i++ )); do
+                space="$(df -hP "${mounts[$i]}" 2>/dev/null | awk 'NR==2 {print $4 " free of " $2}')"
+                ui_item $(( i + 1 )) "${mounts[$i]}" "$space"
+            done
+            echo ""
+            ui_item F "Browse for a folder" "" toggle
+            ui_item T "Type a path" "" toggle
+            ui_prompt "Choose"
+            local pick scan_target=""
+            ui_read_choice pick
+            case "$pick" in
+                [1-9])
+                    (( pick <= ${#mounts[@]} )) && scan_target="${mounts[$(( pick - 1 ))]}"
+                    ;;
+                f|F)
+                    local saved_target="$TARGET_FOLDER"
+                    browse_directory && scan_target="$TARGET_FOLDER"
+                    TARGET_FOLDER="$saved_target"
+                    ;;
+                t|T)
+                    ui_ask scan_target "Path"
+                    scan_target="${scan_target/#\~/$HOME}"
+                    ;;
+            esac
+            [[ -z "$scan_target" ]] && return 0
 
-            ui_confirm "Scan recursively?" || true
-            local recursive=false
-            [[ $REPLY =~ ^[Yy]$ ]] && recursive=true
-
-            start_operation "Catalog Drive: $mount_point"
-            catalog_drive "$mount_point" "$recursive"
+            start_operation "Catalog: $(basename "$scan_target")"
+            catalog_drive "$scan_target" true
             end_operation
             ui_pause
             return 0
             ;;
         2)
             # List all cataloged drives
-            clear
-            start_operation "List Cataloged Drives"
+            show_screen "Cataloged Drives"
             list_cataloged_drives
-            end_operation
             ui_pause
             return 0
             ;;
         3)
             # Search catalog
+            _catalog_require_jq || { ui_pause; return 0; }
             show_screen "Search Catalog"
             ui_section "Filter by media type"
             ui_item 1 "All media"
@@ -1090,83 +1102,44 @@ _handle_catalog_choice() {
                 2) media_filter="video" ;;
                 3) media_filter="image" ;;
                 4) media_filter="audio" ;;
+                ESC) return 0 ;;
                 *) media_filter="all" ;;
             esac
 
             echo ""
-            ui_ask search_term "Enter search term"
+            printf '  %sA name or folder, a hash prefix (6+ characters), a resolution such as 1920x1080, or a camera.%s\n' "$UI_DIM" "$COLOR_RESET"
+            ui_ask search_term "Search for"
 
             if [[ -n "$search_term" ]]; then
-                start_operation "Search Catalog"
+                echo ""
                 search_catalog "$search_term" "$media_filter"
-                end_operation
+                ui_pause
             fi
-            ui_pause
             return 0
             ;;
         4)
-            # Find duplicate files
-            clear
-            start_operation "Find Duplicate Files"
+            # Find duplicate files across drives
+            show_screen "Duplicates Across Drives"
             show_duplicates_report
-            end_operation
             ui_pause
             return 0
             ;;
         5)
-            # Catalog multiple drives (batch)
-            show_screen "Batch Catalog Multiple Drives"
-            echo "Enter mount points to catalog (one per line, empty line to finish):"
-            echo ""
-
-            local -a mount_points
-            while true; do
-                ui_ask mp "Mount point"
-                [[ -z "$mp" ]] && break
-                mount_points+=("$mp")
-            done
-
-            if [[ ${#mount_points[@]} -eq 0 ]]; then
-                log_warning "No mount points specified"
-                ui_pause
-                return 0
-            fi
-
-            ui_confirm "Scan recursively?" || true
-            local recursive=false
-            [[ $REPLY =~ ^[Yy]$ ]] && recursive=true
-
-            start_operation "Batch Catalog Drives"
-            for mp in "${mount_points[@]}"; do
-                echo ""
-                catalog_drive "$mp" "$recursive"
-            done
-            end_operation
-            ui_pause
+            # Catalog several drives or folders at once
+            batch_catalog_interactive
+            [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
         6)
             # Export catalog report
+            _catalog_require_jq || { ui_pause; return 0; }
             show_screen "Export Catalog Report"
-
-            local report_file="$HOME/video-catalog-report-$(date +%Y%m%d-%H%M%S).txt"
-            {
-                echo "Video Catalog Report"
-                echo "Generated: $(date)"
-                echo ""
-                echo "=== CATALOGED DRIVES ==="
-                echo ""
-                cat "$CATALOG_DRIVES_DB" | jq -r '.drives[] | "Drive: \(.drive_label)\nType: \(.drive_type)\nStatus: \(.status)\nVideos: \(.total_videos)\nLast Seen: \(.last_seen)\n"'
-                echo ""
-                echo "=== VIDEO SUMMARY ==="
-                echo ""
-                echo "Total Videos: $(cat "$CATALOG_DB" | jq '.videos | length')"
-                echo ""
-                echo "By Studio:"
-                cat "$CATALOG_DB" | jq -r '.videos[].studio' | sort | uniq -c | sort -rn | head -20
-            } > "$report_file"
-
-            log_success "Report exported to: $report_file"
+            local report_file
+            if report_file="$(catalog_export_report)"; then
+                log_success "Report exported to: $report_file"
+            else
+                log_error "Could not write the report"
+            fi
             ui_pause
             return 0
             ;;
