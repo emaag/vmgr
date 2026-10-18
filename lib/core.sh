@@ -175,6 +175,7 @@ STATS[space_saved]=0
 STATS[subtitles_generated]=0
 STATS[subtitles_failed]=0
 STATS[subtitles_translated]=0
+STATS[subtitles_no_speech]=0
 STATS[low_confidence_count]=0
 
 # Global variables
@@ -411,6 +412,7 @@ reset_statistics() {
     STATS[subtitles_generated]=0
     STATS[subtitles_failed]=0
     STATS[subtitles_translated]=0
+    STATS[subtitles_no_speech]=0
     STATS[low_confidence_count]=0
 }
 

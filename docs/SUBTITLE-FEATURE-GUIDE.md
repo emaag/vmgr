@@ -31,6 +31,14 @@ The Video Manager Ultimate v1.1.0 now includes **AI-powered automatic subtitle g
 - **TXT** - Plain text transcript
 - **JSON** - Structured data with timestamps
 
+### 🔇 Silence, music and "no speech"
+
+Over silence, music or noise Whisper writes filler cues such as `.` or `...` with long timestamps, which makes a video
+look subtitled when it is not. After each file the filler cues are removed (SRT cues are renumbered; VTT headers and cue
+IDs are kept; text in any language is kept). If nothing but filler is left, no subtitle file is written, the summary
+counts the video under **No speech found**, and a hidden marker (`.<video name>.nospeech`) is created next to it so the
+next run skips it instead of transcribing it again. Delete the marker, or turn off *skip existing*, to retry.
+
 ## Installation
 
 ### Option 1: OpenAI Whisper (Python)

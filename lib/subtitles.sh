@@ -122,6 +122,68 @@ _print_subtitle_progress() {
         "$bar" "$current" "$total" "$pct" "$status" "${label:0:60}" >&2
 }
 
+# Drop cues that contain no letters or digits. Over silence, music and noise
+# Whisper writes filler such as "." or "..." with long timestamps; keeping it
+# makes a video look subtitled when it is not.
+# Rewrites SRT/VTT files in place (SRT cues are renumbered) and checks TXT files.
+# Returns 0 when real text remains, 1 when nothing but filler was found.
+# Sets _SUBTITLE_REMOVED_CUES to the number of cues dropped.
+_clean_subtitle_cues() {
+    local file="$1" format="$2" tmp counts kept dropped
+    _SUBTITLE_REMOVED_CUES=0
+    [[ -f "$file" ]] || return 0
+
+    case "$format" in
+        srt|vtt) ;;
+        txt) LC_ALL=C grep -q '[^[:space:][:punct:]]' "$file" 2>/dev/null; return ;;
+        *) return 0 ;;
+    esac
+
+    tmp="$(mktemp)" || return 0
+    counts="$(mktemp)" || { rm -f "$tmp"; return 0; }
+
+    # Paragraph mode: one record per cue. A record without a "-->" line (the
+    # WEBVTT header, notes) passes through untouched. C locale, so bytes above
+    # 127 (accented and non-Latin text) count as text, not punctuation.
+    LC_ALL=C awk -v RS= -v FS='\n' -v fmt="$format" -v counts="$counts" '
+        {
+            t = 0
+            for (i = 1; i <= NF; i++) if ($i ~ /-->/) { t = i; break }
+            if (t == 0) { print $0 "\n"; next }
+            text = ""
+            for (i = t + 1; i <= NF; i++) text = text $i
+            if (text !~ /[^[:space:][:punct:]]/) { dropped++; next }
+            kept++
+            if (fmt == "srt") {
+                print kept
+                for (i = t; i <= NF; i++) print $i
+            } else {
+                for (i = 1; i <= NF; i++) print $i
+            }
+            print ""
+        }
+        END { print kept + 0, dropped + 0 > counts }
+    ' "$file" > "$tmp" 2>/dev/null
+
+    read -r kept dropped < "$counts"
+    rm -f "$counts"
+    kept="${kept:-0}"; dropped="${dropped:-0}"
+    _SUBTITLE_REMOVED_CUES=$dropped
+
+    if (( dropped > 0 && kept > 0 )); then
+        cat "$tmp" > "$file"
+    fi
+    rm -f "$tmp"
+    (( kept > 0 )) || (( dropped == 0 ))
+}
+
+# Hidden marker that records "this video had no speech", so skip-existing does
+# not send it through Whisper again on every run. Delete it to retry.
+_no_speech_marker() {
+    local video_file="$1"
+    printf '%s/.%s.nospeech' "$(dirname "$video_file")" "$(basename "${video_file%.*}")"
+}
+
 # Internal helper: run whisper on a single file and update stats.
 # Args: video_file whisper_cmd model format language device output_dir [file_idx] [file_total]
 # Language "auto" omits --language entirely (older whisper versions error otherwise).
@@ -229,6 +291,20 @@ _generate_single_subtitle() {
     local subtitle_file="${video_file%.*}.${format}"
     if [[ ! -f "$subtitle_file" ]]; then
         log_warning "Expected subtitle not found (whisper.cpp naming?): $(basename "$subtitle_file")"
+    fi
+
+    # Remove filler cues; if nothing but filler was found, there was no speech
+    if [[ -f "$subtitle_file" ]]; then
+        if _clean_subtitle_cues "$subtitle_file" "$format"; then
+            (( _SUBTITLE_REMOVED_CUES > 0 )) && log_verbose "Removed ${_SUBTITLE_REMOVED_CUES} empty cue(s) from $(basename "$subtitle_file")"
+        else
+            rm -f "$subtitle_file"
+            : > "$(_no_speech_marker "$video_file")" 2>/dev/null
+            log_warning "No speech found in $(basename "$video_file"); no subtitle written"
+            STATS[subtitles_no_speech]=$(( ${STATS[subtitles_no_speech]:-0} + 1 ))
+            STATS[files_processed]=$(( STATS[files_processed] + 1 ))
+            return 0
+        fi
     fi
 
     if [[ "${SUBTITLE_AUTO_PUNCTUATION:-false}" == true && -f "$subtitle_file" ]]; then
@@ -355,6 +431,13 @@ generate_subtitles_in_directory() {
         output_dir="$(dirname "$video_file")"
         local subtitle_file="${video_file%.*}.${format}"
 
+        # Skip a video that was already found to have no speech
+        if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true && -f "$(_no_speech_marker "$video_file")" ]]; then
+            log_verbose "Skipping (no speech last time; delete $(basename "$(_no_speech_marker "$video_file")") to retry): $(basename "$video_file")"
+            STATS[files_skipped]=$(( STATS[files_skipped] + 1 ))
+            continue
+        fi
+
         # Skip when a valid subtitle already exists.
         # If the file is present but invalid (empty or no timestamps), it was
         # likely left behind by a previously interrupted whisper run — delete it
@@ -417,7 +500,9 @@ generate_subtitles_in_directory() {
     done
 
     # 12. Summary
-    log_info "Subtitle generation complete: ${STATS[subtitles_generated]} generated, ${STATS[files_skipped]} skipped"
+    local no_speech_note=""
+    (( ${STATS[subtitles_no_speech]:-0} > 0 )) && no_speech_note=", ${STATS[subtitles_no_speech]} with no speech"
+    log_info "Subtitle generation complete: ${STATS[subtitles_generated]} generated, ${STATS[files_skipped]} skipped${no_speech_note}"
     return 0
 }
 

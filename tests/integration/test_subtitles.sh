@@ -53,7 +53,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 base="$(basename "${input_file%.*}")"
-printf "1\n00:00:00,000 --> 00:00:02,000\nMock subtitle\n" > "${output_dir}/${base}.${format}"
+[[ -n "${MOCK_WHISPER_CALLS:-}" ]] && echo "$input_file" >> "$MOCK_WHISPER_CALLS"
+if [[ -n "${MOCK_WHISPER_BODY:-}" ]]; then
+    printf '%b' "$MOCK_WHISPER_BODY" > "${output_dir}/${base}.${format}"
+else
+    printf "1\n00:00:00,000 --> 00:00:02,000\nMock subtitle\n" > "${output_dir}/${base}.${format}"
+fi
 exit 0
 MOCKEOF
     chmod +x "$TEST_TMPDIR/mock_bin/whisper"
@@ -248,5 +253,119 @@ EDITOREOF
     EDITOR="$TEST_TMPDIR/mock_editor.sh"
     edit_subtitle_interactive "$TEST_TMPDIR/video.srt" >/dev/null 2>&1
     assert_file_exists "$sentinel" "edit subtitle: editor was invoked"
+    _teardown
+}
+
+# ── Filler cues and "no speech" ───────────────────────────────────────────────
+
+_FILLER_SRT='1\n00:00:00,000 --> 00:00:07,000\n.\n\n2\n00:00:07,000 --> 00:00:14,000\n...\n\n3\n00:00:14,000 --> 00:00:21,000\n.\n'
+_MIXED_SRT='1\n00:00:00,000 --> 00:00:02,000\nHello there\n\n2\n00:00:02,000 --> 00:00:09,000\n.\n\n3\n00:00:09,000 --> 00:00:11,000\nSecond line\nstill the same cue\n'
+
+test_clean_cues_reports_no_speech_for_filler_only() {
+    _setup
+    printf '%b' "$_FILLER_SRT" > "$TEST_TMPDIR/a.srt"
+    local rc=0
+    _clean_subtitle_cues "$TEST_TMPDIR/a.srt" srt || rc=$?
+    assert_equals "1" "$rc" "clean cues: filler only means no speech"
+    assert_equals "3" "$_SUBTITLE_REMOVED_CUES" "clean cues: counts the filler cues"
+    _teardown
+}
+
+test_clean_cues_drops_filler_and_renumbers() {
+    _setup
+    printf '%b' "$_MIXED_SRT" > "$TEST_TMPDIR/a.srt"
+    _clean_subtitle_cues "$TEST_TMPDIR/a.srt" srt
+    assert_equals "1" "$_SUBTITLE_REMOVED_CUES" "clean cues: one filler cue removed"
+    local out; out="$(cat "$TEST_TMPDIR/a.srt")"
+    assert_contains "Hello there" "$out" "clean cues: real text kept"
+    assert_contains $'2\n00:00:09,000 --> 00:00:11,000\nSecond line\nstill the same cue' "$out" "clean cues: cues renumbered, multi-line cue intact"
+    [[ "$out" != *"00:00:02,000 --> 00:00:09,000"* ]]
+    assert_equals "0" "$?" "clean cues: the filler cue's timestamp is gone"
+    _teardown
+}
+
+test_clean_cues_leaves_a_clean_file_untouched() {
+    _setup
+    printf '1\n00:00:00,000 --> 00:00:02,000\nHello\n\n2\n00:00:02,000 --> 00:00:04,000\nWorld\n\n' > "$TEST_TMPDIR/a.srt"
+    local before; before="$(cat "$TEST_TMPDIR/a.srt")"
+    _clean_subtitle_cues "$TEST_TMPDIR/a.srt" srt
+    assert_equals "$before" "$(cat "$TEST_TMPDIR/a.srt")" "clean cues: a file with real text only is not rewritten"
+    _teardown
+}
+
+test_clean_cues_keeps_non_latin_and_accented_text() {
+    _setup
+    printf '1\n00:00:00,000 --> 00:00:02,000\n日本語\n\n2\n00:00:02,000 --> 00:00:04,000\ncafé\n\n3\n00:00:04,000 --> 00:00:06,000\n...\n' > "$TEST_TMPDIR/a.srt"
+    _clean_subtitle_cues "$TEST_TMPDIR/a.srt" srt
+    local out; out="$(cat "$TEST_TMPDIR/a.srt")"
+    assert_contains "日本語" "$out" "clean cues: Japanese text kept"
+    assert_contains "café" "$out" "clean cues: accented text kept"
+    assert_equals "1" "$_SUBTITLE_REMOVED_CUES" "clean cues: only the dots were removed"
+    _teardown
+}
+
+test_clean_cues_vtt_keeps_header_and_cue_ids() {
+    _setup
+    printf 'WEBVTT\n\nintro\n00:00:00.000 --> 00:00:02.000\nHello\n\n00:00:02.000 --> 00:00:04.000\n.\n' > "$TEST_TMPDIR/a.vtt"
+    _clean_subtitle_cues "$TEST_TMPDIR/a.vtt" vtt
+    local out; out="$(cat "$TEST_TMPDIR/a.vtt")"
+    assert_contains "WEBVTT" "$out" "clean cues (vtt): header kept"
+    assert_contains "intro" "$out" "clean cues (vtt): cue identifier kept"
+    assert_equals "1" "$_SUBTITLE_REMOVED_CUES" "clean cues (vtt): filler removed"
+    _teardown
+}
+
+test_clean_cues_txt() {
+    _setup
+    printf '.\n' > "$TEST_TMPDIR/a.txt"
+    local rc=0; _clean_subtitle_cues "$TEST_TMPDIR/a.txt" txt || rc=$?
+    assert_equals "1" "$rc" "clean cues (txt): punctuation only is no speech"
+    printf 'hello\n' > "$TEST_TMPDIR/b.txt"
+    rc=0; _clean_subtitle_cues "$TEST_TMPDIR/b.txt" txt || rc=$?
+    assert_equals "0" "$rc" "clean cues (txt): text is speech"
+    _teardown
+}
+
+test_filler_only_output_is_reported_as_no_speech() {
+    _setup
+    _setup_mock_whisper
+    touch "$TEST_TMPDIR/quiet.mp4"
+    STATS[subtitles_no_speech]=0
+    MOCK_WHISPER_BODY="$_FILLER_SRT" generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false >/dev/null 2>&1
+    _restore_path
+    assert_file_not_exists "$TEST_TMPDIR/quiet.srt" "no speech: no subtitle file is left behind"
+    assert_file_exists "$TEST_TMPDIR/.quiet.nospeech" "no speech: a hidden marker records it"
+    assert_equals "1" "${STATS[subtitles_no_speech]}" "no speech: counted"
+    assert_equals "0" "${STATS[subtitles_generated]}" "no speech: not counted as generated"
+    _teardown
+}
+
+test_no_speech_video_is_not_retranscribed_until_the_marker_is_removed() {
+    _setup
+    _setup_mock_whisper
+    touch "$TEST_TMPDIR/quiet.mp4"
+    export MOCK_WHISPER_CALLS="$TEST_TMPDIR/calls"
+    MOCK_WHISPER_BODY="$_FILLER_SRT" generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false >/dev/null 2>&1
+    assert_equals "1" "$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')" "no speech: whisper ran once"
+    generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false >/dev/null 2>&1
+    assert_equals "1" "$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')" "no speech: a second run skips the video"
+    rm -f "$TEST_TMPDIR/.quiet.nospeech"
+    generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false >/dev/null 2>&1
+    assert_equals "2" "$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')" "no speech: removing the marker retries it"
+    unset MOCK_WHISPER_CALLS
+    _restore_path
+    _teardown
+}
+
+test_mixed_output_keeps_the_real_cues() {
+    _setup
+    _setup_mock_whisper
+    touch "$TEST_TMPDIR/talk.mp4"
+    MOCK_WHISPER_BODY="$_MIXED_SRT" generate_subtitles_in_directory "$TEST_TMPDIR" base srt auto false >/dev/null 2>&1
+    _restore_path
+    assert_file_exists "$TEST_TMPDIR/talk.srt" "mixed: the subtitle is written"
+    assert_contains "Hello there" "$(cat "$TEST_TMPDIR/talk.srt")" "mixed: real cues kept"
+    assert_equals "0" "$(grep -c '^\.$' "$TEST_TMPDIR/talk.srt")" "mixed: filler cues removed"
+    assert_file_not_exists "$TEST_TMPDIR/.talk.nospeech" "mixed: no no-speech marker"
     _teardown
 }

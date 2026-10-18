@@ -183,6 +183,7 @@ _print_summary_card() {
     [[ ${STATS[files_skipped]:-0}         -gt 0 ]] && rows+=("Files skipped" "${STATS[files_skipped]}")
     [[ ${STATS[subtitles_generated]:-0}   -gt 0 ]] && rows+=("Subtitles generated" "${STATS[subtitles_generated]}")
     [[ ${STATS[subtitles_translated]:-0}  -gt 0 ]] && rows+=("Subtitles translated" "${STATS[subtitles_translated]}")
+    [[ ${STATS[subtitles_no_speech]:-0}   -gt 0 ]] && rows+=("No speech found" "${STATS[subtitles_no_speech]}")
     [[ ${STATS[low_confidence_count]:-0}  -gt 0 ]] && rows+=("Low confidence" "${STATS[low_confidence_count]}")
     [[ ${STATS[subtitles_failed]:-0}      -gt 0 ]] && rows+=("Subtitles failed" "${STATS[subtitles_failed]}")
     [[ ${STATS[duplicates_found]:-0}      -gt 0 ]] && rows+=("Duplicates found" "${STATS[duplicates_found]}")

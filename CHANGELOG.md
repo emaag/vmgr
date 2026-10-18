@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Subtitle generation removes filler cues (`.`, `...`, punctuation only) that Whisper writes over silence and music. When nothing
+  but filler is left, no subtitle file is written, the video is counted under "No speech found" on the summary card, and a
+  hidden `.<name>.nospeech` marker makes the next run skip it instead of transcribing it again (delete the marker to retry).
+
 ### Fixed
 - The test suite no longer writes to the real home directory: `core.sh` overwrote the log and undo paths the tests set, so
   tests that rename or flatten files created undo records in `~/.video-manager-logs/undo-history`, where they could shadow a
