@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- **Undo for renames and flattens**: Rename Files, Remove Dashes, Fix Bracket Spacing, Flatten and their batch versions now
+  record every change in an undo log (one per operation; a batch is one operation) and print how many changes were recorded.
+  Utilities > Undo Last Operation (and the granular-controls entry, which called a function that did not exist) puts them back,
+  List Undo Operations shows each operation by name with its file count, and `--undo-organize [ID]` accepts any logged operation.
+  Dry runs and `Undo System: off` record nothing; duplicate deletion and image conversion are not recorded.
 - Duplicate reports are written to `~/.video-manager-logs/duplicate-reports/<folder>_<timestamp>/` instead of a
   `_duplicate_report_*` folder inside the scanned collection (which is still the fallback if the logs directory is not
   writable). A scan that finds nothing leaves no empty report folder behind.

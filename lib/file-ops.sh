@@ -166,6 +166,7 @@ _apply_transform_to_directory() {
                         echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
                         echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
                     fi
+                    undo_record "$file" "$new_path"
                     log_message "RENAME" "Success: $filename -> $new_filename"
                     ((renamed_count++))
                     ((STATS[files_renamed]++))
@@ -240,6 +241,7 @@ flatten_directory() {
             mv "$file" "$target" 2>/dev/null
             if [[ $? -eq 0 ]]; then
                 echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Moved: $(basename "$file") ${COLOR_CYAN}${SYMBOL_ARROW}${COLOR_RESET} $target"
+                undo_record "$file" "$target"
                 log_message "MOVE" "Success: $file -> $target"
                 ((moved_count++))
                 ((STATS[files_moved]++))

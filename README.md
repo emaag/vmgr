@@ -230,9 +230,10 @@ Or use command-line flags:
 - Access: via menu (Utilities → View Logs) or direct file access
 
 **Undo operations**
-- Automatic logging of organize operations
+- Renames, flattens and organize runs are logged automatically (one undo log per operation; a batch is one operation)
 - Undo log location: `~/.video-manager-logs/undo-history/`
-- Access via menu or CLI: `--undo-organize`, `--list-undo`
+- Undo from the menu (Utilities → Undo Last Operation) or CLI: `--undo-organize [ID]`, `--list-undo`
+- Duplicate deletion and image conversion are not undoable; turn the log off with Settings → Granular Controls → Undo System
 
 ## Development Log
 

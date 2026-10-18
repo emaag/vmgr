@@ -126,7 +126,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     workflow-clean <dir>    Deep clean workflow
     batch                   Batch process multiple folders
     --organize              Organize files by subfolder names
-    --undo-organize [id]    Undo organize operation (optional: operation ID)
+    --undo-organize [id]    Undo a logged operation (default: the most recent)
     --list-undo             List available undo operations
     reddit <subreddit> <dir> [max]  Download images from a subreddit
 

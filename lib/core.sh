@@ -167,6 +167,7 @@ STATS[files_processed]=0
 STATS[files_renamed]=0
 STATS[files_moved]=0
 STATS[files_previewed]=0
+STATS[files_restored]=0
 STATS[files_skipped]=0
 STATS[errors]=0
 STATS[duplicates_found]=0
@@ -242,6 +243,59 @@ load_module() {
         echo "ERROR: Failed to load $module" >&2
         exit 1
     fi
+}
+
+# ── Undo recording ────────────────────────────────────────────────────────────
+# One undo log per user-level operation (start_operation clears the current one).
+# Each line is "original_path|new_path"; undo moves the new path back.
+UNDO_CURRENT_LOG=""
+
+# Turn an operation name into a short filename-safe slug.
+_undo_slug() {
+    local s="${1,,}"
+    s="${s//[^a-z0-9]/-}"
+    while [[ "$s" == *--* ]]; do s="${s//--/-}"; done
+    s="${s#-}"; s="${s%-}"
+    [[ -z "$s" ]] && s="operation"
+    printf '%s' "${s:0:30}"
+}
+
+# Open a new undo log for CURRENT_OPERATION and make it current.
+# Returns 1 (and records nothing) if the undo directory is not writable.
+_undo_start_log() {
+    mkdir -p "$UNDO_LOG_DIR" 2>/dev/null || return 1
+    local id file n=1
+    id="$(_undo_slug "${CURRENT_OPERATION:-operation}")-$(date +%Y%m%d-%H%M%S)"
+    file="$UNDO_LOG_DIR/$id.log"
+    while [[ -e "$file" ]]; do
+        file="$UNDO_LOG_DIR/$id-$((++n)).log"
+    done
+    {
+        echo "# Undo Log"
+        echo "# Operation: ${CURRENT_OPERATION:-operation}"
+        echo "# Operation ID: $(basename "$file" .log)"
+        echo "# Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "# Format: original_path|new_path"
+    } > "$file" 2>/dev/null || return 1
+    UNDO_CURRENT_LOG="$file"
+}
+
+# undo_record ORIGINAL NEW: remember that ORIGINAL was moved or renamed to NEW.
+# Does nothing when the undo system is off. Call only for real changes.
+undo_record() {
+    [[ "${ENABLE_UNDO:-true}" == true ]] || return 0
+    if [[ -z "$UNDO_CURRENT_LOG" || ! -f "$UNDO_CURRENT_LOG" ]]; then
+        _undo_start_log || return 0
+    fi
+    printf '%s|%s\n' "$1" "$2" >> "$UNDO_CURRENT_LOG"
+}
+
+# Number of changes recorded in the current undo log.
+undo_recorded_count() {
+    [[ -n "$UNDO_CURRENT_LOG" && -f "$UNDO_CURRENT_LOG" ]] || { echo 0; return; }
+    local n
+    n=$(grep -vc '^#' "$UNDO_CURRENT_LOG" 2>/dev/null) || n=0
+    echo "$n"
 }
 
 # Yes/no prompt: the themed single-key ui_confirm when theme.sh is loaded, a
@@ -349,6 +403,7 @@ reset_statistics() {
     STATS[files_renamed]=0
     STATS[files_moved]=0
     STATS[files_previewed]=0
+    STATS[files_restored]=0
     STATS[files_skipped]=0
     STATS[errors]=0
     STATS[duplicates_found]=0

@@ -220,7 +220,7 @@ show_utilities_menu() {
     ui_title "UTILITIES"
     ui_item 1 "Organize by Subfolder Names"
     ui_item 2 "List Undo Operations"
-    ui_item 3 "Undo Last Organize Operation"
+    ui_item 3 "Undo Last Operation" "Renames, flattens, organize"
     ui_item 4 "View Last 50 Log Entries"
     ui_item 5 "Open Log Directory"
     ui_item 6 "Test Filename Transformation"
@@ -1539,17 +1539,8 @@ _handle_granular_controls_choice() {
             return 0
             ;;
         8)
-            show_screen "Undo History"
-            if [[ -f "$UNDO_HISTORY_FILE" ]]; then
-                local operations=$(jq -r '.operations[] | select(.undone == false) | "\(.timestamp) - \(.type): \(.original) -> \(.new)"' "$UNDO_HISTORY_FILE" 2>/dev/null)
-                if [[ -n "$operations" ]]; then
-                    echo "$operations"
-                else
-                    echo "No operations in history"
-                fi
-            else
-                echo "No undo history file found"
-            fi
+            clear
+            list_undo_operations
             ui_pause
             return 0
             ;;

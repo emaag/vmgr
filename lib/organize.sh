@@ -31,8 +31,9 @@ _create_undo_log() {
 
     # Create log file with header
     cat > "$undo_file" <<EOF
-# Organize Operation Undo Log
-# Operation ID: $operation_id
+# Undo Log
+# Operation: Organize by Subfolder Names
+# Operation ID: organize-$operation_id
 # Timestamp: $(date '+%Y-%m-%d %H:%M:%S')
 # Format: source_path|destination_path
 EOF
@@ -54,24 +55,27 @@ _log_move_operation() {
 # ORGANIZE OPERATIONS
 ################################################################################
 
-# Undo the last organize operation
-# Args: $1=operation_id (optional, defaults to most recent)
+# Undo a logged operation (rename, flatten, organize, ...): move every recorded
+# file back to where it came from.
+# Args: $1=operation_id (optional, defaults to most recent). Accepts the full ID
+#       shown by list_undo_operations, or the bare timestamp of an organize run.
 # Returns: 0 on success
 undo_organize_operation() {
     local operation_id="$1"
 
-    start_operation "Undo Organize Operation"
+    start_operation "Undo Operation"
 
     # Find undo log
     local undo_log
     if [[ -n "$operation_id" ]]; then
-        undo_log="$UNDO_LOG_DIR/organize-${operation_id}.log"
+        undo_log="$UNDO_LOG_DIR/${operation_id}.log"
+        [[ -f "$undo_log" ]] || undo_log="$UNDO_LOG_DIR/organize-${operation_id}.log"
     else
         # Find most recent undo log using stat instead of ls
         local latest_file=""
         local latest_time=0
         shopt -s nullglob
-        for file in "$UNDO_LOG_DIR"/organize-*.log; do
+        for file in "$UNDO_LOG_DIR"/*.log; do
             if [[ -f "$file" ]]; then
                 local file_time=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null)
                 if [[ "$file_time" -gt "$latest_time" ]]; then
@@ -91,10 +95,12 @@ undo_organize_operation() {
 
     log_info "Using undo log: $(basename "$undo_log")"
 
-    # Show log header
+    # Show what is about to be undone
     echo ""
-    grep '^#' "$undo_log"
-    echo ""
+    local undo_name undo_when
+    undo_name="$(grep -m1 '^# Operation:' "$undo_log" | cut -d: -f2- | xargs)"
+    undo_when="$(grep -m1 '^# Timestamp:' "$undo_log" | cut -d: -f2- | xargs)"
+    log_info "Operation: ${undo_name:-Organize by Subfolder Names}${undo_when:+ ($undo_when)}"
 
     # Count operations
     local total_ops=$(grep -v '^#' "$undo_log" | wc -l)
@@ -164,15 +170,14 @@ undo_organize_operation() {
         fi
     done < <(grep -v '^#' "$undo_log" | awk '{ l[NR] = $0 } END { for (i = NR; i > 0; i--) print l[i] }')
 
+    progress_break
+    if [[ "$DRY_RUN" == true ]]; then
+        STATS[files_previewed]=$success_count
+    else
+        STATS[files_restored]=$success_count
+    fi
+    STATS[files_skipped]=$error_count
     echo ""
-
-    # Summary
-    echo ""
-    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}${COLOR_WHITE}Undo Summary:${COLOR_RESET}"
-    echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} Successfully restored: ${COLOR_WHITE}$success_count${COLOR_RESET}"
-    echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} Failed/Skipped: ${COLOR_WHITE}$error_count${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_CYAN}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
 
     # Archive the undo log
     if [[ $success_count -gt 0 && "$DRY_RUN" == false ]]; then
@@ -183,50 +188,42 @@ undo_organize_operation() {
     end_operation
 }
 
-# List available undo operations
+# Undo the most recent logged operation of any kind.
+undo_last_operation() {
+    undo_organize_operation ""
+}
+
+# List available undo operations (newest first)
 list_undo_operations() {
     start_operation "Available Undo Operations"
 
-    # Check if directory exists and has files
-    if [[ ! -d "$UNDO_LOG_DIR" ]]; then
+    shopt -s nullglob
+    local -a logs=("$UNDO_LOG_DIR"/*.log)
+    shopt -u nullglob
+
+    if [[ ${#logs[@]} -eq 0 ]]; then
         log_info "No undo operations available"
         return 0
     fi
 
-    # Check if directory is empty using glob pattern
-    shopt -s nullglob dotglob
-    local files=("$UNDO_LOG_DIR"/*)
-    shopt -u nullglob dotglob
+    # Newest first, by modification time
+    local -a sorted=()
+    mapfile -t sorted < <(ls -1t "${logs[@]}" 2>/dev/null)
 
-    if [[ ${#files[@]} -eq 0 ]]; then
-        log_info "No undo operations available"
-        return 0
-    fi
-
-    echo ""
-    echo -e "${COLOR_BRIGHT_CYAN}Available Undo Logs:${COLOR_RESET}"
-    echo ""
-
-    local count=0
-    for log_file in "$UNDO_LOG_DIR"/organize-*.log; do
-        [[ ! -f "$log_file" ]] && continue
-
+    local count=0 log_file op_id name stamp n
+    for log_file in "${sorted[@]}"; do
         ((count++))
-        local op_id=$(basename "$log_file" .log | sed 's/organize-//')
-        local timestamp=$(grep '# Timestamp:' "$log_file" | cut -d':' -f2- | xargs)
-        local op_count=$(grep -v '^#' "$log_file" | wc -l)
-
-        echo -e "${COLOR_WHITE}[$count]${COLOR_RESET} ID: ${COLOR_CYAN}$op_id${COLOR_RESET}"
-        echo -e "    Timestamp: $timestamp"
-        echo -e "    Operations: $op_count file(s) moved"
-        echo ""
+        op_id="$(basename "$log_file" .log)"
+        name="$(grep -m1 '^# Operation:' "$log_file" | cut -d: -f2- | xargs)"
+        stamp="$(grep -m1 '^# Timestamp:' "$log_file" | cut -d: -f2- | xargs)"
+        n=$(grep -vc '^#' "$log_file" 2>/dev/null) || n=0
+        printf '  %s%2d%s  %s%s%s\n' "${UI_ACCENT:-$COLOR_CYAN}" "$count" "$COLOR_RESET" \
+            "$COLOR_BOLD" "${name:-Organize by Subfolder Names}" "$COLOR_RESET"
+        printf '      %s%s %s %s file(s) %s %s%s\n' "${UI_DIM:-}" "$stamp" "${UI_SEP:--}" "$n" "${UI_SEP:--}" "$op_id" "$COLOR_RESET"
     done
+    echo ""
+    log_info "Undo the most recent one from Utilities > Undo Last Operation, or by ID with --undo-organize <ID>"
 
-    if [[ $count -eq 0 ]]; then
-        log_info "No undo operations available"
-    fi
-
-    end_operation
 }
 
 # Organize files by subfolder names

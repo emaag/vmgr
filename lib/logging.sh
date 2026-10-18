@@ -118,8 +118,9 @@ log_info() {
 start_operation() {
     CURRENT_OPERATION="$1"
     START_TIME=$(date +%s)
-    # Each operation reports its own numbers, not a running total
+    # Each operation reports its own numbers, not a running total, and its own undo log
     [[ "$(type -t reset_statistics)" == "function" ]] && reset_statistics
+    UNDO_CURRENT_LOG=""
 
     if [[ "$(type -t ui_operation_start)" == "function" ]]; then
         ui_operation_start "$CURRENT_OPERATION"
@@ -160,6 +161,13 @@ end_operation() {
         echo ""
     fi
 
+    local undo_n
+    undo_n="$(undo_recorded_count)"
+    if (( undo_n > 0 )); then
+        printf '  %s%s%s\n\n' "${UI_DIM:-$COLOR_CYAN}" \
+            "Undo: ${undo_n} change(s) recorded. Utilities > Undo Last Operation puts them back." "$COLOR_RESET"
+    fi
+
     log_message "OPERATION" "Completed: $CURRENT_OPERATION (Duration: ${minutes}m ${seconds}s)"
 }
 
@@ -169,8 +177,9 @@ _print_summary_card() {
     local -a rows=()
     [[ ${STATS[files_processed]:-0}       -gt 0 ]] && rows+=("Files processed" "${STATS[files_processed]}")
     [[ ${STATS[files_renamed]:-0}         -gt 0 ]] && rows+=("Files renamed" "${STATS[files_renamed]}")
-    [[ ${STATS[files_previewed]:-0}       -gt 0 ]] && rows+=("Would rename" "${STATS[files_previewed]}")
+    [[ ${STATS[files_previewed]:-0}       -gt 0 ]] && rows+=("Would change" "${STATS[files_previewed]}")
     [[ ${STATS[files_moved]:-0}           -gt 0 ]] && rows+=("Files moved" "${STATS[files_moved]}")
+    [[ ${STATS[files_restored]:-0}        -gt 0 ]] && rows+=("Files restored" "${STATS[files_restored]}")
     [[ ${STATS[files_skipped]:-0}         -gt 0 ]] && rows+=("Files skipped" "${STATS[files_skipped]}")
     [[ ${STATS[subtitles_generated]:-0}   -gt 0 ]] && rows+=("Subtitles generated" "${STATS[subtitles_generated]}")
     [[ ${STATS[subtitles_translated]:-0}  -gt 0 ]] && rows+=("Subtitles translated" "${STATS[subtitles_translated]}")

@@ -532,6 +532,10 @@ System management and diagnostics.
 - Works in both WSL and native Linux
 - Easy access to full log files
 
+**Undo Last Operation**
+- Moves every file from the most recent renamed/flattened/organized operation back
+- Asks for confirmation; previews first when Dry Run is on
+
 **[3] Test Filename Transformation**
 - Interactive testing tool
 - Enter any filename
@@ -1226,7 +1230,7 @@ A: Only filenames. Video content is never touched.
 A: Always backup first! But you can recover from the duplicate report CSV if needed.
 
 **Q: Can I undo renames?**  
-A: Not directly, but logs contain before/after information. Consider using git for version control of your collection.
+A: Yes. Renames, dash removal, spacing fixes, flattening and "organize by subfolder" are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. Deleting duplicates and converting images cannot be undone, so back those up first.
 
 **Q: Does this work with network drives?**  
 A: Yes, if mounted in your filesystem. Performance depends on network speed.
