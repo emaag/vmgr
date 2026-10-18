@@ -340,6 +340,15 @@ confirm_destructive_op() {
     echo -e "${COLOR_YELLOW}${op_label}${COLOR_RESET} will affect ${COLOR_BOLD}${count}${COLOR_RESET} file(s) in:"
     echo -e "  ${COLOR_WHITE}${directory}${COLOR_RESET}"
 
+    if [[ "${count:-0}" -eq 0 && "$depth_mode" != "deep" ]]; then
+        local nested
+        nested=$(find "$directory" -mindepth 2 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
+        if [[ "${nested:-0}" -gt 0 ]]; then
+            echo -e "${COLOR_CYAN}Note:${COLOR_RESET} ${nested} video(s) are in subfolders; this operation only looks at files directly in this folder."
+            echo -e "      Use Flatten Directory first, or pick a subfolder."
+        fi
+    fi
+
     if [[ "${count:-0}" -gt 0 ]]; then
         echo -e "${COLOR_CYAN}Sample:${COLOR_RESET}"
         if [[ "$depth_mode" == "deep" ]]; then
