@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (credentials, RSS fallback, galleries).
 
 ### Changed
+- **Quiet by default**: verbose output is now off. The per-file intermediate steps ("After dash removal", ...)
+  no longer bury the before/after results. Use `--verbose` (new) or Settings > Toggle Verbose Output for detail;
+  `-q`/`--quiet` still works. A saved config keeps whatever it stored.
+- The "Loading ... modules" line no longer prints before `--help` and the menu.
+- The directory browser tells you to press `T` (type a path) when it opens on a folder with nothing in it.
 - **Menu redesign**: a framed header with a status strip (dry-run state and the selected folder), compact
   one-line menu items with colored key chips and dimmed descriptions, on/off dots for toggles, and grouped
   sections. New `lib/theme.sh` holds the shared helpers (`ui_title`, `ui_item`, `ui_item_toggle`, ...).

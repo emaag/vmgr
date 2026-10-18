@@ -100,7 +100,8 @@ vmgr workflow-clean /mnt/c/Users/Eric/Videos/Vixen
 | `-h, --help` | Show help message |
 | `-v, --version` | Show version info |
 | `-d, --dry-run` | Preview without changes |
-| `-q, --quiet` | Minimal output |
+| `--verbose` | Show every intermediate step per file |
+| `-q, --quiet` | Minimal output (the default) |
 | `-i, --interactive` | Launch menu |
 
 ---

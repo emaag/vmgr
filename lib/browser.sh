@@ -283,7 +283,7 @@ _browser_interactive() {
     local current_dir="$1" prev_dir="" show_hidden=0
     local -a dirs=()
     local sel=0 top=0 reload=1 key msg="" n_videos=0 rows cols visible count i
-    local preview_path="" rtext=() rkind=() resized=1
+    local preview_path="" rtext=() rkind=() resized=1 first_screen=1
     trap 'resized=1' WINCH
 
     printf '\033[2J'
@@ -295,6 +295,11 @@ _browser_interactive() {
             n_videos=${#BROWSER_VIDS[@]}
             reload=0
             preview_path=""
+            # Nothing to browse here on the first screen: say how to get somewhere
+            if (( first_screen && ${#dirs[@]} == 0 && n_videos == 0 )); then
+                msg="Nothing here yet. Press T to type a path, or ← to go up."
+            fi
+            first_screen=0
         fi
 
         count=${#dirs[@]}

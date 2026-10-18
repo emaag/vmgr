@@ -82,7 +82,7 @@ BACKUP_DIR="$HOME/.video-manager-backups"
 CONFIG_FILE="$HOME/.video-manager-config.conf"
 MAX_LOG_ENTRIES=1000
 DRY_RUN=false
-VERBOSE=true
+VERBOSE=false
 INTERACTIVE=true
 
 # Organize by Subfolder Settings

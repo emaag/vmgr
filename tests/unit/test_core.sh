@@ -117,3 +117,15 @@ test_init_core_creates_log_dir() {
     UNDO_LOG_DIR=/dev/null
     BACKUP_DIR="$HOME/.video-manager-backups"
 }
+
+test_verbose_off_by_default() {
+    local out
+    out="$(bash -c 'source "'"$LIB_DIR"'/core.sh"; echo "$VERBOSE"')"
+    assert_equals "false" "$out" "defaults: verbose output is off"
+}
+
+test_cli_accepts_verbose_flag() {
+    local out
+    out="$("$VMGR_ROOT/video-manager-ultimate.sh" --verbose --help 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
+    assert_contains "--verbose" "$out" "cli: --verbose is accepted and documented"
+}

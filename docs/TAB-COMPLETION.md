@@ -194,7 +194,8 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `--help`, `-h` - Show help
 - `--version`, `-v` - Show version
 - `--dry-run`, `-d` - Enable dry run
-- `--quiet`, `-q` - Quiet mode
+- `--verbose` - Show every intermediate step per file
+- `--quiet`, `-q` - Quiet mode (the default)
 - `--interactive`, `-i` - Interactive mode
 - `--model` - Whisper model selection
 - `--format` - Subtitle format

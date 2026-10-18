@@ -48,7 +48,6 @@ SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 # Load all modules in dependency order
-echo "Loading Video Manager Ultimate modules..."
 
 # Core module must be loaded first (defines load_module helper)
 if ! source "$LIB_DIR/core.sh"; then
@@ -96,7 +95,8 @@ ${COLOR_BOLD}OPTIONS:${COLOR_RESET}
     -h, --help              Show this help message
     -v, --version           Show version information
     -d, --dry-run           Enable dry run mode (no changes made)
-    -q, --quiet             Disable verbose output
+    --verbose               Show every intermediate step per file
+    -q, --quiet             Keep output minimal (the default)
     -i, --interactive       Launch interactive menu (default if no command)
 
 ${COLOR_BOLD}SUBTITLE OPTIONS:${COLOR_RESET}
@@ -199,6 +199,10 @@ parse_arguments() {
             -d|--dry-run)
                 DRY_RUN=true
                 log_info "Dry run mode enabled"
+                shift
+                ;;
+            --verbose)
+                VERBOSE=true
                 shift
                 ;;
             -q|--quiet)

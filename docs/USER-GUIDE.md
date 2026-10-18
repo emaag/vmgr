@@ -691,7 +691,8 @@ subreddit that does not exist, 429 for rate limiting).
 | `-h` | `--help` | Show help message and exit |
 | `-v` | `--version` | Show version information |
 | `-d` | `--dry-run` | Enable dry run mode (no changes) |
-| `-q` | `--quiet` | Disable verbose output |
+| | `--verbose` | Show every intermediate step per file |
+| `-q` | `--quiet` | Minimal output (the default) |
 | `-i` | `--interactive` | Launch interactive menu |
 
 ### Commands

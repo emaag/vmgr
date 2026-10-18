@@ -39,11 +39,15 @@ def drain(timeout):
         out += chunk
     return out
 
-drain(1.0)
+first = drain(1.0).decode(errors='replace')
 for k in re.findall(rb'\x1b\[[A-D]|\x1b.|.', keys, re.S):
     os.write(fd, k)
     time.sleep(0.12)
-m = re.search(r'RESULT rc=(\d+) T=(.*)', drain(1.0).decode(errors='replace'))
+screen = first + drain(1.0).decode(errors='replace')
+if os.environ.get('DRV_TIP'):
+    print(screen.count('Nothing here yet'))
+    sys.exit(0)
+m = re.search(r'RESULT rc=(\d+) T=(.*)', screen)
 print(f'{m.group(1)}|{m.group(2).strip()}' if m else 'NORESULT')
 PY
 }
@@ -103,5 +107,17 @@ test_pty_cancel() {
     _setup
     assert_equals "1|" "$(_drive "$TEST_TMPDIR/root" 'q')" \
         "browser: Q cancels with a non-zero status"
+    _teardown
+}
+
+test_pty_tip_shown_in_empty_start_folder() {
+    _setup
+    mkdir "$TEST_TMPDIR/empty"
+    # No keys sent: the first screen itself carries the tip
+    local with_tip without_tip
+    with_tip="$(DRV_TIP=1 _drive "$TEST_TMPDIR/empty" ' ')"
+    without_tip="$(DRV_TIP=1 _drive "$TEST_TMPDIR/root" ' ')"
+    assert_equals "1" "$(( with_tip > 0 ? 1 : 0 ))" "browser: empty start folder shows the tip"
+    assert_equals "0" "$without_tip" "browser: no tip when there is something to browse"
     _teardown
 }

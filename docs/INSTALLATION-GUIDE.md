@@ -359,8 +359,8 @@ vmgr
 
 **Via CLI:**
 ```bash
-# Quiet mode (minimal output)
-vmgr --quiet rename /path/to/directory
+# Detailed output (every intermediate step); minimal output is the default
+vmgr --verbose rename /path/to/directory
 ```
 
 ### Dry Run Mode

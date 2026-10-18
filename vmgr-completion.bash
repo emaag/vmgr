@@ -19,6 +19,7 @@ _vmgr_completion() {
         --help -h
         --version -v
         --dry-run -d
+        --verbose
         --quiet -q
         --interactive -i
         --model
