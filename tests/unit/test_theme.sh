@@ -15,7 +15,7 @@ test_short_path_home_and_ellipsis() {
     assert_equals "~/Videos" "$out" "short_path: \$HOME becomes ~"
     _ui_short_path "/a/very/long/path/to/some/folder" 12 out
     assert_equals "12" "${#out}" "short_path: truncated to the requested width"
-    assert_equals "…" "${out:0:1}" "short_path: truncation marks the cut with an ellipsis"
+    assert_equals "$UI_ELLIPSIS" "${out:0:${#UI_ELLIPSIS}}" "short_path: truncation marks the cut with an ellipsis"
 }
 
 test_box_row_fills_the_width() {
@@ -47,7 +47,7 @@ test_item_long_description_wraps_below() {
     COLUMNS=100
     local out lines
     out="$(ui_item 2 "Deep Clean" "Remove Dashes + Fix Spacing + Bracket Notation + more words here" | _strip)"
-    lines="$(printf '%s\n' "$out" | wc -l)"
+    lines=$(( $(printf '%s\n' "$out" | wc -l) ))
     assert_equals "2" "$lines" "item: an over-wide description moves to its own line"
 }
 
@@ -56,8 +56,8 @@ test_item_toggle_state() {
     local on off
     on="$(ui_item_toggle D "Dry run" true | _strip)"
     off="$(ui_item_toggle D "Dry run" false | _strip)"
-    assert_contains "● ON" "$on" "toggle: on state"
-    assert_contains "○ OFF" "$off" "toggle: off state"
+    assert_contains "$UI_DOT_ON ON" "$on" "toggle: on state"
+    assert_contains "$UI_DOT_OFF OFF" "$off" "toggle: off state"
 }
 
 test_read_choice_from_pipe_reads_a_line() {
