@@ -378,7 +378,7 @@ generate_subtitles_in_directory() {
     else
         find_args+=("-maxdepth" "1")
     fi
-    find_args+=("-type" "f")
+    find_args+=("-type" "f" "!" "-path" "*/.vmgr-trash/*")
 
     # Build video extension name filter
     local -a name_filter=()

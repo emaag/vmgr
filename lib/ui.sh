@@ -225,6 +225,7 @@ show_utilities_menu() {
     ui_item 5 "Open Log Directory"
     ui_item 6 "Test Filename Transformation"
     ui_item 7 "Display System Information"
+    ui_item 8 "Empty Trash" "Delete trashed duplicates for good"
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
@@ -330,7 +331,7 @@ confirm_destructive_op() {
 
     local count
     if [[ "$depth_mode" == "deep" ]]; then
-        count=$(find "$directory" -mindepth 2 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
+        count=$(find "$directory" -mindepth 2 -type f ! -path '*/.vmgr-trash/*' | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
     else
         count=$(find "$directory" -maxdepth 1 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
     fi
@@ -342,7 +343,7 @@ confirm_destructive_op() {
 
     if [[ "${count:-0}" -eq 0 && "$depth_mode" != "deep" ]]; then
         local nested
-        nested=$(find "$directory" -mindepth 2 -type f | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
+        nested=$(find "$directory" -mindepth 2 -type f ! -path '*/.vmgr-trash/*' | grep -ciE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null || true)
         if [[ "${nested:-0}" -gt 0 ]]; then
             echo -e "${COLOR_CYAN}Note:${COLOR_RESET} ${nested} video(s) are in subfolders; this operation only looks at files directly in this folder."
             echo -e "      Use Flatten Directory first, or pick a subfolder."
@@ -352,7 +353,7 @@ confirm_destructive_op() {
     if [[ "${count:-0}" -gt 0 ]]; then
         ui_section "Sample"
         if [[ "$depth_mode" == "deep" ]]; then
-            find "$directory" -mindepth 2 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null | head -5 | while IFS= read -r f; do
+            find "$directory" -mindepth 2 -type f ! -path '*/.vmgr-trash/*' | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$' 2>/dev/null | head -5 | while IFS= read -r f; do
                 echo -e "  $(basename "$f")"
             done
         else
@@ -652,9 +653,16 @@ _handle_duplicates_choice() {
             if get_directory_input; then
                 start_operation "Find and Delete Duplicates"
                 echo ""
-                log_warning "This will DELETE duplicate files!"
-                ui_ask confirm "Are you sure? (type 'yes' to confirm)"
-                if [[ "$confirm" == "yes" ]]; then
+                local go_ahead=false
+                if [[ "${ENABLE_UNDO:-true}" == true ]]; then
+                    log_info "Duplicates are moved to a hidden .vmgr-trash folder; Utilities > Undo Last Operation puts them back."
+                    ui_confirm "Move the duplicate files to the trash?" && go_ahead=true
+                else
+                    log_warning "Undo is off: duplicates will be DELETED for good!"
+                    ui_ask confirm "Are you sure? (type 'yes' to confirm)"
+                    [[ "$confirm" == "yes" ]] && go_ahead=true
+                fi
+                if $go_ahead; then
                     find_duplicates "$TARGET_FOLDER" "delete"
                 else
                     log_warning "Operation cancelled"
@@ -1338,6 +1346,12 @@ _handle_utilities_choice() {
             command -v identify &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} identify (ImageMagick)" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} identify (ImageMagick)"
             command -v whisper &> /dev/null && echo -e "  ${COLOR_GREEN}${SYMBOL_CHECK}${COLOR_RESET} whisper" || echo -e "  ${COLOR_RED}${SYMBOL_CROSS}${COLOR_RESET} whisper"
             ui_pause
+            return 0
+            ;;
+        8)
+            clear
+            empty_trash
+            [[ $? -eq 2 ]] || ui_pause
             return 0
             ;;
         b|B) return 1 ;;

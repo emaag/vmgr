@@ -237,7 +237,7 @@ Or use command-line flags:
 - Renames, flattens and organize runs are logged automatically (one undo log per operation; a batch is one operation)
 - Undo log location: `~/.video-manager-logs/undo-history/`
 - Undo from the menu (Utilities → Undo Last Operation) or CLI: `--undo-organize [ID]`, `--list-undo`
-- Duplicate deletion and image conversion are not undoable; turn the log off with Settings → Granular Controls → Undo System
+- Deleting duplicates moves them to a hidden `.vmgr-trash` folder (undoable; Utilities → Empty Trash deletes them for good). Image conversion is not undoable. Turn the log off with Settings → Granular Controls → Undo System; duplicates are then deleted permanently
 
 ## Development Log
 

@@ -168,6 +168,8 @@ STATS[files_renamed]=0
 STATS[files_moved]=0
 STATS[files_previewed]=0
 STATS[files_restored]=0
+STATS[files_trashed]=0
+STATS[space_trashed]=0
 STATS[files_skipped]=0
 STATS[errors]=0
 STATS[duplicates_found]=0
@@ -299,6 +301,42 @@ undo_recorded_count() {
     echo "$n"
 }
 
+# ── Trash ─────────────────────────────────────────────────────────────────────
+# Files the tool removes (duplicates) go to a hidden .vmgr-trash folder inside the
+# scanned directory, which is on the same filesystem so the move is instant, and
+# are recorded in the undo log. Every recursive scan skips this folder.
+VMGR_TRASH_DIR=".vmgr-trash"
+
+# trash_file FILE ROOT STAMP: move FILE to ROOT/.vmgr-trash/STAMP/ (keeping its path
+# relative to ROOT) and record it for undo. The new path is left in TRASH_LAST_DEST
+# (not printed, so callers need no subshell and the undo log stays shared).
+# Returns 1 if the file could not be moved; the original is left alone.
+TRASH_LAST_DEST=""
+trash_file() {
+    local file="$1" root="${2%/}" stamp="$3" rel dest n=1
+    rel="${file#"$root"/}"
+    [[ "$rel" == "$file" ]] && rel="$(basename "$file")"
+    dest="$root/$VMGR_TRASH_DIR/$stamp/$rel"
+    while [[ -e "$dest" ]]; do
+        dest="$root/$VMGR_TRASH_DIR/$stamp/$rel.$((++n))"
+    done
+    mkdir -p "$(dirname "$dest")" 2>/dev/null || return 1
+    mv -- "$file" "$dest" 2>/dev/null || return 1
+    undo_record "$file" "$dest"
+    TRASH_LAST_DEST="$dest"
+}
+
+# Remove now-empty folders left in a trash after files were restored from it.
+# Args: the path a file was restored from.
+trash_prune_empty() {
+    local dir
+    dir="$(dirname "$1")"
+    while [[ "$dir" == *"/$VMGR_TRASH_DIR/"* || "$dir" == *"/$VMGR_TRASH_DIR" ]]; do
+        rmdir "$dir" 2>/dev/null || break
+        dir="$(dirname "$dir")"
+    done
+}
+
 # Yes/no prompt: the themed single-key ui_confirm when theme.sh is loaded, a
 # plain line prompt otherwise. Returns 0 for yes.
 ask_yes_no() {
@@ -405,6 +443,8 @@ reset_statistics() {
     STATS[files_moved]=0
     STATS[files_previewed]=0
     STATS[files_restored]=0
+    STATS[files_trashed]=0
+    STATS[space_trashed]=0
     STATS[files_skipped]=0
     STATS[errors]=0
     STATS[duplicates_found]=0

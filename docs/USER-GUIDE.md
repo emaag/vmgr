@@ -1230,7 +1230,7 @@ A: Only filenames. Video content is never touched.
 A: Always backup first! But you can recover from the duplicate report CSV if needed.
 
 **Q: Can I undo renames?**  
-A: Yes. Renames, dash removal, spacing fixes, flattening and "organize by subfolder" are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. Deleting duplicates and converting images cannot be undone, so back those up first.
+A: Yes. Renames, dash removal, spacing fixes, flattening and "organize by subfolder" are recorded in an undo log as they happen, one log per operation (a batch counts as one). After an operation the summary tells you how many changes were recorded. Use **Utilities → Undo Last Operation** to put the files back, **Utilities → List Undo Operations** to see them, or `--undo-organize [ID]` from the command line. Undo skips any file whose old name has been taken since. **Deleting duplicates moves them to a hidden `.vmgr-trash` folder inside the scanned folder** (same drive, so it is instant), and they can be put back the same way; **Utilities → Empty Trash** (or `--empty-trash`) deletes the trashed files for good and retires the undo logs that pointed at them. If you switch the Undo System off, duplicates are deleted permanently instead. Converting images cannot be undone, so back those up first.
 
 **Q: Does this work with network drives?**  
 A: Yes, if mounted in your filesystem. Performance depends on network speed.

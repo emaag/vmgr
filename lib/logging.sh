@@ -180,6 +180,7 @@ _print_summary_card() {
     [[ ${STATS[files_previewed]:-0}       -gt 0 ]] && rows+=("Would change" "${STATS[files_previewed]}")
     [[ ${STATS[files_moved]:-0}           -gt 0 ]] && rows+=("Files moved" "${STATS[files_moved]}")
     [[ ${STATS[files_restored]:-0}        -gt 0 ]] && rows+=("Files restored" "${STATS[files_restored]}")
+    [[ ${STATS[files_trashed]:-0}         -gt 0 ]] && rows+=("Moved to trash" "${STATS[files_trashed]}")
     [[ ${STATS[files_skipped]:-0}         -gt 0 ]] && rows+=("Files skipped" "${STATS[files_skipped]}")
     [[ ${STATS[subtitles_generated]:-0}   -gt 0 ]] && rows+=("Subtitles generated" "${STATS[subtitles_generated]}")
     [[ ${STATS[subtitles_translated]:-0}  -gt 0 ]] && rows+=("Subtitles translated" "${STATS[subtitles_translated]}")
@@ -188,6 +189,7 @@ _print_summary_card() {
     [[ ${STATS[subtitles_failed]:-0}      -gt 0 ]] && rows+=("Subtitles failed" "${STATS[subtitles_failed]}")
     [[ ${STATS[duplicates_found]:-0}      -gt 0 ]] && rows+=("Duplicates found" "${STATS[duplicates_found]}")
     [[ ${STATS[space_saved]:-0}           -gt 0 ]] && rows+=("Space saved" "$(format_bytes "${STATS[space_saved]}")")
+    [[ ${STATS[space_trashed]:-0}         -gt 0 ]] && rows+=("To reclaim (empty trash)" "$(format_bytes "${STATS[space_trashed]}")")
     [[ ${STATS[errors]:-0}                -gt 0 ]] && rows+=("Errors" "${STATS[errors]}")
     ui_summary_card "$CURRENT_OPERATION" "$1" "${STATS[errors]:-0}" "${rows[@]}"
 }

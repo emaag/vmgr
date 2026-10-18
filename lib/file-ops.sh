@@ -249,7 +249,7 @@ flatten_directory() {
                 log_error "Failed to move: $file"
             fi
         fi
-    done < <(find "$top_dir" -mindepth 2 -type f | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
+    done < <(find "$top_dir" -mindepth 2 -type f ! -path '*/.vmgr-trash/*' | grep -iE '\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|mpg|mpeg|3gp)$')
 
     if [[ "$dry_run" == true ]]; then
         log_info "Dry run complete - no files were actually moved"
@@ -306,7 +306,7 @@ convert_images_to_jpg() {
     [[ "$recursive" != true ]] && depth_args="-maxdepth 1"
 
     # Count total files first
-    local total_files=$(find "$directory" $depth_args -type f -iname "*.$source_ext" 2>/dev/null | wc -l)
+    local total_files=$(find "$directory" $depth_args -type f ! -path '*/.vmgr-trash/*' -iname "*.$source_ext" 2>/dev/null | wc -l)
     log_info "Found $total_files .$source_ext files to convert"
 
     if [[ $total_files -eq 0 ]]; then
@@ -376,7 +376,7 @@ convert_images_to_jpg() {
                 ((error_count++))
             fi
         fi
-    done < <(find "$directory" $depth_args -type f -iname "*.$source_ext" -print0 2>/dev/null)
+    done < <(find "$directory" $depth_args -type f ! -path '*/.vmgr-trash/*' -iname "*.$source_ext" -print0 2>/dev/null)
 
     echo -ne "\r\033[K" # Clear progress line
 

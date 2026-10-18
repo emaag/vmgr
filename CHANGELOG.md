@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Trash for duplicates**: "Find and Delete Duplicates" now moves the extra copies to a hidden `.vmgr-trash/<timestamp>/` folder
+  inside the scanned folder (same drive, so the move is instant, with each file's relative path kept) and records them in the undo
+  log, so **Utilities > Undo Last Operation** puts them back. The confirmation is a single-key yes/no; with the Undo System switched
+  off it stays a typed `yes` and deletes permanently, as before.
+- **Empty Trash** (Utilities > 8, or `--empty-trash`) lists every trash folder the undo logs know about with its file count and size,
+  asks before deleting for good, and retires the undo logs that pointed into it (kept as `.log.expired`).
+- The summary card reports "Moved to trash" and "To reclaim (empty trash)" for these runs.
+- Every recursive scan (duplicates, flatten, image conversion, subtitles, organize) skips `.vmgr-trash`, so trashed files are never
+  rediscovered, flattened back out, or transcribed.
+
 ### Changed
 - **Batch Subtitle Generation** uses the folder-queue screen and per-folder results list of Batch Processing (browse, add every
   subfolder with videos, or type a path) instead of the old `[B] Browse [T] Type` prompt. Whisper is checked once up front, and

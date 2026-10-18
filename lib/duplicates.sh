@@ -45,7 +45,7 @@ find_duplicates() {
     # Count the videos first so the progress bar has a total (terminal only)
     local total_videos=0
     if [[ -t 1 ]]; then
-        total_videos=$(find "$directory" -type f \( \
+        total_videos=$(find "$directory" -type f ! -path '*/.vmgr-trash/*' \( \
             -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
             -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
             -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \) 2>/dev/null | wc -l)
@@ -91,7 +91,7 @@ find_duplicates() {
         else
             hash_map[$hash]="$file"
         fi
-    done < <(find "$directory" -type f -print0 | sort -z)
+    done < <(find "$directory" -type f ! -path '*/.vmgr-trash/*' -print0 | sort -z)
 
     echo -ne "\r\033[K" # Clear line
 
@@ -157,8 +157,22 @@ find_duplicates() {
 
             if [[ "$action" == "delete" ]]; then
                 if [[ "$DRY_RUN" == true ]]; then
-                    log_warning "[DRY RUN] Would delete: $dupe"
+                    if [[ "${ENABLE_UNDO:-true}" == true ]]; then
+                        log_warning "[DRY RUN] Would move to trash: $dupe"
+                    else
+                        log_warning "[DRY RUN] Would delete: $dupe"
+                    fi
+                elif [[ "${ENABLE_UNDO:-true}" == true ]]; then
+                    # Undoable: move to the trash instead of deleting
+                    if trash_file "$dupe" "$directory" "$stamp"; then
+                        log_success "Moved to trash: $(basename "$dupe")"
+                        STATS[files_trashed]=$(( ${STATS[files_trashed]:-0} + 1 ))
+                        STATS[space_trashed]=$(( ${STATS[space_trashed]:-0} + size ))
+                    else
+                        log_error "Could not move to trash: $dupe"
+                    fi
                 else
+                    # Undo is switched off: delete for good, as before
                     rm -f "$dupe" 2>/dev/null
                     if [[ $? -eq 0 ]]; then
                         log_success "Deleted duplicate: $(basename "$dupe")"

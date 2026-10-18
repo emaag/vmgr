@@ -128,6 +128,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     --organize              Organize files by subfolder names
     --undo-organize [id]    Undo a logged operation (default: the most recent)
     --list-undo             List available undo operations
+    --empty-trash           Permanently delete files the tool moved to trash
     reddit <subreddit> <dir> [max]  Download images from a subreddit
 
 ${COLOR_BOLD}REDDIT OPTIONS:${COLOR_RESET}
@@ -306,6 +307,10 @@ parse_arguments() {
                 command="list-undo"
                 shift
                 ;;
+            --empty-trash)
+                command="empty-trash"
+                shift
+                ;;
             reddit)
                 command="reddit"
                 shift
@@ -369,7 +374,7 @@ parse_arguments() {
     fi
 
     # Validate directory for commands that need it
-    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
+    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
             show_usage
@@ -425,6 +430,9 @@ parse_arguments() {
             ;;
         list-undo)
             list_undo_operations
+            ;;
+        empty-trash)
+            empty_trash
             ;;
         reddit)
             if [[ -z "$REDDIT_SUBREDDIT" || -z "$directory" ]]; then

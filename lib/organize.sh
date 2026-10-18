@@ -162,6 +162,7 @@ undo_organize_operation() {
         else
             if mv "$dest" "$source"; then
                 log_verbose "Restored: $(basename "$dest") → $source"
+                trash_prune_empty "$dest"
                 ((success_count++))
             else
                 log_error "Failed to restore: $(basename "$dest")"
@@ -184,6 +185,86 @@ undo_organize_operation() {
         mv "$undo_log" "${undo_log}.completed"
         log_info "Undo log archived"
     fi
+
+    end_operation
+}
+
+# Total size in bytes of the files under a directory (real sizes, not disk blocks).
+_dir_bytes() {
+    local total=0 f sz
+    while IFS= read -r -d '' f; do
+        sz="$(get_file_size "$f")"
+        total=$(( total + ${sz:-0} ))
+    done < <(find "$1" -type f -print0 2>/dev/null)
+    echo "$total"
+}
+
+# Every trash folder the undo logs know about, one path per line (only ones that
+# still exist).
+_trash_roots() {
+    local f root
+    shopt -s nullglob
+    for f in "$UNDO_LOG_DIR"/*.log; do
+        grep -v '^#' "$f" | cut -d'|' -f2 | grep "/$VMGR_TRASH_DIR/" | sed "s|\(.*/$VMGR_TRASH_DIR\)/.*|\1|"
+    done | sort -u | while IFS= read -r root; do
+        [[ "$(basename "$root")" == "$VMGR_TRASH_DIR" && -d "$root" ]] && echo "$root"
+    done
+    shopt -u nullglob
+}
+
+# Permanently delete everything the tool has moved to trash. This is the point of
+# no return: the matching undo logs are retired because they can no longer work.
+empty_trash() {
+    start_operation "Empty Trash"
+
+    local -a roots=()
+    mapfile -t roots < <(_trash_roots)
+    if [[ ${#roots[@]} -eq 0 ]]; then
+        log_info "The trash is empty"
+        end_operation
+        return 0
+    fi
+
+    local root bytes total=0 files total_files=0 short
+    for root in "${roots[@]}"; do
+        bytes="$(_dir_bytes "$root")"
+        files=$(find "$root" -type f 2>/dev/null | wc -l)
+        files=$(( files ))
+        total=$(( total + bytes )); total_files=$(( total_files + files ))
+        _ui_short_path "$(dirname "$root")" 52 short 2>/dev/null || short="$(dirname "$root")"
+        printf '  %s%s%s %s(%d file(s), %s)%s\n' "${UI_ACCENT:-}" "$short" "$COLOR_RESET" "${UI_DIM:-}" "$files" "$(format_bytes "$bytes")" "$COLOR_RESET"
+    done
+    echo ""
+
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY RUN] Would permanently delete ${total_files} file(s) (~$(format_bytes "$total"))"
+        end_operation
+        return 0
+    fi
+
+    if ! ask_yes_no "Permanently delete ${total_files} file(s) ($(format_bytes "$total"))? This cannot be undone"; then
+        return 2
+    fi
+
+    local f
+    for root in "${roots[@]}"; do
+        [[ "$(basename "$root")" == "$VMGR_TRASH_DIR" ]] || continue
+        if rm -rf -- "$root"; then
+            log_success "Emptied: $(dirname "$root")/$VMGR_TRASH_DIR"
+        else
+            log_error "Could not remove: $root"
+        fi
+    done
+    STATS[space_saved]=$(( ${STATS[space_saved]:-0} + total ))
+
+    # The undo logs that pointed into the trash can no longer restore anything
+    shopt -s nullglob
+    for f in "$UNDO_LOG_DIR"/*.log; do
+        if grep -v '^#' "$f" | cut -d'|' -f2 | grep -q "/$VMGR_TRASH_DIR/"; then
+            mv "$f" "${f}.expired" 2>/dev/null
+        fi
+    done
+    shopt -u nullglob
 
     end_operation
 }
@@ -304,7 +385,7 @@ organize_by_subfolder_names() {
         log_verbose "Counting files to process..."
         for subfolder in "${subfolders[@]}"; do
             local subfolder_name=$(basename "$subfolder")
-            local count=$(find "$search_path" -type f \( \
+            local count=$(find "$search_path" -type f ! -path '*/.vmgr-trash/*' \( \
                 -iname "*${subfolder_name}*" \
                 \) \( \
                 -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
@@ -352,7 +433,7 @@ organize_by_subfolder_names() {
             fi
 
             matching_files+=("$file")
-        done < <(find "$search_path" -type f \( \
+        done < <(find "$search_path" -type f ! -path '*/.vmgr-trash/*' \( \
             -iname "*${subfolder_name}*" -o \
             -iname "*${subfolder_name_lower}*" \
             \) \( \
