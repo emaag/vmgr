@@ -48,9 +48,11 @@ fi
 if (( _VM_ASCII )); then
     UI_TL="+"; UI_TR="+"; UI_BL="+"; UI_BR="+"; UI_H="-"; UI_V="|"
     UI_DOT_ON="*"; UI_DOT_OFF="o"; UI_BAR="|"; UI_PROMPT=">"; UI_ELLIPSIS="..."; UI_SEP="-"
+    UI_BAR_FULL="#"; UI_BAR_EMPTY="-"; UI_ARROW="->"; UI_PLAY=">"; UI_WARN_MARK="!"
 else
     UI_TL="╭"; UI_TR="╮"; UI_BL="╰"; UI_BR="╯"; UI_H="─"; UI_V="│"
     UI_DOT_ON="●"; UI_DOT_OFF="○"; UI_BAR="▍"; UI_PROMPT="❯"; UI_ELLIPSIS="…"; UI_SEP="·"
+    UI_BAR_FULL="█"; UI_BAR_EMPTY="░"; UI_ARROW="→"; UI_PLAY="▶"; UI_WARN_MARK="⚠"
 fi
 
 UI_MAX_WIDTH=64
@@ -186,6 +188,91 @@ ui_hint_line() {
 ui_prompt() {
     printf '\n  %s%s%s %s %s(press a key)%s ' \
         "$UI_ACCENT" "$UI_PROMPT" "$COLOR_RESET" "${1:-Select option}" "$UI_DIM" "$COLOR_RESET"
+}
+
+# ── Progress and results ─────────────────────────────────────────────────────
+
+# ui_progress CURRENT TOTAL [LABEL]: redraw one progress line in place
+#   Processing  ████████░░░░░░░░  50%  (25/50)
+# Does nothing when stdout is not a terminal, so logs and pipes stay clean.
+# Call ui_progress_clear to wipe the line when you are done with it.
+ui_progress() {
+    [[ -t 1 ]] || return 0
+    local current="$1" total="$2" label="${3:-Processing}" pct width filled bar_on bar_off
+    (( total > 0 )) || return 0
+    (( current > total )) && current=$total
+    _ui_measure
+    pct=$(( current * 100 / total ))
+    width=$(( UI_W - 36 ))
+    (( width < 10 )) && width=10
+    (( width > 30 )) && width=30
+    filled=$(( pct * width / 100 ))
+    _ui_repeat "$UI_BAR_FULL" "$filled" bar_on
+    _ui_repeat "$UI_BAR_EMPTY" $(( width - filled )) bar_off
+    printf '\r  %s%s%s  %s%s%s%s%s%s %3d%%  %s(%d/%d)%s\033[K' \
+        "$UI_DIM" "$label" "$COLOR_RESET" \
+        "$UI_ACCENT" "$bar_on" "$COLOR_RESET" "$UI_DIM" "$bar_off" "$COLOR_RESET" \
+        "$pct" "$UI_DIM" "$current" "$total" "$COLOR_RESET"
+}
+
+ui_progress_clear() { [[ -t 1 ]] && printf '\r\033[K'; return 0; }
+
+# ui_change OLD NEW [DRY]: a before/after pair on two lines. DRY is "true" to
+# mark it as a preview rather than something that happened.
+ui_change() {
+    local mark="${UI_OK}${SYMBOL_CHECK}${COLOR_RESET}" arrow="${UI_OK}"
+    if [[ "${3:-false}" == true ]]; then
+        mark="${UI_WARN}${UI_DOT_OFF}${COLOR_RESET}"; arrow="${UI_WARN}"
+    fi
+    printf '  %s %s%s%s\n' "$mark" "$UI_DIM" "$1" "$COLOR_RESET"
+    printf '    %s%s %s%s\n' "$arrow" "$UI_ARROW" "$2" "$COLOR_RESET"
+}
+
+# ui_operation_start NAME: banner at the top of a running operation.
+ui_operation_start() {
+    local rule badge=""
+    _ui_measure
+    _ui_repeat "$UI_H" $(( UI_W - 2 )) rule
+    if [[ "${DRY_RUN:-false}" == true ]]; then
+        if [[ -n "$UI_CHIP_TOGGLE" ]]; then
+            badge="  ${UI_CHIP_TOGGLE} DRY RUN ${COLOR_RESET}"
+        else
+            badge="  [DRY RUN]"
+        fi
+    fi
+    printf '\n  %s%s%s %s%s%s%s\n  %s%s%s\n\n' \
+        "$UI_ACCENT" "$UI_PLAY" "$COLOR_RESET" "$COLOR_BOLD" "$1" "$COLOR_RESET" "$badge" \
+        "$UI_DIM" "$rule" "$COLOR_RESET"
+}
+
+# ui_summary_card NAME DURATION ERRORS LABEL VALUE [LABEL VALUE ...]
+# The end-of-operation card: a title that reflects success or errors, the
+# operation and its duration, then one row per statistic. Pass pairs with a
+# non-zero VALUE only; with none it says nothing changed.
+ui_summary_card() {
+    local name="$1" duration="$2" errors="$3" title label value
+    shift 3
+    if (( errors > 0 )); then
+        title="${UI_WARN_MARK} Done with ${errors} error(s)"
+    else
+        title="${SYMBOL_CHECK} Complete"
+    fi
+    ui_box_top "$title"
+    ui_box_row "$name" "${COLOR_BOLD}${name}${COLOR_RESET}" "$duration" "${UI_DIM}${duration}${COLOR_RESET}"
+    if (( $# == 0 )); then
+        ui_box_row "Nothing to report" "${UI_DIM}Nothing to report${COLOR_RESET}" "" ""
+    fi
+    while (( $# >= 2 )); do
+        label="$1"; value="$2"; shift 2
+        local color="$COLOR_WHITE"
+        case "$label" in
+            *rror*|*ailed*)   color="$UI_ERR" ;;
+            *kipped*|*Low*)   color="$UI_WARN" ;;
+            *)                color="$UI_OK" ;;
+        esac
+        ui_box_row "$label" "${UI_DIM}${label}${COLOR_RESET}" "$value" "${color}${value}${COLOR_RESET}"
+    done
+    ui_box_bottom
 }
 
 # ── Input ────────────────────────────────────────────────────────────────────

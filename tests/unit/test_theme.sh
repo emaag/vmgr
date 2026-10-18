@@ -138,3 +138,55 @@ test_ask_yes_no_fallback_without_theme() {
     out="$(bash -c 'source "'"$LIB_DIR"'/core.sh"; ask_yes_no "Go?" <<< y; echo rc=$?' 2>&1)"
     assert_contains "rc=0" "$out" "ask_yes_no: plain fallback works without theme.sh"
 }
+
+test_progress_silent_when_not_a_terminal() {
+    local out
+    out="$(ui_progress 5 10 "Working")"
+    assert_equals "" "$out" "progress: prints nothing when stdout is not a tty"
+}
+
+test_change_shows_old_and_new() {
+    local out; out="$(ui_change "old name.mp4" "[New] name.mp4" | _strip)"
+    assert_contains "old name.mp4" "$out" "change: shows the old name"
+    assert_contains "[New] name.mp4" "$out" "change: shows the new name"
+    assert_contains "$UI_ARROW [New]" "$out" "change: new name follows an arrow"
+}
+
+test_summary_card_success_and_rows() {
+    COLUMNS=100
+    local out; out="$(ui_summary_card "Rename Files" "0m 3s" 0 "Files renamed" 4 "Files skipped" 1 | _strip)"
+    assert_contains "Complete" "$out" "card: success title"
+    assert_contains "Rename Files" "$out" "card: operation name"
+    assert_contains "0m 3s" "$out" "card: duration"
+    assert_contains "Files renamed" "$out" "card: stat label"
+}
+
+test_summary_card_reports_errors() {
+    COLUMNS=100
+    local out; out="$(ui_summary_card "Op" "0m 1s" 2 "Errors" 2 | _strip)"
+    assert_contains "Done with 2 error(s)" "$out" "card: error count in the title"
+}
+
+test_summary_card_without_stats() {
+    COLUMNS=100
+    local out; out="$(ui_summary_card "Op" "0m 1s" 0 | _strip)"
+    assert_contains "Nothing to report" "$out" "card: says so when there are no statistics"
+}
+
+test_summary_card_rows_fill_the_width() {
+    COLUMNS=100
+    local line bad=0
+    while IFS= read -r line; do
+        [[ "${#line}" -eq "$UI_MAX_WIDTH" ]] || bad=1
+    done < <(ui_summary_card "Rename Files" "0m 3s" 1 "Errors" 1 | _strip)
+    assert_equals "0" "$bad" "card: every line is exactly the box width"
+}
+
+test_operation_start_shows_dry_run() {
+    local out
+    out="$(DRY_RUN=true ui_operation_start "Rename" | _strip)"
+    assert_contains "Rename" "$out" "start: shows the operation name"
+    assert_contains "DRY RUN" "$out" "start: flags dry run"
+    out="$(DRY_RUN=false ui_operation_start "Rename" | _strip)"
+    [[ "$out" != *"DRY RUN"* ]]; assert_equals "0" "$?" "start: no dry-run flag when off"
+}

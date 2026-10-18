@@ -108,11 +108,15 @@ start_operation() {
     CURRENT_OPERATION="$1"
     START_TIME=$(date +%s)
 
-    echo ""
-    echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_MAGENTA}${SYMBOL_STAR} ${COLOR_BOLD}$CURRENT_OPERATION${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo ""
+    if [[ "$(type -t ui_operation_start)" == "function" ]]; then
+        ui_operation_start "$CURRENT_OPERATION"
+    else
+        echo ""
+        echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+        echo -e "${COLOR_BRIGHT_MAGENTA}${SYMBOL_STAR} ${COLOR_BOLD}$CURRENT_OPERATION${COLOR_RESET}"
+        echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+        echo ""
+    fi
 
     log_message "OPERATION" "Started: $CURRENT_OPERATION"
 }
@@ -125,19 +129,44 @@ end_operation() {
     local minutes=$((duration / 60))
     local seconds=$((duration % 60))
 
-    echo ""
-    echo -e "${COLOR_BRIGHT_MAGENTA}───────────────────────────────────────────────────────────────${COLOR_RESET}"
-    echo -e "${COLOR_BOLD}Operation Complete: $CURRENT_OPERATION${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_MAGENTA}───────────────────────────────────────────────────────────────${COLOR_RESET}"
+    if [[ "$(type -t ui_summary_card)" == "function" ]]; then
+        echo ""
+        _print_summary_card "${minutes}m ${seconds}s"
+        echo ""
+    else
+        echo ""
+        echo -e "${COLOR_BRIGHT_MAGENTA}───────────────────────────────────────────────────────────────${COLOR_RESET}"
+        echo -e "${COLOR_BOLD}Operation Complete: $CURRENT_OPERATION${COLOR_RESET}"
+        echo -e "${COLOR_BRIGHT_MAGENTA}───────────────────────────────────────────────────────────────${COLOR_RESET}"
 
-    print_statistics
+        print_statistics
 
-    echo ""
-    echo -e "${COLOR_CYAN}Duration: ${minutes}m ${seconds}s${COLOR_RESET}"
-    echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
-    echo ""
+        echo ""
+        echo -e "${COLOR_CYAN}Duration: ${minutes}m ${seconds}s${COLOR_RESET}"
+        echo -e "${COLOR_BRIGHT_MAGENTA}═══════════════════════════════════════════════════════════════${COLOR_RESET}"
+        echo ""
+    fi
 
     log_message "OPERATION" "Completed: $CURRENT_OPERATION (Duration: ${minutes}m ${seconds}s)"
+}
+
+# Build the themed end-of-operation card from the non-zero counters in STATS.
+# Args: $1 - duration text
+_print_summary_card() {
+    local -a rows=()
+    local space_mb=$(( ${STATS[space_saved]:-0} / 1024 / 1024 ))
+    [[ ${STATS[files_processed]:-0}       -gt 0 ]] && rows+=("Files processed" "${STATS[files_processed]}")
+    [[ ${STATS[files_renamed]:-0}         -gt 0 ]] && rows+=("Files renamed" "${STATS[files_renamed]}")
+    [[ ${STATS[files_moved]:-0}           -gt 0 ]] && rows+=("Files moved" "${STATS[files_moved]}")
+    [[ ${STATS[files_skipped]:-0}         -gt 0 ]] && rows+=("Files skipped" "${STATS[files_skipped]}")
+    [[ ${STATS[subtitles_generated]:-0}   -gt 0 ]] && rows+=("Subtitles generated" "${STATS[subtitles_generated]}")
+    [[ ${STATS[subtitles_translated]:-0}  -gt 0 ]] && rows+=("Subtitles translated" "${STATS[subtitles_translated]}")
+    [[ ${STATS[low_confidence_count]:-0}  -gt 0 ]] && rows+=("Low confidence" "${STATS[low_confidence_count]}")
+    [[ ${STATS[subtitles_failed]:-0}      -gt 0 ]] && rows+=("Subtitles failed" "${STATS[subtitles_failed]}")
+    [[ ${STATS[duplicates_found]:-0}      -gt 0 ]] && rows+=("Duplicates found" "${STATS[duplicates_found]}")
+    [[ $space_mb -gt 0 ]]                           && rows+=("Space saved" "${space_mb} MB")
+    [[ ${STATS[errors]:-0}                -gt 0 ]] && rows+=("Errors" "${STATS[errors]}")
+    ui_summary_card "$CURRENT_OPERATION" "$1" "${STATS[errors]:-0}" "${rows[@]}"
 }
 
 # Show progress bar
@@ -148,6 +177,12 @@ show_progress() {
     local message="${3:-Processing}"
 
     if [[ $total -eq 0 ]]; then
+        return
+    fi
+
+    if [[ "$(type -t ui_progress)" == "function" ]]; then
+        ui_progress "$current" "$total" "$message"
+        [[ $current -eq $total && -t 1 ]] && echo ""
         return
     fi
 

@@ -130,7 +130,11 @@ _apply_transform_to_directory() {
         local new_filename
         new_filename=$("$transform_fn" "$filename")
 
-        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+        if [[ "$(type -t ui_progress)" == "function" ]]; then
+            ui_progress "$file_count" "$total_files" "Processing"
+        else
+            echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+        fi
 
         if [[ "$filename" != "$new_filename" ]]; then
             local new_path="$directory/$new_filename"
@@ -143,16 +147,24 @@ _apply_transform_to_directory() {
             echo -ne "\r\033[K"
 
             if [[ "$dry_run" == true ]]; then
-                echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
-                echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
-                echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                if [[ "$(type -t ui_change)" == "function" ]]; then
+                    ui_change "$filename" "$new_filename" true
+                else
+                    echo -e "${COLOR_YELLOW}[DRY RUN]${COLOR_RESET} Would rename:"
+                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                fi
                 log_message "DRYRUN" "Would rename: $filename -> $new_filename"
             else
                 mv -- "$file" "$new_path" 2>/dev/null
                 if [[ $? -eq 0 ]]; then
-                    echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
-                    echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
-                    echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    if [[ "$(type -t ui_change)" == "function" ]]; then
+                        ui_change "$filename" "$new_filename"
+                    else
+                        echo -e "${COLOR_GREEN}${SYMBOL_ARROW}${COLOR_RESET} Renamed:"
+                        echo -e "  ${COLOR_WHITE}From:${COLOR_RESET} $filename"
+                        echo -e "  ${COLOR_WHITE}To:${COLOR_RESET}   $new_filename"
+                    fi
                     log_message "RENAME" "Success: $filename -> $new_filename"
                     ((renamed_count++))
                     ((STATS[files_renamed]++))
@@ -314,7 +326,11 @@ convert_images_to_jpg() {
         local new_path="$filedir/$new_filename"
 
         # Progress indicator
-        echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+        if [[ "$(type -t ui_progress)" == "function" ]]; then
+            ui_progress "$file_count" "$total_files" "Processing"
+        else
+            echo -ne "\r${COLOR_CYAN}Processing: [$file_count/$total_files] ${COLOR_RESET}"
+        fi
 
         # Check for conflicts
         if [[ -e "$new_path" && "$new_path" != "$file" ]]; then

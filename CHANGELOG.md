@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sub-screens and prompts use the same look: a titled `show_screen`, `ui_confirm` (single-key y/n; Enter takes the
   default, Esc means no), `ui_ask` for text input, and `ui_pause` (any key). `ask_yes_no` / `pause_for_key` in
   `core.sh` fall back to plain prompts when `theme.sh` is not loaded.
+- **Progress and results**: operations open with a `▶ Name` banner (with a DRY RUN badge) and close with a summary card
+  whose title reflects success or the error count, listing only the non-zero statistics and the duration. Rename-style
+  loops show an in-place progress bar (terminal only) and compact `old → new` pairs instead of From/To blocks.
+  `show_progress` uses the same bar. All of it falls back to the previous output when `theme.sh` is not loaded.
 - The directory browser now matches: a framed header (location, folder and video counts, hidden-folder
   state), accent-colored highlight and preview, and dimmed key hints.
 - Menus take a single keypress (no Enter); `Esc` goes back, and arrow keys are ignored. End of input now
