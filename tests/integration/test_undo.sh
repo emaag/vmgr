@@ -169,3 +169,49 @@ test_end_operation_mentions_undo() {
     assert_contains "Undo: 1 change(s) recorded" "$out" "end_operation: tells you the change can be undone"
     _teardown
 }
+
+# A stand-in for ImageMagick: "convert in out" writes out (fails for files named bad*)
+_fake_convert() {
+    convert() { [[ "$(basename "$1")" == bad* ]] && return 1; echo "jpg of $(cat "$1")" > "${@: -1}"; }
+}
+_unfake_convert() { unset -f convert; }
+
+test_png_conversion_keeps_the_original_in_the_trash_and_can_be_undone() {
+    _setup; _fake_convert
+    mkdir "$TEST_TMPDIR/p"; echo "pixels" > "$TEST_TMPDIR/p/pic.png"; echo "x" > "$TEST_TMPDIR/p/bad.png"
+    start_operation "Convert PNG to JPG" >/dev/null 2>&1
+    convert_png_to_jpg "$TEST_TMPDIR/p" false false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/p/pic.jpg" "convert: the .jpg was made"
+    assert_file_not_exists "$TEST_TMPDIR/p/pic.png" "convert: the .png is no longer in the folder"
+    assert_file_exists "$TEST_TMPDIR/p/bad.png" "convert: a failed conversion keeps its original"
+    assert_equals "1" "$(find "$TEST_TMPDIR/p/.vmgr-trash" -name 'pic.png' | wc -l | tr -d ' ')" "convert: the original is in the trash, not deleted"
+
+    undo_last_operation >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/p/pic.png" "undo: the .png is back"
+    assert_equals "pixels" "$(cat "$TEST_TMPDIR/p/pic.png")" "undo: the .png content is intact"
+    assert_file_not_exists "$TEST_TMPDIR/p/pic.jpg" "undo: the converted .jpg is moved away"
+    _unfake_convert; _teardown
+}
+
+test_jpeg_rename_is_undone() {
+    _setup
+    mkdir "$TEST_TMPDIR/j"; echo "a" > "$TEST_TMPDIR/j/photo.jpeg"
+    start_operation "Convert JPEG to JPG" >/dev/null 2>&1
+    convert_jpeg_to_jpg "$TEST_TMPDIR/j" false false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/j/photo.jpg" "jpeg: renamed to .jpg"
+    undo_last_operation >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/j/photo.jpeg" "undo: the .jpeg name is back"
+    assert_file_not_exists "$TEST_TMPDIR/j/photo.jpg" "undo: the .jpg name is gone"
+    _teardown
+}
+
+test_a_dry_run_conversion_changes_and_records_nothing() {
+    _setup; _fake_convert
+    mkdir "$TEST_TMPDIR/d"; echo "p" > "$TEST_TMPDIR/d/pic.png"
+    start_operation "Convert PNG to JPG" >/dev/null 2>&1
+    convert_png_to_jpg "$TEST_TMPDIR/d" true false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/d/pic.png" "dry run: the .png stays"
+    assert_file_not_exists "$TEST_TMPDIR/d/pic.jpg" "dry run: no .jpg made"
+    assert_equals "0" "$(undo_recorded_count)" "dry run: nothing recorded"
+    _unfake_convert; _teardown
+}

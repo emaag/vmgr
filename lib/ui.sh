@@ -220,7 +220,7 @@ show_utilities_menu() {
     ui_title "UTILITIES"
     ui_item 1 "Organize by Subfolder Names"
     ui_item 2 "List Undo Operations"
-    ui_item 3 "Undo Last Operation" "Renames, flattens, organize"
+    ui_item 3 "Undo Last Operation" "Renames, flattens, conversions, organize"
     ui_item 4 "View Last 50 Log Entries"
     ui_item 5 "Open Log Directory"
     ui_item 6 "Test Filename Transformation"

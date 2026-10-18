@@ -300,6 +300,8 @@ convert_images_to_jpg() {
     local file_count=0
     local converted_count=0
     local error_count=0
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
 
     # Build find command based on recursive setting
     local depth_args=""
@@ -354,12 +356,26 @@ convert_images_to_jpg() {
             local success=false
             if [[ "$rename_only" == true ]]; then
                 # Just rename (for jpeg->jpg)
-                mv -- "$file" "$new_path" 2>/dev/null && success=true
+                if mv -- "$file" "$new_path" 2>/dev/null; then
+                    success=true
+                    undo_record "$file" "$new_path"
+                fi
             else
-                # Actual conversion using ImageMagick
-                convert "$file" -quality 90 "$new_path" 2>/dev/null && success=true
-                # Remove original if conversion succeeded
-                [[ "$success" == true ]] && rm -f "$file"
+                # Actual conversion using ImageMagick. The original goes to the trash
+                # (not deleted), and the undo log also lists the new .jpg so an undo
+                # puts the original back and moves the .jpg out of the way.
+                if convert "$file" -quality 90 "$new_path" 2>/dev/null; then
+                    if trash_file "$file" "$directory" "$stamp"; then
+                        success=true
+                        local jrel="${new_path#"$directory"/}" jdest jn=1
+                        jdest="$directory/$VMGR_TRASH_DIR/$stamp/$jrel"
+                        while [[ -e "$jdest" ]]; do jdest="$directory/$VMGR_TRASH_DIR/$stamp/$jrel.$((++jn))"; done
+                        undo_record "$jdest" "$new_path"
+                    else
+                        log_warning "Could not move the original to the trash, leaving it in place: $filename"
+                        rm -f "$new_path"
+                    fi
+                fi
             fi
 
             if [[ "$success" == true ]]; then

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Image conversion can be undone**: JPEG to JPG renames are recorded, and PNG, WebP and HEIC conversions now move the original to the folder's `.vmgr-trash` instead of deleting it. Utilities > Undo Last Operation puts the originals back and moves the converted .jpg files out of the way. Empty Trash deletes the originals for good.
+
 ---
 
 ## [1.8.0] - 2026-10-18
