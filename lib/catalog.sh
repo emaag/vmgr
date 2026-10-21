@@ -1013,8 +1013,14 @@ catalog_trash_duplicates() {
         fi
     done < <(_catalog_duplicate_plan "$drive")
 
-    # The moved files are no longer at those paths: drop them from the catalog now
+    # The moved files are no longer at those paths: drop them from the catalog now.
+    # Their records are kept beside the undo log so Undo can put them back.
     if (( moved > 0 )); then
+        if [[ -n "${UNDO_CURRENT_LOG:-}" && -f "$UNDO_CURRENT_LOG" ]]; then
+            jq -c --rawfile ids "$work/removed" '
+                ($ids | split("\n") | map(select(length > 0) | {(.): true}) | add // {}) as $r
+                | .videos[] | select($r[.video_id])' "$CATALOG_DB" >> "${UNDO_CURRENT_LOG%.log}.catalog"
+        fi
         jq -r --rawfile ids "$work/removed" --arg now "$(_catalog_now)" '
             ($ids | split("\n") | map(select(length > 0) | {(.): true}) | add // {}) as $r
             | .videos |= map(select($r[.video_id] | not)) | .last_updated = $now | '"$_CAT_FMT" "$CATALOG_DB" > "$work/db.json" \
@@ -1039,6 +1045,48 @@ catalog_trash_duplicates() {
         (( moved > 0 )) && log_info "Undo with Utilities > Undo Last Operation, or empty the trash for good with Utilities > Empty Trash"
     fi
     (( failed == 0 ))
+}
+
+# Put catalog records back after an undo restored their files. Only records whose
+# file is back in place are re-added, and each drive's totals are refreshed.
+# Args: file of removed records (one JSON record per line, as catalog_trash_duplicates writes it)
+catalog_restore_records() {
+    local side="$1"
+    [[ -s "$side" ]] || return 0
+    _catalog_require_jq || return 1
+    init_catalog_db
+
+    local work; work="$(mktemp -d)" || return 1
+    : > "$work/back"; : > "$work/drives"
+    local vid drive path
+    while IFS="$_CAT_SEP" read -r vid drive path; do
+        [[ -e "$path" ]] || continue
+        printf '%s\n' "$vid" >> "$work/back"
+        printf '%s\n' "$drive" >> "$work/drives"
+    done < <(jq -r --slurpfile d "$CATALOG_DRIVES_DB" '
+        ($d[0].drives | map({(.drive_id): .mount_point}) | add // {}) as $mp
+        | select($mp[.drive_id] != null)
+        | [.video_id, .drive_id, ($mp[.drive_id] + "/" + .relative_path)] | join("\u001f")' "$side")
+
+    local restored=0
+    if [[ -s "$work/back" ]]; then
+        restored=$(wc -l < "$work/back" | tr -d ' ')
+        jq -r --rawfile ids "$work/back" --slurpfile add "$side" --arg now "$(_catalog_now)" '
+            ($ids | split("\n") | map(select(length > 0) | {(.): true}) | add // {}) as $b
+            | (.videos | map({(.video_id): true}) | add // {}) as $have
+            | .videos += ($add | map(select($b[.video_id] and ($have[.video_id] | not))))
+            | .last_updated = $now | '"$_CAT_FMT" "$CATALOG_DB" > "$work/db.json" \
+            && _catalog_commit "$CATALOG_DB" "$work/db.json"
+        local d count size_total
+        while IFS= read -r d; do
+            read -r count size_total < <(_catalog_drive_totals "$d")
+            jq --arg d "$d" --argjson c "${count:-0}" --argjson s "${size_total:-0}" \
+                '(.drives[] | select(.drive_id == $d)) |= (.file_count = $c | .total_size = $s)' "$CATALOG_DRIVES_DB" > "$work/drives.json" \
+                && _catalog_commit "$CATALOG_DRIVES_DB" "$work/drives.json"
+        done < <(sort -u "$work/drives")
+        log_info "Put $restored record(s) back in the catalog"
+    fi
+    rm -rf "$work"
 }
 
 # Write a plain-text report of the catalog. Prints the report path.

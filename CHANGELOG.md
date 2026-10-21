@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Undo restores catalog records**: undoing "duplicates to trash" from the catalog puts the removed records (and the drive's file count and size) back, so the duplicate shows up again without a rescan.
 - **Empty Trash by age**: `--empty-trash 30` (or the prompt in Utilities > Empty Trash) deletes only trashed batches at least that many days old. Newer batches stay in the trash and remain undoable; only the undo logs of deleted batches are retired.
 
 ---

@@ -462,6 +462,29 @@ test_trashed_duplicates_can_be_undone() {
     _teardown
 }
 
+test_undo_puts_the_catalog_records_back() {
+    _setup; _dup_drives
+    start_operation "Duplicates to Trash" >/dev/null 2>&1
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    assert_equals "0" "$(_count '[.videos[] | select(.filename == "Same copy.mp4")] | length')" "undo catalog: record removed by the move"
+    undo_last_operation >/dev/null 2>&1
+    assert_equals "1" "$(_count '[.videos[] | select(.filename == "Same copy.mp4")] | length')" "undo catalog: record is back after undo"
+    assert_equals "2" "$(jq '.drives[] | select(.drive_id == "id-two") | .file_count' "$CATALOG_DRIVES_DB")" "undo catalog: the drive's file count is restored"
+    assert_equals "1" "$(jq 'length' <<< "$(find_duplicates_in_catalog)")" "undo catalog: the duplicate is reported again"
+    assert_equals "0" "$(find "$UNDO_LOG_DIR" -name '*.catalog' | wc -l | tr -d ' ')" "undo catalog: the saved records are archived"
+    _teardown
+}
+
+test_undo_does_not_add_records_for_files_that_did_not_come_back() {
+    _setup; _dup_drives
+    start_operation "Duplicates to Trash" >/dev/null 2>&1
+    catalog_trash_duplicates id-two >/dev/null 2>&1
+    local before; before="$(_count '.videos | length')"
+    catalog_restore_records "$UNDO_LOG_DIR"/*.catalog >/dev/null 2>&1
+    assert_equals "$before" "$(_count '.videos | length')" "undo catalog: nothing re-added while the file is still in the trash"
+    _teardown
+}
+
 test_a_file_changed_since_the_scan_is_left_alone() {
     _setup; _dup_drives
     echo "edited after the scan, so the hash is stale" > "$D2/Backup/Same copy.mp4"

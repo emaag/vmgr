@@ -180,6 +180,13 @@ undo_organize_operation() {
     STATS[files_skipped]=$error_count
     echo ""
 
+    # Put back catalog records the operation removed (e.g. duplicates moved to trash)
+    local catalog_side="${undo_log%.log}.catalog"
+    if [[ $success_count -gt 0 && "$DRY_RUN" == false && -f "$catalog_side" ]]; then
+        [[ "$(type -t catalog_restore_records)" == "function" ]] && catalog_restore_records "$catalog_side"
+        mv "$catalog_side" "${catalog_side}.completed"
+    fi
+
     # Archive the undo log
     if [[ $success_count -gt 0 && "$DRY_RUN" == false ]]; then
         mv "$undo_log" "${undo_log}.completed"
@@ -297,7 +304,10 @@ empty_trash() {
         while IFS= read -r dest; do
             [[ -e "$dest" ]] || { gone=true; break; }
         done < <(grep -v '^#' "$f" | cut -d'|' -f2 | grep "/$VMGR_TRASH_DIR/")
-        $gone && mv "$f" "${f}.expired" 2>/dev/null
+        if $gone; then
+            mv "$f" "${f}.expired" 2>/dev/null
+            [[ -f "${f%.log}.catalog" ]] && mv "${f%.log}.catalog" "${f%.log}.catalog.expired" 2>/dev/null
+        fi
     done
     shopt -u nullglob
 

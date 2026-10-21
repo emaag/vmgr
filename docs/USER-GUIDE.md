@@ -392,8 +392,9 @@ scanned (on the same drive, so it is instant even for large videos), keeping eac
 `--empty-trash`) lists each trash with its size, asks, and then deletes for good; the undo logs that pointed into it are retired. Give a number of days (`--empty-trash 30`, or answer the menu prompt) to delete only batches at least that old and keep the newer ones undoable.
 
 **Limits.** If you switch **Settings → Granular Controls → Undo System** off, nothing is recorded
-and duplicates are deleted permanently (with a typed `yes`). Undo restores files to their places but does not re-add them to the
-catalog: rescan the drive.
+and duplicates are deleted permanently (with a typed `yes`). Undo restores files to their places. When the operation was
+"duplicates to trash" from the catalog, the removed records go back into the catalog too; other operations never changed the
+catalog, so after renaming or flattening, rescan the drive.
 
 ---
 
