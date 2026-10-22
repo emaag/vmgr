@@ -263,7 +263,7 @@ find_similar_images() {
 #   GROUP, copies, size of each copy, "", "", ""
 #   FILE, "", "", drive label, online|offline, relative path     (one per copy)
 #   SUMMARY, groups, extra copies, wasted bytes, "", ""          (last line, counts every group)
-# Only the first DUPLICATE_REPORT_GROUPS groups get GROUP/FILE lines.
+# Only the first DUPLICATE_REPORT_GROUPS groups get GROUP/FILE lines (0 = every group).
 _catalog_duplicate_report_lines() {
     local media="${1:-all}" map id mp label limit="${DUPLICATE_REPORT_GROUPS:-200}"
     map="$(mktemp)"
@@ -282,7 +282,7 @@ _catalog_duplicate_report_lines() {
             if (n > 1) {
                 groups++; extra += n - 1; wasted += total - total / n
                 avg = int(total / n)
-                if (groups <= limit) {
+                if (limit == 0 || groups <= limit) {
                 printf "GROUP\037%d\037%d\037\037\037\n", n, avg
                 for (i = 1; i <= n; i++)
                     printf "FILE\037\037\037%s\037%s\037%s\n", (D[i] in lab ? lab[D[i]] : "unknown"), (D[i] in st ? st[D[i]] : "offline"), R[i]
@@ -301,6 +301,7 @@ _catalog_duplicate_report_lines() {
 # across every cataloged drive (drives that are offline are included).
 show_duplicates_report() {
     local media_filter="${1:-all}"
+    local DUPLICATE_REPORT_GROUPS="${2:-${DUPLICATE_REPORT_GROUPS:-200}}"   # 0 shows every group
 
     command -v jq >/dev/null 2>&1 || { log_error "The catalog needs jq"; return 1; }
     init_catalog_db
@@ -338,7 +339,15 @@ show_duplicates_report() {
 
     if (( dup_count > n )); then
         echo ""
-        log_info "Showing the first ${n} of ${dup_count} groups. Export Catalog Report lists them all; cleaning up duplicates covers every one."
+        log_info "Showing the first ${n} of ${dup_count} groups; cleaning up duplicates covers every one."
+        if [[ "$INTERACTIVE" == true ]]; then
+            if ask_yes_no "Show all ${dup_count} groups?"; then
+                show_duplicates_report "$media_filter" 0
+                return $?
+            fi
+        else
+            log_info "Run catalog-duplicates --all to list every group."
+        fi
     fi
     echo ""
     log_info "${dup_count} duplicate group(s), ${copies} extra cop$([[ "$copies" == 1 ]] && echo y || echo ies), $(format_bytes "${wasted:-0}") wasted"

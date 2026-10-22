@@ -39,6 +39,13 @@ _vmgr_completion() {
         --empty-trash
         --sort
         --time
+        --all
+        --min-size
+        --max-size
+        --newer
+        --older
+        --min-duration
+        --max-duration
     "
 
     # Whisper models

@@ -787,6 +787,42 @@ list_cataloged_drives() {
 # a hash prefix (6+ hex characters), an exact resolution or dimensions such as
 # 1920x1080, or a camera name. Files on drives that are offline are included.
 # Args: term [all|video|image|audio]
+# Parse "500", "10K", "1.5G"... into bytes (binary units). Prints nothing and
+# returns 1 when the text is not a size.
+_catalog_parse_size() {
+    LC_ALL=C awk -v s="$1" 'BEGIN {
+        if (!match(s, /^[0-9]+(\.[0-9]+)?[KkMmGgTt]?[Bb]?$/)) exit 1
+        u = toupper(s); sub(/B$/, "", u)
+        m = 1; c = substr(u, length(u))
+        if (c == "K") m = 1024; else if (c == "M") m = 1024^2; else if (c == "G") m = 1024^3; else if (c == "T") m = 1024^4
+        if (m > 1) u = substr(u, 1, length(u) - 1)
+        printf "%.0f\n", u * m }'
+}
+
+# Parse "90", "90s", "10m", "2h" into seconds. Returns 1 when not a duration.
+_catalog_parse_duration() {
+    LC_ALL=C awk -v s="$1" 'BEGIN {
+        if (!match(s, /^[0-9]+(\.[0-9]+)?[smhSMH]?$/)) exit 1
+        c = tolower(substr(s, length(s))); m = 1
+        if (c == "m") m = 60; else if (c == "h") m = 3600
+        if (c ~ /[smh]/) s = substr(s, 1, length(s) - 1)
+        printf "%.0f\n", s * m }'
+}
+
+# Parse "30d", "2w", "6m", "1y" (a bare number is days) into days. Returns 1 when not an age.
+_catalog_parse_age() {
+    LC_ALL=C awk -v s="$1" 'BEGIN {
+        if (!match(s, /^[0-9]+[dDwWmMyY]?$/)) exit 1
+        c = tolower(substr(s, length(s))); m = 1
+        if (c == "w") m = 7; else if (c == "m") m = 30; else if (c == "y") m = 365
+        if (c ~ /[dwmy]/) s = substr(s, 1, length(s) - 1)
+        printf "%d\n", s * m }'
+}
+
+# Search the catalog by name, hash, resolution or camera, optionally narrowed by
+# CATALOG_FILTER_MIN_SIZE / _MAX_SIZE (bytes), _NEWER_DAYS / _OLDER_DAYS (by file
+# modification time) and _MIN_DURATION / _MAX_DURATION (seconds, needs metadata).
+# With at least one filter set the search term may be empty.
 search_catalog() {
     local term="$1"
     local media_filter="${2:-all}"
@@ -794,7 +830,13 @@ search_catalog() {
     _catalog_require_jq || return 1
     init_catalog_db
 
-    if [[ -z "$term" ]]; then
+    local f_min_size="${CATALOG_FILTER_MIN_SIZE:-null}" f_max_size="${CATALOG_FILTER_MAX_SIZE:-null}"
+    local f_newer="${CATALOG_FILTER_NEWER_DAYS:-null}" f_older="${CATALOG_FILTER_OLDER_DAYS:-null}"
+    local f_min_dur="${CATALOG_FILTER_MIN_DURATION:-null}" f_max_dur="${CATALOG_FILTER_MAX_DURATION:-null}"
+    local filtered=false
+    [[ "$f_min_size$f_max_size$f_newer$f_older$f_min_dur$f_max_dur" != "nullnullnullnullnullnull" ]] && filtered=true
+
+    if [[ -z "$term" && "$filtered" == false ]]; then
         log_warning "Nothing to search for"
         return 1
     fi
@@ -808,18 +850,27 @@ search_catalog() {
     # differently inside the JSON, so it skips the pre-filter.
     local tmp cand
     tmp="$(mktemp)"; cand="$(mktemp)"
-    if [[ "$term" == *\"* || "$term" == *\\* ]]; then
+    if [[ -z "$term" || "$term" == *\"* || "$term" == *\\* ]]; then
         grep '^{"video_id"' "$CATALOG_DB" | sed 's/,$//' > "$cand"
     else
         grep -iF -- "$term" "$CATALOG_DB" | grep '^{"video_id"' | sed 's/,$//' > "$cand"
     fi
     jq -r -s --arg t "$term" --arg mt "$media_filter" --argjson limit "$CATALOG_SEARCH_LIMIT" \
-          --argjson online "$online_json" --slurpfile drives "$CATALOG_DRIVES_DB" '
+          --argjson online "$online_json" --slurpfile drives "$CATALOG_DRIVES_DB" \
+          --argjson minsz "$f_min_size" --argjson maxsz "$f_max_size" --argjson newer "$f_newer" --argjson older "$f_older" \
+          --argjson mindur "$f_min_dur" --argjson maxdur "$f_max_dur" '
         ($t | ascii_downcase) as $q
+        | now as $now
         | ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $labels
         | [.[]
            | select($mt == "all" or .media_type == $mt)
-           | select(((.relative_path | ascii_downcase) | contains($q))
+           | select($minsz == null or .file_size >= $minsz)
+           | select($maxsz == null or .file_size <= $maxsz)
+           | select($newer == null or (.mtime // 0) >= ($now - $newer * 86400))
+           | select($older == null or (.mtime // 0) <= ($now - $older * 86400))
+           | select($mindur == null or ((.duration // -1) >= $mindur))
+           | select($maxdur == null or (.duration != null and .duration <= $maxdur))
+           | select($q == "" or ((.relative_path | ascii_downcase) | contains($q))
                     or (($q | test("^[0-9a-f]{6,}$")) and ((.hash // "") | startswith($q)))
                     or ((.resolution // "") == $q) or ((.dimensions // "") == $q)
                     or ((.camera // "" | ascii_downcase) | contains($q)))]
@@ -827,19 +878,21 @@ search_catalog() {
         | ("TOTAL\u001f" + ($all | length | tostring)),
           ($all[:$limit][] | [($labels[.drive_id] // "unknown"),
                               (if $online[.drive_id] then "online" else "offline" end),
-                              .relative_path, (.file_size | tostring), .media_type, (.resolution // .dimensions // "")]
+                              .relative_path, (.file_size | tostring), .media_type, (.resolution // .dimensions // ""),
+                              (if .duration then (.duration | floor | tostring) else "" end)]
                             | join("\u001f"))' "$cand" > "$tmp" 2>/dev/null
     rm -f "$cand"
 
-    local total=0 label state rel size mtype res shown=0
-    while IFS="$_CAT_SEP" read -r label state rel size mtype res; do
+    local total=0 label state rel size mtype res dur shown=0
+    while IFS="$_CAT_SEP" read -r label state rel size mtype res dur; do
         if [[ "$label" == "TOTAL" ]]; then total="$state"; continue; fi
         shown=$(( shown + 1 ))
         local dot color
         if [[ "$state" == online ]]; then dot="${UI_DOT_ON:-*}"; color="${UI_OK:-$COLOR_GREEN}"
         else dot="${UI_DOT_OFF:-o}"; color="${UI_DIM:-$COLOR_RED}"; fi
         printf '  %s%s%s %s%s%s  %s\n' "$color" "$dot" "$COLOR_RESET" "${UI_ACCENT:-$COLOR_CYAN}" "$label" "$COLOR_RESET" "$rel"
-        printf '      %s%s %s %s%s%s\n' "${UI_DIM:-}" "$mtype" "${UI_SEP:-·}" "$(format_bytes "$size")" "${res:+ ${UI_SEP:-·} $res}" "$COLOR_RESET"
+        [[ -n "$dur" ]] && dur="$(printf '%d:%02d:%02d' $(( dur / 3600 )) $(( dur % 3600 / 60 )) $(( dur % 60 )))"
+        printf '      %s%s %s %s%s%s%s\n' "${UI_DIM:-}" "$mtype" "${UI_SEP:-·}" "$(format_bytes "$size")" "${res:+ ${UI_SEP:-·} $res}" "${dur:+ ${UI_SEP:-·} $dur}" "$COLOR_RESET"
     done < "$tmp"
     rm -f "$tmp"
 

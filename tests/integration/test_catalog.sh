@@ -299,6 +299,82 @@ test_retention_zero_keeps_offline_drives_forever() {
     _teardown
 }
 
+_filters_off() { unset CATALOG_FILTER_MIN_SIZE CATALOG_FILTER_MAX_SIZE CATALOG_FILTER_NEWER_DAYS CATALOG_FILTER_OLDER_DAYS CATALOG_FILTER_MIN_DURATION CATALOG_FILTER_MAX_DURATION; }
+
+test_size_age_and_duration_parsers() {
+    assert_equals "1073741824" "$(_catalog_parse_size 1G)" "parse: 1G is 1024^3 bytes"
+    assert_equals "1536" "$(_catalog_parse_size 1.5k)" "parse: decimals and lower case"
+    assert_equals "500" "$(_catalog_parse_size 500)" "parse: bare number is bytes"
+    assert_exits_nonzero "_catalog_parse_size big" "parse: junk size rejected"
+    assert_equals "600" "$(_catalog_parse_duration 10m)" "parse: 10m is 600 seconds"
+    assert_equals "7200" "$(_catalog_parse_duration 2h)" "parse: 2h"
+    assert_exits_nonzero "_catalog_parse_duration 2x" "parse: junk duration rejected"
+    assert_equals "14" "$(_catalog_parse_age 2w)" "parse: 2w is 14 days"
+    assert_equals "365" "$(_catalog_parse_age 1y)" "parse: 1y"
+    assert_exits_nonzero "_catalog_parse_age soon" "parse: junk age rejected"
+}
+
+test_search_by_size_range_without_a_term() {
+    _setup
+    head -c 5000 /dev/zero > "$D1/Movies/Big.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    CATALOG_FILTER_MIN_SIZE=2000
+    local out; out="$(search_catalog "" all 2>&1 | _strip)"
+    assert_contains "Big.mp4" "$out" "size filter: the big file matches"
+    assert_not_contains "Film A.mp4" "$out" "size filter: smaller files are left out"
+    _filters_off
+    CATALOG_FILTER_MAX_SIZE=100
+    out="$(search_catalog "" all 2>&1 | _strip)"
+    assert_not_contains "Big.mp4" "$out" "size filter: max size leaves the big file out"
+    assert_contains "Film A.mp4" "$out" "size filter: ... and keeps the small ones"
+    _filters_off
+    _teardown
+}
+
+test_search_by_age() {
+    _setup
+    touch -d "100 days ago" "$D1/Movies/Old.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    CATALOG_FILTER_OLDER_DAYS=30
+    local out; out="$(search_catalog "" all 2>&1 | _strip)"
+    assert_contains "Old.mp4" "$out" "age filter: an old file matches --older"
+    assert_not_contains "Film A.mp4" "$out" "age filter: a new file does not"
+    _filters_off
+    CATALOG_FILTER_NEWER_DAYS=30
+    out="$(search_catalog "" all 2>&1 | _strip)"
+    assert_not_contains "Old.mp4" "$out" "age filter: --newer leaves the old file out"
+    assert_contains "Film A.mp4" "$out" "age filter: --newer keeps new files"
+    _filters_off
+    _teardown
+}
+
+test_search_by_duration_and_with_a_term() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    jq -c '.videos |= map(if .filename == "Film A.mp4" then .duration = 7200 elif .filename == "ep 1.mkv" then .duration = 60 else . end)' "$CATALOG_DB" > "$TEST_TMPDIR/x" && mv "$TEST_TMPDIR/x" "$CATALOG_DB"
+    CATALOG_FILTER_MIN_DURATION=3600
+    local out; out="$(search_catalog "" all 2>&1 | _strip)"
+    assert_contains "Film A.mp4" "$out" "duration filter: the 2 hour film matches"
+    assert_contains "2:00:00" "$out" "duration filter: the length is shown"
+    assert_not_contains "ep 1.mkv" "$out" "duration filter: the 1 minute episode does not"
+    assert_not_contains "song.mp3" "$out" "duration filter: files with no known length are left out"
+    CATALOG_FILTER_MIN_DURATION=30
+    out="$(search_catalog "ep" all 2>&1 | _strip)"
+    assert_contains "ep 1.mkv" "$out" "filters combine with a term"
+    assert_not_contains "Film A.mp4" "$out" "filters combine with a term: the term still applies"
+    _filters_off
+    _teardown
+}
+
+test_search_with_no_term_and_no_filter_is_refused() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    local rc=0
+    search_catalog "" all >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "search: nothing to search for returns 1"
+    _teardown
+}
+
 test_export_csv_has_a_header_and_one_row_per_file() {
     _setup
     echo "odd" > "$D1/Odd, \"name\".mp4"
@@ -695,6 +771,21 @@ test_hashes_that_look_like_numbers_do_not_merge_groups() {
     assert_contains "|Drive Two|" "$out" "numeric-looking hashes: drive two still offered"
     assert_equals "1" "$(_catalog_duplicate_plan id-two | grep -c 'third.mp4')" "numeric-looking hashes: the cross-drive copy is found"
     assert_equals "0" "$(_catalog_duplicate_plan id-two | grep -c 'dup[AB].mp4')" "numeric-looking hashes: two copies on one drive are not offered"
+    _teardown
+}
+
+test_the_duplicate_report_can_show_every_group_and_points_to_how() {
+    _setup
+    echo "one" > "$D1/Movies/a.mp4"; echo "one" > "$D2/Backup/a2.mp4"
+    echo "two" > "$D1/Movies/b.mp4"; echo "two" > "$D2/Backup/b2.mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    catalog_drive "$D2" true >/dev/null 2>&1
+    DUPLICATE_REPORT_GROUPS=1
+    local out; out="$(show_duplicates_report all 0 2>&1 | _strip)"
+    assert_equals "2" "$(grep -c 'Group [0-9]' <<< "$out")" "report all: a limit of 0 prints every group"
+    out="$(show_duplicates_report 2>&1 | _strip)"
+    assert_contains "catalog-duplicates --all" "$out" "report cap: the partial list says how to see everything"
+    DUPLICATE_REPORT_GROUPS=200
     _teardown
 }
 

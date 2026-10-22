@@ -192,7 +192,7 @@ vmgr subtitles --model base --format srt ~/Videos/<Tab>
 - `--empty-trash [DAYS]` - Permanently delete files moved to trash (only batches at least DAYS old, if given)
 - `reddit` - Download from a subreddit (`reddit a,b,c <dir>` for several; `--sort` and `--time` values complete); `reddit-setup` - guided Reddit API setup
 - `catalog <dir>` - Scan a drive or folder into the catalog (directory completion)
-- `catalog-list`, `catalog-search`, `catalog-duplicates`, `catalog-report`, `catalog-export` - Query or export the catalog
+- `catalog-list`, `catalog-search` (with `--min-size`, `--max-size`, `--newer`, `--older`, `--min-duration`, `--max-duration`), `catalog-duplicates [--all]`, `catalog-report`, `catalog-export` - Query or export the catalog
 
 ### Options
 - `--help`, `-h` - Show help

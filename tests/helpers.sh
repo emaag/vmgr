@@ -104,6 +104,16 @@ assert_contains() {
     fi
 }
 
+# assert_not_contains SUBSTRING STRING NAME
+assert_not_contains() {
+    local substr="$1" string="$2" name="$3"
+    if [[ "$string" != *"$substr"* ]]; then
+        _pass "$name"
+    else
+        _fail "$name" "does not contain '$substr'" "'$string'"
+    fi
+}
+
 # assert_matches REGEX STRING NAME  (bash extended regex)
 assert_matches() {
     local regex="$1" string="$2" name="$3"

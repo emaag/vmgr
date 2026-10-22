@@ -127,3 +127,22 @@ test_catalog_export_command_writes_the_requested_format() {
     assert_contains "relative_path" "$(head -1 "$TEST_TMPDIR/out.csv")" "cli: a format word and a file can be given"
     _teardown
 }
+
+test_catalog_search_range_filters_on_the_command_line() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/lib"
+    head -c 5000 /dev/zero > "$TEST_TMPDIR/lib/big.mp4"; echo small > "$TEST_TMPDIR/lib/small.mp4"
+    _vmgr catalog "$TEST_TMPDIR/lib"
+    _vmgr catalog-search --min-size 2K
+    assert_equals "0" "$RC" "cli: a filter alone is a valid search"
+    assert_contains "big.mp4" "$OUT" "cli: --min-size keeps the big file"
+    assert_not_contains "small.mp4" "$OUT" "cli: --min-size drops the small file"
+    _vmgr catalog-search mp4 video --max-size 100
+    assert_contains "small.mp4" "$OUT" "cli: term, type and filter combine"
+    _vmgr catalog-search --min-size lots
+    assert_equals "1" "$RC" "cli: an invalid size exits 1"
+    assert_contains "Invalid value for --min-size" "$OUT" "cli: the bad filter is named"
+    _vmgr catalog-search
+    assert_equals "1" "$RC" "cli: no term and no filter exits 1"
+    _teardown
+}

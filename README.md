@@ -170,9 +170,10 @@ chmod +x video-manager-ultimate.sh
 
 # Search by name, hash prefix, resolution or camera; drives that are unplugged are included
 ./video-manager-ultimate.sh catalog-search "season 2" video
+./video-manager-ultimate.sh catalog-search --min-size 1G --older 1y   # filters work without a term
 
 # Duplicates across every cataloged drive, and a text report
-./video-manager-ultimate.sh catalog-duplicates
+./video-manager-ultimate.sh catalog-duplicates [--all]
 ./video-manager-ultimate.sh catalog-report
 ./video-manager-ultimate.sh catalog-export [file] [csv|json]
 ```

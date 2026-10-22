@@ -132,8 +132,12 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
                             (with DAYS, only batches at least that old)
     catalog <dir>           Scan a drive or folder into the catalog (incremental)
     catalog-list            List cataloged drives (online/offline, totals)
-    catalog-search <term> [video|image|audio]   Search the catalog, offline drives included
-    catalog-duplicates      Find duplicate files across all cataloged drives
+    catalog-search [term] [video|image|audio] [--min-size 1G] [--max-size 500M] [--newer 30d]
+                [--older 1y] [--min-duration 10m] [--max-duration 2h]
+                            Search the catalog, offline drives included
+    catalog-duplicates [--all] [type]
+                            Find duplicate files across all cataloged drives
+                            (--all lists every group, not only the first 200)
     catalog-report [file]   Write a text report of the catalog
     catalog-export [file] [csv|json]
                             Export every catalog record for spreadsheets or scripts
@@ -336,12 +340,38 @@ parse_arguments() {
             catalog-list|catalog-duplicates)
                 command="$1"
                 shift
+                if [[ "$command" == "catalog-duplicates" ]]; then
+                    local _n
+                    for _n in 1 2; do
+                        if [[ "$1" == "--all" ]]; then CATALOG_CLI_ALL=true; shift
+                        elif [[ "$1" =~ ^(video|image|audio)$ ]]; then CATALOG_CLI_TYPE="$1"; shift
+                        fi
+                    done
+                fi
                 ;;
             catalog-search)
                 command="catalog-search"
                 shift
                 if [[ -n "$1" && "$1" != -* ]]; then CATALOG_CLI_TERM="$1"; shift; fi
                 if [[ -n "$1" && "$1" =~ ^(all|video|image|audio)$ ]]; then CATALOG_CLI_TYPE="$1"; shift; fi
+                # Range filters: --min-size 1G --max-size 500M --newer 30d --older 1y --min-duration 10m --max-duration 2h
+                while [[ "$1" =~ ^--(min-size|max-size|newer|older|min-duration|max-duration)$ ]]; do
+                    local _opt="$1" _val=""
+                    shift
+                    case "$_opt" in
+                        --min-size)     _val="$(_catalog_parse_size "$1")"     && CATALOG_FILTER_MIN_SIZE="$_val" ;;
+                        --max-size)     _val="$(_catalog_parse_size "$1")"     && CATALOG_FILTER_MAX_SIZE="$_val" ;;
+                        --newer)        _val="$(_catalog_parse_age "$1")"      && CATALOG_FILTER_NEWER_DAYS="$_val" ;;
+                        --older)        _val="$(_catalog_parse_age "$1")"      && CATALOG_FILTER_OLDER_DAYS="$_val" ;;
+                        --min-duration) _val="$(_catalog_parse_duration "$1")" && CATALOG_FILTER_MIN_DURATION="$_val" ;;
+                        --max-duration) _val="$(_catalog_parse_duration "$1")" && CATALOG_FILTER_MAX_DURATION="$_val" ;;
+                    esac
+                    if [[ -z "$_val" ]]; then
+                        log_error "Invalid value for $_opt: ${1:-<missing>}"
+                        exit 1
+                    fi
+                    shift
+                done
                 ;;
             catalog-report)
                 command="catalog-report"
@@ -493,14 +523,14 @@ parse_arguments() {
             list_cataloged_drives
             ;;
         catalog-search)
-            if [[ -z "${CATALOG_CLI_TERM:-}" ]]; then
-                log_error "Usage: vmgr catalog-search <term> [video|image|audio]"
+            if [[ -z "${CATALOG_CLI_TERM:-}" && -z "${CATALOG_FILTER_MIN_SIZE:-}${CATALOG_FILTER_MAX_SIZE:-}${CATALOG_FILTER_NEWER_DAYS:-}${CATALOG_FILTER_OLDER_DAYS:-}${CATALOG_FILTER_MIN_DURATION:-}${CATALOG_FILTER_MAX_DURATION:-}" ]]; then
+                log_error "Usage: vmgr catalog-search <term> [video|image|audio] [--min-size 1G] [--max-size 500M] [--newer 30d] [--older 1y] [--min-duration 10m] [--max-duration 2h]"
                 exit 1
             fi
             search_catalog "$CATALOG_CLI_TERM" "${CATALOG_CLI_TYPE:-all}"
             ;;
         catalog-duplicates)
-            show_duplicates_report
+            show_duplicates_report "${CATALOG_CLI_TYPE:-all}" "$([[ "${CATALOG_CLI_ALL:-false}" == true ]] && echo 0 || echo "$DUPLICATE_REPORT_GROUPS")"
             ;;
         catalog-report)
             catalog_export_report "${CATALOG_CLI_FILE:-}"

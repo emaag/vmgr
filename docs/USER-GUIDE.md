@@ -562,7 +562,8 @@ From the command line:
 vmgr catalog /mnt/d                       # scan (incremental)
 vmgr catalog-list                         # drives and status
 vmgr catalog-search "season 2" video      # search, offline drives included
-vmgr catalog-duplicates                   # duplicates across all drives
+vmgr catalog-search --min-size 1G --older 1y   # by size, age or length, with or without a term
+vmgr catalog-duplicates [--all]            # duplicates across all drives (--all: every group)
 vmgr catalog-report [file]                # write a text report
 vmgr catalog-export [file] [csv|json]     # every record as CSV or JSON
 vmgr --dry-run catalog /mnt/d             # preview: how many files would be added or updated
@@ -745,8 +746,8 @@ subreddit that does not exist, 429 for rate limiting).
 | `--empty-trash` | Permanently delete files moved to trash | none |
 | `catalog <dir>` | Scan a drive or folder into the catalog | directory |
 | `catalog-list` | Cataloged drives, online/offline | none |
-| `catalog-search <term> [type]` | Search the catalog (video, image or audio) | term |
-| `catalog-duplicates` | Duplicates across all cataloged drives | none |
+| `catalog-search [term] [type] [filters]` | Search the catalog (video, image or audio). Filters: `--min-size 1G`, `--max-size 500M`, `--newer 30d`, `--older 1y` (by modification time; d, w, m, y), `--min-duration 10m`, `--max-duration 2h` (needs metadata). A filter can replace the term | term or a filter |
+| `catalog-duplicates [--all] [type]` | Duplicates across all cataloged drives; the first 200 groups unless `--all` | none |
 | `catalog-report [file]` | Text report of the catalog | none |
 | `catalog-export [file] [csv\|json]` | Every record as CSV (default) or JSON; the format follows the file extension | none |
 | `reddit <sub> <dir> [max]` | Download from a subreddit | subreddit, directory |

@@ -308,7 +308,8 @@ vmgr
 vmgr catalog /mnt/d                    # scan a drive or folder (incremental)
 vmgr catalog-list                      # drives: online/offline, totals
 vmgr catalog-search "name" [video|image|audio]   # also: hash prefix, 1920x1080, camera
-vmgr catalog-duplicates                # same hash on different drives
+vmgr catalog-search --min-size 1G --newer 30d    # filters: --min-size --max-size --newer --older --min-duration --max-duration
+vmgr catalog-duplicates [--all]         # same hash on different drives (--all: every group)
 vmgr catalog-report [file]             # text report
 vmgr catalog-export [file] [csv|json]  # every record, for spreadsheets/scripts
 ```
