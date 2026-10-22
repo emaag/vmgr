@@ -564,6 +564,7 @@ vmgr catalog-list                         # drives and status
 vmgr catalog-search "season 2" video      # search, offline drives included
 vmgr catalog-duplicates                   # duplicates across all drives
 vmgr catalog-report [file]                # write a text report
+vmgr catalog-export [file] [csv|json]     # every record as CSV or JSON
 vmgr --dry-run catalog /mnt/d             # preview: how many files would be added or updated
 ```
 
@@ -747,6 +748,7 @@ subreddit that does not exist, 429 for rate limiting).
 | `catalog-search <term> [type]` | Search the catalog (video, image or audio) | term |
 | `catalog-duplicates` | Duplicates across all cataloged drives | none |
 | `catalog-report [file]` | Text report of the catalog | none |
+| `catalog-export [file] [csv\|json]` | Every record as CSV (default) or JSON; the format follows the file extension | none |
 | `reddit <sub> <dir> [max]` | Download from a subreddit | subreddit, directory |
 | `reddit-setup` | Guided Reddit API setup | terminal |
 

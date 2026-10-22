@@ -1089,6 +1089,46 @@ catalog_restore_records() {
     rm -rf "$work"
 }
 
+# Export every catalog record as CSV or JSON for spreadsheets and scripts. Each
+# record carries its drive's label. Prints the file path.
+# Args: [format csv|json] [output file]. The format defaults to the file's
+# extension, then to csv.
+catalog_export_data() {
+    local format="${1:-}" out="${2:-}"
+    if [[ -z "$format" && -n "$out" ]]; then
+        case "${out##*.}" in json|JSON) format=json ;; *) format=csv ;; esac
+    fi
+    format="${format:-csv}"
+    if [[ "$format" != csv && "$format" != json ]]; then
+        log_error "Unknown export format: $format (use csv or json)"
+        return 1
+    fi
+    _catalog_require_jq || return 1
+    init_catalog_db
+    out="${out:-$HOME/video-catalog-$(date +%Y%m%d-%H%M%S).$format}"
+
+    local tmp; tmp="$(mktemp)" || return 1
+    if [[ "$format" == csv ]]; then
+        jq -r --slurpfile drives "$CATALOG_DRIVES_DB" '
+            ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $l
+            | ["drive_label","drive_id","relative_path","filename","extension","media_type","file_size","modified","hash","duration","resolution","dimensions","codec","camera","date_taken","last_scanned"],
+              (.videos | sort_by([$l[.drive_id] // "", .relative_path])[]
+               | [$l[.drive_id], .drive_id, .relative_path, .filename, .extension, .media_type, .file_size,
+                  (.mtime | if . then todate else null end), .hash, .duration, .resolution, .dimensions, .codec, .camera, .date_taken, .last_scanned])
+            | @csv' "$CATALOG_DB" > "$tmp"
+    else
+        jq --slurpfile drives "$CATALOG_DRIVES_DB" '
+            ($drives[0].drives | map({(.drive_id): .drive_label}) | add // {}) as $l
+            | .videos | sort_by([$l[.drive_id] // "", .relative_path])
+            | map(. + {drive_label: $l[.drive_id]})' "$CATALOG_DB" > "$tmp"
+    fi
+    if [[ $? -ne 0 || ! -s "$tmp" ]]; then
+        rm -f "$tmp"; log_error "Could not build the export"; return 1
+    fi
+    mv -f "$tmp" "$out" || { rm -f "$tmp"; return 1; }
+    echo "$out"
+}
+
 # Write a plain-text report of the catalog. Prints the report path.
 # Args: [output file]
 catalog_export_report() {

@@ -115,3 +115,15 @@ test_parallel_option_only_accepts_1_to_8() {
     assert_equals "0" "$RC" "cli: --parallel 4 accepted"
     _teardown
 }
+
+test_catalog_export_command_writes_the_requested_format() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/lib"; touch "$TEST_TMPDIR/lib/a.mp4"
+    _vmgr catalog "$TEST_TMPDIR/lib"
+    _vmgr catalog-export "$TEST_TMPDIR/out.json"
+    assert_equals "0" "$RC" "cli: catalog-export exits 0"
+    assert_file_exists "$TEST_TMPDIR/out.json" "cli: catalog-export writes the file"
+    _vmgr catalog-export csv "$TEST_TMPDIR/out.csv"
+    assert_contains "relative_path" "$(head -1 "$TEST_TMPDIR/out.csv")" "cli: a format word and a file can be given"
+    _teardown
+}

@@ -310,6 +310,7 @@ vmgr catalog-list                      # drives: online/offline, totals
 vmgr catalog-search "name" [video|image|audio]   # also: hash prefix, 1920x1080, camera
 vmgr catalog-duplicates                # same hash on different drives
 vmgr catalog-report [file]             # text report
+vmgr catalog-export [file] [csv|json]  # every record, for spreadsheets/scripts
 ```
 
 Needs `jq`. Rescans skip unchanged files; offline drives stay searchable. Data: `~/.video-manager-catalog.json`,

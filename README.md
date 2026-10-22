@@ -174,6 +174,7 @@ chmod +x video-manager-ultimate.sh
 # Duplicates across every cataloged drive, and a text report
 ./video-manager-ultimate.sh catalog-duplicates
 ./video-manager-ultimate.sh catalog-report
+./video-manager-ultimate.sh catalog-export [file] [csv|json]
 ```
 
 ### Reddit

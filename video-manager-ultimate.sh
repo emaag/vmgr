@@ -135,6 +135,8 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     catalog-search <term> [video|image|audio]   Search the catalog, offline drives included
     catalog-duplicates      Find duplicate files across all cataloged drives
     catalog-report [file]   Write a text report of the catalog
+    catalog-export [file] [csv|json]
+                            Export every catalog record for spreadsheets or scripts
     reddit <subreddit> <dir> [max]  Download images from a subreddit
                             (a,b,c = several, one folder each under <dir>)
     reddit-setup            Guided setup of Reddit API credentials (galleries, full speed)
@@ -346,6 +348,16 @@ parse_arguments() {
                 shift
                 if [[ -n "$1" && "$1" != -* ]]; then CATALOG_CLI_FILE="$1"; shift; fi
                 ;;
+            catalog-export)
+                command="catalog-export"
+                shift
+                local _n
+                for _n in 1 2; do
+                    if [[ "$1" =~ ^(csv|json)$ ]]; then CATALOG_CLI_FORMAT="$1"; shift
+                    elif [[ -n "$1" && "$1" != -* ]]; then CATALOG_CLI_FILE="$1"; shift
+                    fi
+                done
+                ;;
             reddit)
                 command="reddit"
                 shift
@@ -409,7 +421,7 @@ parse_arguments() {
     fi
 
     # Validate directory for commands that need it
-    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "reddit-setup" && "$command" != "catalog-list" && "$command" != "catalog-search" && "$command" != "catalog-duplicates" && "$command" != "catalog-report" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
+    if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "reddit-setup" && "$command" != "catalog-list" && "$command" != "catalog-search" && "$command" != "catalog-duplicates" && "$command" != "catalog-report" && "$command" != "catalog-export" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
             show_usage
@@ -492,6 +504,9 @@ parse_arguments() {
             ;;
         catalog-report)
             catalog_export_report "${CATALOG_CLI_FILE:-}"
+            ;;
+        catalog-export)
+            catalog_export_data "${CATALOG_CLI_FORMAT:-}" "${CATALOG_CLI_FILE:-}"
             ;;
         reddit)
             if [[ -z "$REDDIT_SUBREDDIT" || -z "$directory" ]]; then

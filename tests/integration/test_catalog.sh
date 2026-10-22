@@ -299,6 +299,49 @@ test_retention_zero_keeps_offline_drives_forever() {
     _teardown
 }
 
+test_export_csv_has_a_header_and_one_row_per_file() {
+    _setup
+    echo "odd" > "$D1/Odd, \"name\".mp4"
+    catalog_drive "$D1" true >/dev/null 2>&1
+    local file="$TEST_TMPDIR/out.csv" out
+    out="$(catalog_export_data csv "$file")"
+    assert_equals "$file" "$out" "csv: prints the path it wrote"
+    assert_equals "5" "$(( $(wc -l < "$file") - 1 ))" "csv: one row per file"
+    assert_contains "\"drive_label\",\"drive_id\",\"relative_path\"" "$(head -1 "$file")" "csv: header row"
+    assert_contains '"Odd, ""name"".mp4"' "$(cat "$file")" "csv: commas and quotes in names are escaped"
+    assert_contains '"Drive One"' "$(sed -n 2p "$file")" "csv: rows carry the drive label"
+    _teardown
+}
+
+test_export_json_is_a_valid_array_of_records() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    local file="$TEST_TMPDIR/out.json"
+    catalog_export_data json "$file" >/dev/null
+    assert_equals "4" "$(jq 'length' "$file")" "json: one record per file"
+    assert_equals "Drive One" "$(jq -r '.[0].drive_label' "$file")" "json: records carry the drive label"
+    _teardown
+}
+
+test_export_format_follows_the_file_extension() {
+    _setup
+    catalog_drive "$D1" true >/dev/null 2>&1
+    catalog_export_data "" "$TEST_TMPDIR/a.json" >/dev/null
+    assert_equals "4" "$(jq 'length' "$TEST_TMPDIR/a.json")" "export: .json file gets JSON"
+    catalog_export_data "" "$TEST_TMPDIR/a.txt" >/dev/null
+    assert_contains "relative_path" "$(head -1 "$TEST_TMPDIR/a.txt")" "export: any other extension gets CSV"
+    _teardown
+}
+
+test_export_rejects_an_unknown_format() {
+    _setup
+    local rc=0
+    catalog_export_data xml "$TEST_TMPDIR/a.xml" >/dev/null 2>&1 || rc=$?
+    assert_equals "1" "$rc" "export: unknown format fails"
+    assert_file_not_exists "$TEST_TMPDIR/a.xml" "export: nothing written"
+    _teardown
+}
+
 test_export_report_summarises_the_catalog() {
     _setup
     catalog_drive "$D1" true >/dev/null 2>&1

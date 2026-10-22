@@ -1162,12 +1162,19 @@ _handle_catalog_choice() {
         6)
             # Export catalog report
             _catalog_require_jq || { ui_pause; return 0; }
-            show_screen "Export Catalog Report"
-            local report_file
-            if report_file="$(catalog_export_report)"; then
-                log_success "Report exported to: $report_file"
+            show_screen "Export Catalog"
+            local report_file export_kind
+            read -r -n 1 -p "  Export as [r]eport, [c]sv or [j]son? (Enter = report): " export_kind
+            echo ""
+            case "$export_kind" in
+                c|C) report_file="$(catalog_export_data csv)" ;;
+                j|J) report_file="$(catalog_export_data json)" ;;
+                *)   report_file="$(catalog_export_report)" ;;
+            esac
+            if [[ $? -eq 0 && -n "$report_file" ]]; then
+                log_success "Exported to: $report_file"
             else
-                log_error "Could not write the report"
+                log_error "Could not write the export"
             fi
             ui_pause
             return 0

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Catalog export to CSV or JSON**: `vmgr catalog-export [file] [csv|json]` (and Export Catalog in the menu) writes every record, with its drive label, for spreadsheets and scripts. The format follows the file extension, defaulting to CSV.
+
 ---
 
 ## [1.10.0] - 2026-10-22
