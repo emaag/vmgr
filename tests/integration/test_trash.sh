@@ -189,7 +189,7 @@ _two_batches() {
     echo old > "$t/old/o.mp4"; echo new > "$t/new/n.mp4"
     printf '# Operation: old\n%s|%s\n' "$TEST_TMPDIR/v/o.mp4" "$t/old/o.mp4" > "$UNDO_LOG_DIR/op-old.log"
     printf '# Operation: new\n%s|%s\n' "$TEST_TMPDIR/v/n.mp4" "$t/new/n.mp4" > "$UNDO_LOG_DIR/op-new.log"
-    touch -d "10 days ago" "$t/old"
+    touch_days_ago 10 "$t/old"
 }
 
 test_empty_trash_with_days_keeps_newer_batches_and_their_undo() {

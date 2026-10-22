@@ -333,7 +333,7 @@ test_search_by_size_range_without_a_term() {
 
 test_search_by_age() {
     _setup
-    touch -d "100 days ago" "$D1/Movies/Old.mp4"
+    touch_days_ago 100 "$D1/Movies/Old.mp4"
     catalog_drive "$D1" true >/dev/null 2>&1
     CATALOG_FILTER_OLDER_DAYS=30
     local out; out="$(search_catalog "" all 2>&1 | _strip)"

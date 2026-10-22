@@ -49,6 +49,32 @@ jobs:
         test -f "$dir/foo - bar.mp4"
         rm -rf "$dir"
 
+  windows:
+    name: Tests (Windows, Git Bash, experimental)
+    runs-on: windows-latest
+    # Git Bash support is best effort: this job reports problems without blocking a merge
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Show tool versions
+      run: |
+        bash --version | head -1
+        jq --version || choco install jq -y
+
+    - name: Run test suite
+      run: bash tests/run_tests.sh
+
+    - name: Test version and help
+      run: |
+        ./video-manager-ultimate.sh --version
+        ./video-manager-ultimate.sh --help
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-24.04

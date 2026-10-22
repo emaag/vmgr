@@ -34,6 +34,15 @@ _fail() {
 
 # ── Assert functions ─────────────────────────────────────────────────────────
 
+# touch_days_ago DAYS FILE...  set modification time DAYS days back (GNU and BSD date/touch)
+touch_days_ago() {
+    local days="$1" epoch stamp
+    shift
+    epoch=$(( $(date +%s) - days * 86400 ))
+    stamp="$(date -d "@$epoch" +%Y%m%d%H%M 2>/dev/null || date -r "$epoch" +%Y%m%d%H%M)"
+    touch -t "$stamp" "$@"
+}
+
 # assert_equals EXPECTED ACTUAL NAME
 assert_equals() {
     local expected="$1" actual="$2" name="$3"
