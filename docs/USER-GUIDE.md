@@ -1,7 +1,7 @@
 # VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Complete User Guide
 
-**Version:** 1.10.0  
+**Version:** 1.11.0  
 **Date:** October 2026  
 **Complements:** PowerShell Ultimate Edition
 
@@ -404,7 +404,7 @@ catalog, so after renaming or flattening, rescan the drive.
 
 ```
 ╭──────────────────────────────────────────────────────────────╮
-│ VIDEO MANAGER ULTIMATE                                v1.10.0 │
+│ VIDEO MANAGER ULTIMATE                                v1.11.0 │
 │ ○ Dry run OFF                             ~/Videos/Series    │
 ╰──────────────────────────────────────────────────────────────╯
 
@@ -913,7 +913,7 @@ The script accepts both Windows and Unix path formats:
 
 ```
 [2025-10-19 14:30:00] [INFO] ==========================================
-[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.10.0
+[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.11.0
 [2025-10-19 14:30:00] [INFO] Session started: 2025-10-19 14:30:00
 [2025-10-19 14:30:00] [INFO] ==========================================
 [2025-10-19 14:30:05] [OPERATION] Started: Rename Files (Bracket Notation)
@@ -1309,6 +1309,9 @@ A: Yes, when used with dry run first. The script never modifies video content, o
 ---
 
 ## Version History
+
+### Version 1.11.0 (October 2026)
+- Catalog export (CSV/JSON), search filters for size, age and duration, and the full duplicate list
 
 ### Version 1.10.0 (October 2026)
 - Empty Trash can be limited by age; undo restores catalog records for trashed duplicates

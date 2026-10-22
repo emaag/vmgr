@@ -9,13 +9,13 @@
 #
 # Author: Created for Eric's Video Management System
 # Module: core.sh
-# Version: 1.10.0
+# Version: 1.11.0
 # Date: October 22, 2026
 #
 ################################################################################
 
 # Script metadata
-readonly SCRIPT_VERSION="1.10.0"
+readonly SCRIPT_VERSION="1.11.0"
 readonly SCRIPT_NAME="Video Manager Ultimate - Bash Edition"
 readonly SCRIPT_DATE="2026-10-22"
 

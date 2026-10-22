@@ -1,7 +1,7 @@
 # VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Quick Reference Card
 
-**Version:** 1.10.0 | **Platform:** Linux, WSL, macOS
+**Version:** 1.11.0 | **Platform:** Linux, WSL, macOS
 
 ---
 
@@ -460,5 +460,5 @@ ffmpeg -v error -i "file.mp4" -f null - 2>&1
 
 ---
 
-**Video Manager Ultimate - Bash Edition v1.10.0**  
+**Video Manager Ultimate - Bash Edition v1.11.0**  
 *Making video collection management verbose and beautiful* ✨

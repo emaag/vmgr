@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.11.0] - 2026-10-22
+
+The catalog can be exported, searched by size, age and length, and shows every duplicate group on request.
+
 ### Added
 - **Catalog search by size, age and length**: `catalog-search --min-size 1G --older 1y` (also `--max-size`, `--newer`, `--min-duration`, `--max-duration`) narrows by file size, modification time and duration. A filter can stand in for the search term; results show the duration.
 - **See every duplicate group**: `catalog-duplicates --all` lists all groups instead of the first 200, and the menu offers to show them all when the list is cut short.

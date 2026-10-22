@@ -74,7 +74,7 @@ source ~/.bashrc
 ```bash
 # Test the script
 vmgr --version
-# Should show: Video Manager Ultimate - Bash Edition v1.10.0 (2026-10-22)
+# Should show: Video Manager Ultimate - Bash Edition v1.11.0 (2026-10-22)
 
 # Test with help
 vmgr --help
@@ -97,7 +97,7 @@ You'll see the main menu:
 
 ```
 ╭──────────────────────────────────────────────────────────────╮
-│ VIDEO MANAGER ULTIMATE                                v1.10.0 │
+│ VIDEO MANAGER ULTIMATE                                v1.11.0 │
 │ ○ Dry run OFF                             no folder selected │
 ╰──────────────────────────────────────────────────────────────╯
 
@@ -634,7 +634,7 @@ vmgr --help             # Show help
 **Welcome to Video Manager Ultimate - Bash Edition!**  
 *Making video management verbose, safe, and beautiful.* ✨
 
-**Version:** 1.10.0  
+**Version:** 1.11.0  
 **Created:** October 19, 2025  
 **Author:** Built for Eric's Video Management System
 
