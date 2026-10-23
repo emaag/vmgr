@@ -52,8 +52,8 @@ _teardown() { [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPD
 # _drive KEYS -> "fileops|utilities|mainmenu|goodbye|anykey|exited"
 _drive() { HOME="$TEST_TMPDIR" python3 "$TEST_TMPDIR/drive.py" "$VMGR_ROOT/video-manager-ultimate.sh" "$1" 2>/dev/null; }
 
-if ! command -v python3 >/dev/null 2>&1; then
-    test_menu_pty_skipped() { assert_equals "1" "1" "menu pty tests skipped (no python3)"; }
+if ! command -v python3 >/dev/null 2>&1 || on_windows_shell; then
+    test_menu_pty_skipped() { assert_equals "1" "1" "menu pty tests skipped (no python3 or no pty)"; }
     return 0 2>/dev/null || exit 0
 fi
 

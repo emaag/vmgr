@@ -56,8 +56,8 @@ _teardown() { [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPD
 # _drive START KEYS  ->  "rc|chosen-folder"
 _drive() { python3 "$_PTY_DRIVER" "$LIB_DIR" "$1" "$2" 2>/dev/null; }
 
-if ! command -v python3 >/dev/null 2>&1; then
-    test_browser_pty_skipped() { assert_equals "1" "1" "browser pty tests skipped (no python3)"; }
+if ! command -v python3 >/dev/null 2>&1 || on_windows_shell; then
+    test_browser_pty_skipped() { assert_equals "1" "1" "browser pty tests skipped (no python3 or no pty)"; }
     return 0 2>/dev/null || exit 0
 fi
 

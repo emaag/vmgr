@@ -99,6 +99,7 @@ test_trash_file_avoids_name_collisions() {
 }
 
 test_trash_file_failure_leaves_the_original() {
+    if on_windows_shell; then _pass "unwritable trash folder: skipped (no POSIX permissions/symlinks in Git Bash)"; return 0; fi
     _setup
     local rc=0
     trash_file "$TEST_TMPDIR/v/missing.mp4" "$TEST_TMPDIR/v" "S1" || rc=$?

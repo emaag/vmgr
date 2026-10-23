@@ -34,6 +34,13 @@ _fail() {
 
 # ── Assert functions ─────────────────────────────────────────────────────────
 
+# on_windows_shell: true under Git Bash / MSYS / Cygwin, where chmod, symlinks and
+# pseudo-terminals do not behave like POSIX
+on_windows_shell() {
+    case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; esac
+    return 1
+}
+
 # touch_days_ago DAYS FILE...  set modification time DAYS days back (GNU and BSD date/touch)
 touch_days_ago() {
     local days="$1" epoch stamp

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- CI now also runs the tests under Windows Git Bash (best effort, never blocks a merge). Tests no longer depend on GNU-only `touch -d`, so the suite passes on macOS again. Known Git Bash gaps are listed in `docs/CROSS-PLATFORM.md`.
+
 ---
 
 ## [1.11.0] - 2026-10-22

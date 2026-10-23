@@ -225,6 +225,7 @@ test_read_key_sequences() {
 }
 
 test_list_subdirs_skips_symlinks() {
+    if on_windows_shell; then _pass "symlinked folders: skipped (no POSIX permissions/symlinks in Git Bash)"; return 0; fi
     local d result; d="$(mktemp -d)"
     mkdir "$d/real"; ln -s "$d/real" "$d/link"
     result="$(browser_list_subdirs "$d" 0 | tr '\n' ',')"

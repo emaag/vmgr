@@ -180,6 +180,8 @@ This will show:
 - Some tools require manual installation
 - Windows paths (C:\) accessible via `/c/`
 - Explorer integration works seamlessly
+- **Known gaps (experimental):** CI runs the test suite under Git Bash on every push, but only as a best-effort check. Renaming, flattening, duplicates, subtitles, undo and the command line pass. The multi-drive catalog does not work reliably yet: drive mount points come out wrong for `/c/...` paths, so cross-drive duplicates and "duplicates to trash" can misbehave. Use WSL for catalog work.
+- The interactive menu and file browser rely on a real terminal. They are tested on Linux and macOS only.
 
 ### WSL
 - Full Linux compatibility

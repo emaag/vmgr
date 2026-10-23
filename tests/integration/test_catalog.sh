@@ -653,6 +653,7 @@ test_trash_dry_run_moves_nothing() {
 }
 
 test_an_unwritable_drive_root_is_reported_and_nothing_moves() {
+    if on_windows_shell; then _pass "unwritable drive: skipped (no POSIX permissions/symlinks in Git Bash)"; return 0; fi
     _setup; _dup_drives
     if [[ "$(id -u)" == 0 ]]; then _teardown; return; fi
     chmod a-w "$D2"

@@ -313,6 +313,7 @@ test_a_folder_we_did_not_create_is_never_removed() {
 }
 
 test_an_uncreatable_output_folder_is_reported_up_front() {
+    if on_windows_shell; then _pass "unwritable output folder: skipped (no POSIX permissions/symlinks in Git Bash)"; return 0; fi
     _dl_setup
     if [[ "$(id -u)" == 0 ]]; then _dl_teardown; return; fi
     mkdir -p "$TEST_TMPDIR/ro"; chmod a-w "$TEST_TMPDIR/ro"
