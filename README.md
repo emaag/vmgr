@@ -123,6 +123,10 @@ chmod +x video-manager-ultimate.sh
 # Rename with bracket notation
 ./video-manager-ultimate.sh rename /path
 
+# Rename with another naming pattern: bracket (default), title-case,
+# snake_case or strip-junk (drops tags like 1080p, x264, WEB-DL)
+./video-manager-ultimate.sh --pattern strip-junk rename /path
+
 # Flatten directory structure
 ./video-manager-ultimate.sh flatten /path
 

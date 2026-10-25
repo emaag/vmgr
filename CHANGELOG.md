@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Naming patterns for rename**: `vmgr --pattern <name> rename <dir>` chooses `bracket` (the default and previous behavior), `title-case`, `snake_case` or `strip-junk` (removes encoding tags such as `1080p`, `x264` and `WEB-DL`). Applies to `--dry-run`, undo and the `workflow` commands too.
+
+### Fixed
+- Bracket notation no longer splits names that start with an accented or non-Latin letter (`Café - Title.mp4` was renamed `[Caf] é Title.mp4`); it now gives `[Café] Title.mp4`.
+- A name that is already just `[Studio].mp4` no longer gets a space inserted before the extension, and leading whitespace in a name is trimmed.
+
 ### Changed
 - CI now also runs the tests under Windows Git Bash (best effort, never blocks a merge). Tests no longer depend on GNU-only `touch -d`, so the suite passes on macOS again. Known Git Bash gaps are listed in `docs/CROSS-PLATFORM.md`.
 

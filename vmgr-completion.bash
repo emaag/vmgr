@@ -34,6 +34,7 @@ _vmgr_completion() {
         --organize
         --organize-target
         --organize-search
+        --pattern
         --undo-organize
         --list-undo
         --empty-trash
@@ -72,6 +73,10 @@ _vmgr_completion() {
             ;;
         --parallel)
             COMPREPLY=( $(compgen -W "1 2 3 4 5 6 7 8" -- ${cur}) )
+            return 0
+            ;;
+        --pattern)
+            COMPREPLY=( $(compgen -W "bracket title-case snake_case strip-junk" -- ${cur}) )
             return 0
             ;;
         --sort)

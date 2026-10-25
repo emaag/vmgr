@@ -141,3 +141,22 @@ test_fix_spacing_dir_already_correct() {
         "fix_spacing_dir: correct file unchanged"
     _teardown
 }
+
+# ── --pattern ────────────────────────────────────────────────────────────────
+
+test_rename_uses_selected_pattern() {
+    _setup
+    touch "$TEST_TMPDIR/Show.Name.1080p.x264.mp4"
+    RENAME_PATTERN=strip-junk rename_files_in_directory "$TEST_TMPDIR" false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/Show Name.mp4" "rename --pattern strip-junk: renamed"
+    _teardown
+}
+
+test_rename_rejects_unknown_pattern() {
+    _setup
+    touch "$TEST_TMPDIR/studio name.mp4"
+    RENAME_PATTERN=bogus rename_files_in_directory "$TEST_TMPDIR" false >/dev/null 2>&1
+    assert_not_equals "0" "$?" "rename: unknown pattern fails"
+    assert_file_exists "$TEST_TMPDIR/studio name.mp4" "rename: unknown pattern leaves files alone"
+    _teardown
+}

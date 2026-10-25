@@ -146,3 +146,16 @@ test_catalog_search_range_filters_on_the_command_line() {
     assert_equals "1" "$RC" "cli: no term and no filter exits 1"
     _teardown
 }
+
+test_rename_pattern_option_on_the_command_line() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/lib"
+    touch "$TEST_TMPDIR/lib/Show.Name.1080p.x264.mp4"
+    _vmgr --pattern strip-junk rename "$TEST_TMPDIR/lib"
+    assert_equals "0" "$RC" "cli: --pattern rename exits 0"
+    assert_file_exists "$TEST_TMPDIR/lib/Show Name.mp4" "cli: --pattern strip-junk renames the file"
+    _vmgr --pattern bogus rename "$TEST_TMPDIR/lib"
+    assert_equals "1" "$RC" "cli: an unknown pattern exits 1"
+    assert_contains "Invalid rename pattern" "$OUT" "cli: the bad pattern is named"
+    _teardown
+}

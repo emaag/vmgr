@@ -33,13 +33,16 @@ apply_bracket_notation() {
     local ext="${filename##*.}"
     [[ "$ext" == "$filename" ]] && ext="" || ext=".$ext"
 
-    # Match and extract first word and the rest
-    if [[ "$name" =~ ^([a-zA-Z0-9_]+)[.\ \-]?(.*)$ ]]; then
+    # Leading whitespace would hide the first word
+    name="${name#"${name%%[![:space:]]*}"}"
+
+    # Match and extract first word and the rest (letters in any script count)
+    if [[ "$name" =~ ^([[:alnum:]_]+)[.\ \-]?(.*)$ ]]; then
         local first_word="${BASH_REMATCH[1]}"
         local rest="${BASH_REMATCH[2]}"
 
         # Capitalize first letter
-        first_word="$(tr '[:lower:]' '[:upper:]' <<< "${first_word:0:1}")${first_word:1}"
+        first_word="${first_word^}"
 
         # Construct new filename
         local new_name="[$first_word]"
@@ -48,7 +51,7 @@ apply_bracket_notation() {
 
         echo "$new_name"
     else
-        echo "$filename"
+        echo "$name$ext"
     fi
 }
 
@@ -61,7 +64,8 @@ remove_dashes() {
 # Fix spacing after brackets
 fix_bracket_spacing() {
     local filename="$1"
-    echo "$filename" | sed -E 's/\]([^[:space:]])/] \1/g'
+    # The space goes between ] and the name, never between ] and the extension
+    echo "$filename" | sed -E 's/\]([^[:space:]])/] \1/g; s/\] (\.[^. ]+)$/]\1/'
 }
 
 # Full cleanup pipeline
@@ -83,6 +87,74 @@ cleanup_filename() {
     log_verbose "    After spacing fix: $filename"
 
     echo "$filename"
+}
+
+################################################################################
+# NAMING PATTERNS (selected with --pattern; default: bracket)
+################################################################################
+
+RENAME_PATTERNS="bracket title-case snake_case strip-junk"
+
+# Split "name.ext" into the globals _FN_NAME and _FN_EXT (ext includes the dot).
+# A leading dot (hidden file) is not an extension.
+_split_filename() {
+    local filename="$1"
+    _FN_NAME="${filename%.*}"
+    _FN_EXT="${filename##*.}"
+    if [[ "$_FN_EXT" == "$filename" || -z "$_FN_NAME" ]]; then
+        _FN_NAME="$filename"
+        _FN_EXT=""
+    else
+        _FN_EXT=".$_FN_EXT"
+    fi
+}
+
+# "my_show.s01e01" -> "My Show S01e01"
+title_case_filename() {
+    _split_filename "$1"
+    local name="${_FN_NAME//[._]/ }" out="" word
+    name="${name,,}"
+    for word in $name; do
+        out+="${out:+ }${word^}"
+    done
+    echo "${out:-$_FN_NAME}$_FN_EXT"
+}
+
+# "My Show - S01E01" -> "my_show_s01e01"
+snake_case_filename() {
+    _split_filename "$1"
+    local name="${_FN_NAME,,}"
+    name=$(printf '%s' "$name" | sed -E 's/[^[:alnum:]]+/_/g; s/^_+//; s/_+$//')
+    echo "${name:-$_FN_NAME}$_FN_EXT"
+}
+
+# Words that only describe how a release was encoded; matched case-insensitively
+_JUNK_WORDS=" 2160p 1440p 1080p 1080i 720p 576p 480p 4k uhd hd fhd x264 x265 h264 h265 hevc avc xvid divx webrip web-dl webdl web bluray blu-ray brrip bdrip hdrip dvdrip hdtv aac aac2.0 ac3 eac3 dts dd5.1 ddp5.1 5.1 7.1 10bit 8bit hdr hdr10 sdr proper repack internal "
+
+# "Show.Name.1080p.WEB-DL.x264.mkv" -> "Show Name.mkv"
+strip_junk_filename() {
+    _split_filename "$1"
+    local name="${_FN_NAME//_/ }" out="" word bare
+    # dots separate words, except inside numbers like 5.1
+    name=$(printf '%s' "$name" | sed -E 's/([^0-9])\./\1 /g; s/\.([^0-9])/ \1/g')
+    for word in $name; do
+        bare="${word#[[(]}"; bare="${bare%[])]}"
+        bare="${bare,,}"
+        [[ "$_JUNK_WORDS" == *" $bare "* ]] && continue
+        out+="${out:+ }$word"
+    done
+    echo "${out:-$_FN_NAME}$_FN_EXT"
+}
+
+# Name of the transform function for a pattern; non-zero for unknown patterns
+rename_transform_for_pattern() {
+    case "$1" in
+        bracket)     echo "cleanup_filename" ;;
+        title-case)  echo "title_case_filename" ;;
+        snake_case)  echo "snake_case_filename" ;;
+        strip-junk)  echo "strip_junk_filename" ;;
+        *) return 1 ;;
+    esac
 }
 
 ################################################################################
@@ -189,7 +261,14 @@ _apply_transform_to_directory() {
     fi
 }
 
-rename_files_in_directory()        { _apply_transform_to_directory "$1" "$2" "cleanup_filename"; }
+rename_files_in_directory() {
+    local transform_fn
+    if ! transform_fn=$(rename_transform_for_pattern "${RENAME_PATTERN:-bracket}"); then
+        log_error "Unknown rename pattern: $RENAME_PATTERN (choose from: $RENAME_PATTERNS)"
+        return 1
+    fi
+    _apply_transform_to_directory "$1" "$2" "$transform_fn"
+}
 remove_dashes_in_directory()       { _apply_transform_to_directory "$1" "$2" "remove_dashes"; }
 fix_bracket_spacing_in_directory() { _apply_transform_to_directory "$1" "$2" "fix_bracket_spacing"; }
 

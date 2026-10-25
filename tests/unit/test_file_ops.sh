@@ -73,6 +73,68 @@ test_bracket_already_bracketed_passthrough() {
     assert_equals "[Studio] name.mp4" "$result" "bracket: already-bracketed passthrough"
 }
 
+test_bracket_accented_first_word() {
+    local result
+    result=$(apply_bracket_notation "café title.mp4")
+    assert_equals "[Café] title.mp4" "$result" "bracket: accented first word kept whole"
+}
+
+test_bracket_non_latin_first_word() {
+    local result
+    result=$(apply_bracket_notation "日本語 title.mp4")
+    assert_equals "[日本語] title.mp4" "$result" "bracket: non-latin first word bracketed"
+}
+
+test_bracket_leading_whitespace_trimmed() {
+    local result
+    result=$(apply_bracket_notation "  studio name.mp4")
+    assert_equals "[Studio] name.mp4" "$result" "bracket: leading whitespace trimmed"
+}
+
+test_cleanup_bracket_only_name_keeps_extension_attached() {
+    local result
+    result=$(cleanup_filename "[Studio].mp4")
+    assert_equals "[Studio].mp4" "$result" "cleanup: no space before extension"
+}
+
+test_spacing_not_added_before_extension() {
+    local result
+    result=$(fix_bracket_spacing "[Studio].mp4")
+    assert_equals "[Studio].mp4" "$result" "spacing: ] directly before extension unchanged"
+}
+
+# ── naming patterns ───────────────────────────────────────────────────────────
+
+test_pattern_title_case() {
+    assert_equals "My Show S01e01.mp4" "$(title_case_filename "my_show.s01e01.mp4")" "title-case: separators become spaces"
+    assert_equals "Café Au Lait.mkv" "$(title_case_filename "CAFÉ AU LAIT.mkv")" "title-case: accents and caps"
+}
+
+test_pattern_snake_case() {
+    assert_equals "my_show_01.mp4" "$(snake_case_filename "My Show - 01.mp4")" "snake_case: punctuation collapses"
+    assert_equals "a_b.mkv" "$(snake_case_filename "[A] (b).mkv")" "snake_case: brackets trimmed"
+}
+
+test_pattern_strip_junk() {
+    assert_equals "Show Name.mkv" "$(strip_junk_filename "Show.Name.1080p.WEB-DL.x264.mkv")" "strip-junk: dotted release name"
+    assert_equals "Show Name 2020.mp4" "$(strip_junk_filename "Show Name [1080p] (HEVC) 2020.mp4")" "strip-junk: bracketed tags, year kept"
+    assert_equals "Movie.mp4" "$(strip_junk_filename "Movie.DDP5.1.mp4")" "strip-junk: audio layout tag removed"
+}
+
+test_pattern_keeps_name_when_everything_is_junk() {
+    assert_equals "1080p.mp4" "$(strip_junk_filename "1080p.mp4")" "strip-junk: never produces an empty name"
+}
+
+test_pattern_leading_dot_is_not_an_extension() {
+    assert_equals "hidden" "$(snake_case_filename ".hidden")" "snake_case: leading dot is not split off as an extension"
+}
+
+test_pattern_lookup() {
+    assert_equals "cleanup_filename" "$(rename_transform_for_pattern bracket)" "pattern: bracket maps to cleanup_filename"
+    rename_transform_for_pattern nonsense >/dev/null
+    assert_not_equals "0" "$?" "pattern: unknown name rejected"
+}
+
 # ── remove_dashes ────────────────────────────────────────────────────────────
 
 test_remove_dashes_basic() {

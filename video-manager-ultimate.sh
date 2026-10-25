@@ -112,12 +112,19 @@ ${COLOR_BOLD}ADVANCED SUBTITLE OPTIONS:${COLOR_RESET}
     --speaker-diarization   Enable speaker identification
     --no-punctuation        Disable automatic punctuation fixes
 
+${COLOR_BOLD}RENAME OPTIONS:${COLOR_RESET}
+    --pattern <name>        Naming pattern for rename (default: bracket)
+                              bracket     "studio name.mp4" -> "[Studio] name.mp4"
+                              title-case  "my_show.mp4"     -> "My Show.mp4"
+                              snake_case  "My Show - 01.mp4" -> "my_show_01.mp4"
+                              strip-junk  "Show.1080p.x264.mp4" -> "Show.mp4"
+
 ${COLOR_BOLD}ORGANIZE OPTIONS:${COLOR_RESET}
     --organize-target <dir> Set default target folder for organize
     --organize-search <dir> Set default search path for organize
 
 ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
-    rename <dir>            Rename files with bracket notation
+    rename <dir>            Rename files (see --pattern; default bracket notation)
     flatten <dir>           Move all videos to top directory
     cleanup <dir>           Full cleanup (rename + spacing fixes)
     duplicates <dir>        Find duplicate files
@@ -291,6 +298,17 @@ parse_arguments() {
                 SUBTITLE_AUTO_PUNCTUATION=false
                 log_info "Auto-punctuation disabled"
                 shift
+                ;;
+            --pattern)
+                shift
+                if [[ -n "$1" ]] && rename_transform_for_pattern "$1" >/dev/null; then
+                    RENAME_PATTERN="$1"
+                    log_info "Rename pattern set to: $RENAME_PATTERN"
+                    shift
+                else
+                    log_error "Invalid rename pattern '${1:-}'. Choose from: $RENAME_PATTERNS"
+                    exit 1
+                fi
                 ;;
             --organize)
                 command="organize"
@@ -468,7 +486,7 @@ parse_arguments() {
     INTERACTIVE=false
     case "$command" in
         rename)
-            start_operation "Rename Files (Bracket Notation)"
+            start_operation "Rename Files (${RENAME_PATTERN:-bracket})"
             rename_files_in_directory "$directory" "$DRY_RUN"
             end_operation
             ;;
