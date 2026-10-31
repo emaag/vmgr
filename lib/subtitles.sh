@@ -177,7 +177,8 @@ _clean_subtitle_cues() {
 }
 
 # Tidy SRT timing: stretch cues shorter than SUBTITLE_MIN_CUE_SEC (default 1.0)
-# where the next cue leaves room, and trim overlaps so cues never overlap.
+# where the next cue leaves room, cut cues longer than SUBTITLE_MAX_CUE_SEC
+# (default 10), and trim overlaps so cues never overlap.
 # SRT only; other formats are left alone. Returns 0 (also when skipped).
 _tidy_subtitle_timing() {
     local file="$1" format="$2" tmp
@@ -185,8 +186,9 @@ _tidy_subtitle_timing() {
     command -v perl &>/dev/null || return 0
     tmp="$(mktemp)" || return 0
     SUBTITLE_MIN_CUE_MS=$(awk -v s="${SUBTITLE_MIN_CUE_SEC:-1.0}" 'BEGIN{printf "%d", s*1000}') \
+    SUBTITLE_MAX_CUE_MS=$(awk -v s="${SUBTITLE_MAX_CUE_SEC:-10}" 'BEGIN{printf "%d", s*1000}') \
     perl -0777 -e '
-        my $min = $ENV{SUBTITLE_MIN_CUE_MS} // 1000; my $gap = 40;
+        my $min = $ENV{SUBTITLE_MIN_CUE_MS} // 1000; my $max = $ENV{SUBTITLE_MAX_CUE_MS} // 10000; my $gap = 40;
         sub ms { my ($h,$m,$s,$f)=@_; (($h*60+$m)*60+$s)*1000+$f }
         sub ts { my $t=shift; sprintf("%02d:%02d:%02d,%03d", int($t/3600000), int($t/60000)%60, int($t/1000)%60, $t%1000) }
         my $in = <STDIN>; my @cues;
@@ -200,6 +202,8 @@ _tidy_subtitle_timing() {
         my @t = grep { exists $_->{s} } @cues;
         for my $k (0..$#t) {
             my $c = $t[$k]; my $next = $k < $#t ? $t[$k+1]{s} : undef;
+            # Whisper sometimes stretches a line over minutes of music or silence
+            $c->{e} = $c->{s} + $max if $c->{e} - $c->{s} > $max;
             if ($c->{e} - $c->{s} < $min) {
                 my $want = $c->{s} + $min;
                 $want = $next - $gap if defined $next && $want > $next - $gap;
@@ -282,6 +286,50 @@ _subtitle_draw_progress() {
         "$pct" "${UI_DIM:-}" "$label" "$elapsed" "$eta" "${COLOR_RESET:-}" >&2
 }
 
+# Guess the spoken language for --language auto. Whisper alone looks only at the
+# first 30 s, which is often music or silence and can pick a wrong language that
+# then makes it invent text. Sample 30 s at 20%, 50% and 80% of the video with
+# the tiny model, add up the probabilities per language, and use the winner.
+# Prints a language name (accepted by whisper-ctranslate2) and returns 0, or
+# prints the fallback language and returns 1 when confidence is too low or the
+# tools are missing. Args: video_file whisper_cmd
+_detect_language() {
+    local video="$1" cmd="$2" fallback="${SUBTITLE_FALLBACK_LANGUAGE:-en}"
+    command -v ffmpeg &>/dev/null && command -v ffprobe &>/dev/null || { echo "$fallback"; return 1; }
+    local dur
+    dur="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video" 2>/dev/null | head -n1)"
+    dur="${dur%%.*}"
+    [[ "$dur" =~ ^[0-9]+$ && $dur -gt 0 ]] || { echo "$fallback"; return 1; }
+
+    local tmp frac pos out lang prob samples=0
+    local -A score=()
+    tmp="$(mktemp -d 2>/dev/null)" || { echo "$fallback"; return 1; }
+    for frac in 20 50 80; do
+        pos=$(( dur * frac / 100 ))
+        (( dur < 40 )) && pos=0
+        ffmpeg -nostdin -loglevel error -y -ss "$pos" -t 30 -i "$video" -vn -ac 1 -ar 16000 "$tmp/s.wav" 2>/dev/null || continue
+        out="$(run_with_timeout 300 "$cmd" "$tmp/s.wav" --model tiny --output_format txt \
+                --output_dir "$tmp" --verbose True 2>&1 </dev/null | grep -m1 -E "Detected language")"
+        if [[ "$out" =~ Detected\ language\ \'([^\']+)\'\ with\ probability\ ([0-9.]+) ]]; then
+            lang="${BASH_REMATCH[1]}"; prob="${BASH_REMATCH[2]}"
+            score[$lang]="$(awk -v a="${score[$lang]:-0}" -v b="$prob" 'BEGIN{print a+b}')"
+            samples=$(( samples + 1 ))
+        fi
+        (( dur < 40 )) && break
+    done
+    rm -rf "$tmp"
+
+    local best="" best_score=0 l
+    for l in "${!score[@]}"; do
+        if awk -v a="${score[$l]}" -v b="$best_score" 'BEGIN{exit !(a>b)}'; then best="$l"; best_score="${score[$l]}"; fi
+    done
+    # Average probability of the winner across all samples must reach 0.2
+    if [[ -n "$best" ]] && awk -v a="$best_score" -v n="$samples" 'BEGIN{exit !(n>0 && a/n>=0.2)}'; then
+        echo "$best"; return 0
+    fi
+    echo "$fallback"; return 1
+}
+
 # Hidden marker that records "this video had no speech", so skip-existing does
 # not send it through Whisper again on every run. Delete it to retry.
 _no_speech_marker() {
@@ -332,10 +380,21 @@ _generate_single_subtitle() {
         model="large-v3"
     fi
 
+    # Auto language: guess from several samples (faster-whisper only; the guess is
+    # used for transcription, but never for --lang-tag file names)
+    local spoken="$language"
+    if [[ "$language" == "auto" && "$whisper_cmd" == "whisper-ctranslate2" && "${SUBTITLE_DETECT_LANGUAGE:-true}" == true ]]; then
+        if spoken="$(_detect_language "$video_file" "$whisper_cmd")"; then
+            log_info "Detected language: $spoken"
+        else
+            log_warning "Could not detect the language with confidence; using ${spoken}. Set --language to override."
+        fi
+    fi
+
     # Build language args inside helper to avoid array-passing issues in subshells
     local -a lang_args=()
-    if [[ "$language" != "auto" ]]; then
-        lang_args=("--language" "$language")
+    if [[ "$spoken" != "auto" ]]; then
+        lang_args=("--language" "$spoken")
     fi
 
     # CPU precision: openai-whisper needs --fp16 False; faster-whisper uses int8

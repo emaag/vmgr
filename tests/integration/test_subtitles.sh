@@ -125,6 +125,9 @@ test_subtitles_tidy_timing() {
     assert_contains "00:00:01,000 --> 00:00:02,000" "$out" "tidy: short cue stretched to 1 s"
     assert_contains "00:00:05,000 --> 00:00:06,460" "$out" "tidy: overlap trimmed"
     assert_contains "00:00:06,500 --> 00:00:08,000" "$out" "tidy: later cue unchanged"
+    printf '1\n00:00:51,060 --> 00:14:38,450\nHa, ha, ha\n' > "$TEST_TMPDIR/long.srt"
+    _tidy_subtitle_timing "$TEST_TMPDIR/long.srt" srt
+    assert_contains "00:00:51,060 --> 00:01:01,060" "$(cat "$TEST_TMPDIR/long.srt")" "tidy: runaway cue cut to 10 s"
     _teardown
 }
 
