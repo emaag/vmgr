@@ -19,53 +19,31 @@ _BROWSER_REV=$'\033[7m'
 # Print subdirectory names of $1 (one per line, case-insensitive sort).
 # $2 = 1 to include hidden directories. Symlinks (and Windows junctions, which
 # WSL reports as symlinks) are skipped: they only duplicate other folders.
+# Uses one find call instead of a stat per entry: on network mounts (9p/SMB
+# under WSL) each stat costs ~0.3 s, which made large folders look hung.
+# find -type d does not match symlinks, so they drop out here.
 browser_list_subdirs() {
-    local dir="$1" show_hidden="${2:-0}" entry
-    local restore
-    restore="$(shopt -p nullglob dotglob)"
-    shopt -s nullglob
-    [[ "$show_hidden" == "1" ]] && shopt -s dotglob
-
-    for entry in "$dir"/*/; do
-        entry="${entry%/}"
-        [[ -L "$entry" ]] && continue
-        echo "${entry##*/}"
+    local dir="${1%/}" show_hidden="${2:-0}" entry
+    find "$dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while IFS= read -r entry; do
+        entry="${entry##*/}"
+        [[ "$show_hidden" != "1" && "$entry" == .* ]] && continue
+        echo "$entry"
     done | LC_ALL=C sort -f
-
-    eval "$restore"
 }
 
 # Print the number of video files directly inside $1.
 browser_count_videos() {
-    local dir="$1" f n=0
-    local restore
-    restore="$(shopt -p nullglob)"
-    shopt -s nullglob
-
-    for f in "$dir"/*; do
-        if [[ -f "$f" ]] && is_video_file "$f"; then
-            n=$(( n + 1 ))
-        fi
-    done
-
-    eval "$restore"
+    local n=0
+    while IFS= read -r _; do n=$(( n + 1 )); done < <(browser_list_videos "$1")
     echo "$n"
 }
 
 # Print names of video files directly inside $1 (one per line, sorted).
 browser_list_videos() {
-    local dir="$1" f
-    local restore
-    restore="$(shopt -p nullglob)"
-    shopt -s nullglob
-
-    for f in "$dir"/*; do
-        if [[ -f "$f" ]] && is_video_file "$f"; then
-            echo "${f##*/}"
-        fi
+    local dir="${1%/}" f
+    find "$dir" -mindepth 1 -maxdepth 1 -type f 2>/dev/null | while IFS= read -r f; do
+        is_video_file "$f" && echo "${f##*/}"
     done | LC_ALL=C sort -f
-
-    eval "$restore"
 }
 
 # Print recent directories, most recent first, skipping ones that no longer exist.

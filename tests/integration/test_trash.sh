@@ -176,6 +176,7 @@ test_subtitle_scan_skips_the_trash() {
     SUBTITLE_RECURSIVE=true; SUBTITLE_MAX_DEPTH=5; SUBTITLE_MIN_DEPTH=1; SUBTITLE_PARALLEL_JOBS=1
     SUBTITLE_SKIP_EXISTING=false; SUBTITLE_MIN_SIZE_MB=0; SUBTITLE_MAX_SIZE_MB=0; SUBTITLE_MODIFIED_DAYS=0
     SUBTITLE_MAX_FILES=0; SUBTITLE_USE_GPU=false; SUBTITLE_SHOW_DIR_STATS=false; SUBTITLE_INTERACTIVE_EDIT=false
+    SUBTITLE_BACKEND=whisper; SUBTITLE_EXTRACT_AUDIO=false
     generate_subtitles_in_directory "$TEST_TMPDIR/s" base srt auto false >/dev/null 2>&1
     export PATH="$saved"
     assert_equals "1" "$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')" "subtitles: only the real video is processed"

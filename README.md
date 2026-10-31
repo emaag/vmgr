@@ -151,9 +151,25 @@ chmod +x video-manager-ultimate.sh
 # GPU-accelerated with parallel processing
 ./video-manager-ultimate.sh --gpu --parallel 4 subtitles /path
 
-# Enable speaker diarization
-./video-manager-ultimate.sh --speaker-diarization --model large subtitles /path
+# Pick the model by video length (short videos get a bigger model)
+./video-manager-ultimate.sh --model auto subtitles /path
+
+# Names and jargon hint, language-tagged files (movie.en.srt), faster decoding
+./video-manager-ultimate.sh --prompt "Grafana, Kubernetes" --language en --lang-tag --batched subtitles /path
+
+# Translate speech to English subtitles
+./video-manager-ultimate.sh --translate subtitles /path
+
+# Speaker labels (needs faster-whisper, pyannote.audio and HF_TOKEN; not tested here)
+HF_TOKEN=hf_xxx ./video-manager-ultimate.sh --speaker-diarization subtitles /path
 ```
+
+Subtitles use `whisper-ctranslate2` (faster-whisper) when installed, which is several times
+faster than `whisper` on CPU: `pip install whisper-ctranslate2`. `--backend whisper` forces the
+old CLI. Audio is extracted with ffmpeg first, a VAD filter and confidence thresholds cut
+hallucinated text over silence, and lines wrap at 42 characters (2 per cue). Other switches:
+`--no-vad`, `--no-split-lines`, `--no-extract-audio`, `--no-tidy` (keep Whisper's exact timing),
+`--punctuation`. `large` means `large-v3` on the faster-whisper backend.
 
 ### Organization Operations
 ```console
@@ -229,7 +245,9 @@ Or use command-line flags:
 |-----------|---------|
 | Whisper (`pip install -U openai-whisper` or whisper.cpp) | Subtitle generation |
 | ffprobe | Video metadata |
-| pyannote-audio | Speaker diarization |
+| whisper-ctranslate2 (`pip install whisper-ctranslate2`) | Faster subtitle generation (recommended) |
+| ffmpeg | Audio extraction for subtitles |
+| pyannote.audio | Speaker labels (optional) |
 
 ### Platform Support
 

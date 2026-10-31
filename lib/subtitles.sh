@@ -176,6 +176,112 @@ _clean_subtitle_cues() {
     (( kept > 0 ))
 }
 
+# Tidy SRT timing: stretch cues shorter than SUBTITLE_MIN_CUE_SEC (default 1.0)
+# where the next cue leaves room, and trim overlaps so cues never overlap.
+# SRT only; other formats are left alone. Returns 0 (also when skipped).
+_tidy_subtitle_timing() {
+    local file="$1" format="$2" tmp
+    [[ "$format" == "srt" && -f "$file" ]] || return 0
+    command -v perl &>/dev/null || return 0
+    tmp="$(mktemp)" || return 0
+    SUBTITLE_MIN_CUE_MS=$(awk -v s="${SUBTITLE_MIN_CUE_SEC:-1.0}" 'BEGIN{printf "%d", s*1000}') \
+    perl -0777 -e '
+        my $min = $ENV{SUBTITLE_MIN_CUE_MS} // 1000; my $gap = 40;
+        sub ms { my ($h,$m,$s,$f)=@_; (($h*60+$m)*60+$s)*1000+$f }
+        sub ts { my $t=shift; sprintf("%02d:%02d:%02d,%03d", int($t/3600000), int($t/60000)%60, int($t/1000)%60, $t%1000) }
+        my $in = <STDIN>; my @cues;
+        for my $blk (split /\n{2,}/, $in) {
+            my @l = split /\n/, $blk;
+            my $i = 0; $i++ while $i < @l && $l[$i] !~ /-->/;
+            if ($i >= @l) { push @cues, { raw => $blk }; next }
+            $l[$i] =~ /(\d+):(\d+):(\d+),(\d+)\s*-->\s*(\d+):(\d+):(\d+),(\d+)(.*)/ or do { push @cues, { raw => $blk }; next };
+            push @cues, { s => ms($1,$2,$3,$4), e => ms($5,$6,$7,$8), tail => $9, text => [@l[$i+1..$#l]] };
+        }
+        my @t = grep { exists $_->{s} } @cues;
+        for my $k (0..$#t) {
+            my $c = $t[$k]; my $next = $k < $#t ? $t[$k+1]{s} : undef;
+            if ($c->{e} - $c->{s} < $min) {
+                my $want = $c->{s} + $min;
+                $want = $next - $gap if defined $next && $want > $next - $gap;
+                $c->{e} = $want if $want > $c->{e};
+            }
+            if (defined $next && $c->{e} > $next - $gap) {
+                my $trim = $next - $gap;
+                $c->{e} = $trim if $trim > $c->{s};
+            }
+        }
+        my $n = 0; my @out;
+        for my $c (@cues) {
+            if (!exists $c->{s}) { push @out, $c->{raw}; next }
+            $n++;
+            push @out, join("\n", $n, ts($c->{s}) . " --> " . ts($c->{e}) . $c->{tail}, @{$c->{text}});
+        }
+        print join("\n\n", @out), "\n\n";
+    ' < "$file" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]] && cat "$tmp" > "$file"
+    rm -f "$tmp"
+    return 0
+}
+
+# Pick a model by video length for --model auto: shorter videos get a bigger model.
+# Args: video_file. Prints the model name.
+_auto_model_for() {
+    local dur=0
+    if command -v ffprobe &>/dev/null; then
+        dur="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" 2>/dev/null | head -n1)"
+        dur="${dur%%.*}"
+    fi
+    [[ "$dur" =~ ^[0-9]+$ ]] || dur=0
+    if   (( dur > 0 && dur <= 600 ));  then echo "medium"
+    elif (( dur > 0 && dur <= 2700 )); then echo "small"
+    else                                    echo "base"
+    fi
+}
+
+# Path a finished subtitle should end up at. With SUBTITLE_LANG_TAG=true and an
+# explicit language, srt/vtt files get a language tag (video.en.srt) that players
+# recognise. Args: video_file format language
+_subtitle_final_path() {
+    local base="${1%.*}" format="$2" language="$3"
+    if [[ "${SUBTITLE_LANG_TAG:-false}" == true && "$language" != "auto" && ( "$format" == srt || "$format" == vtt ) ]]; then
+        echo "${base}.${language}.${format}"
+    else
+        echo "${base}.${format}"
+    fi
+}
+
+# Whisper prints a tqdm bar on stderr, e.g. " 3%|███| 51.4/1749.7 [01:21<44:47, 1.58s/seconds]".
+# Read the newest frame from a log file. Prints "pct elapsed eta" (eta may be "?")
+# and returns 1 when no frame has been written yet.
+_whisper_progress_parse() {
+    local frame
+    frame="$(tail -c 2000 "$1" 2>/dev/null | tr '\r' '\n' | grep -E '[0-9]+%\|' | tail -n1)"
+    [[ -n "$frame" ]] || return 1
+    if [[ "$frame" =~ ([0-9]+)%\| ]]; then
+        local pct="${BASH_REMATCH[1]}" elapsed="" eta="?"
+        if [[ "$frame" =~ \[([0-9:]+)\<([0-9:?]+) ]]; then
+            elapsed="${BASH_REMATCH[1]}"; eta="${BASH_REMATCH[2]}"
+        fi
+        echo "$pct ${elapsed:-?} $eta"
+        return 0
+    fi
+    return 1
+}
+
+# Draw one live line for the file being transcribed (stderr, overwrites itself).
+# Args: pct elapsed_text eta_text label
+_subtitle_draw_progress() {
+    local pct="$1" elapsed="$2" eta="$3" label="${4:-Transcribing}"
+    local width=24 filled bar_on bar_off full="${UI_BAR_FULL:-█}" empty="${UI_BAR_EMPTY:-░}" i
+    (( pct > 100 )) && pct=100
+    filled=$(( pct * width / 100 ))
+    bar_on=""; bar_off=""
+    for ((i=0; i<filled; i++)); do bar_on+="$full"; done
+    for ((i=filled; i<width; i++)); do bar_off+="$empty"; done
+    printf '\r    %s%s%s%s%s%s %3d%%  %s%s  elapsed %s  ETA %s%s\033[K' \
+        "${UI_ACCENT:-}" "$bar_on" "${COLOR_RESET:-}" "${UI_DIM:-}" "$bar_off" "${COLOR_RESET:-}" \
+        "$pct" "${UI_DIM:-}" "$label" "$elapsed" "$eta" "${COLOR_RESET:-}" >&2
+}
+
 # Hidden marker that records "this video had no speech", so skip-existing does
 # not send it through Whisper again on every run. Delete it to retry.
 _no_speech_marker() {
@@ -219,6 +325,13 @@ _generate_single_subtitle() {
     local elapsed_sum="${10:-0}"
     local files_done="${11:-0}"
 
+    [[ "$model" == "auto" ]] && model="$(_auto_model_for "$video_file")"
+
+    # whisper-ctranslate2 has no plain "large"; openai-whisper treats it as large-v3
+    if [[ "$whisper_cmd" == "whisper-ctranslate2" && "$model" == "large" ]]; then
+        model="large-v3"
+    fi
+
     # Build language args inside helper to avoid array-passing issues in subshells
     local -a lang_args=()
     if [[ "$language" != "auto" ]]; then
@@ -229,7 +342,7 @@ _generate_single_subtitle() {
     local -a fp16_args=()
     if [[ "$device" == "cpu" ]]; then
         if [[ "$whisper_cmd" == "whisper-ctranslate2" ]]; then
-            fp16_args=("--compute_type" "int8")
+            fp16_args=("--compute_type" "int8" "--threads" "${SUBTITLE_THREADS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}")
         else
             fp16_args=("--fp16" "False")
         fi
@@ -252,6 +365,22 @@ _generate_single_subtitle() {
     fi
     [[ "$whisper_cmd" == "whisper-ctranslate2" && "${SUBTITLE_VAD_FILTER:-true}" == true ]] \
         && quality_args+=(--vad_filter True)
+    [[ "${SUBTITLE_TRANSLATE:-false}" == true ]] && quality_args+=(--task translate)
+    if [[ "$whisper_cmd" == "whisper-ctranslate2" && "${SUBTITLE_BATCHED:-false}" == true ]]; then
+        quality_args+=(--batched True --batch_size "${SUBTITLE_BATCH_SIZE:-8}")
+    fi
+    if [[ "${SUBTITLE_SPEAKER_DIARIZATION:-false}" == true ]]; then
+        local hf_token="${SUBTITLE_HF_TOKEN:-${HF_TOKEN:-}}"
+        if [[ "$whisper_cmd" != "whisper-ctranslate2" ]]; then
+            log_warning "Speaker labels need the faster-whisper backend (whisper-ctranslate2); skipping"
+        elif [[ -z "$hf_token" ]]; then
+            log_warning "Speaker labels need a Hugging Face token (SUBTITLE_HF_TOKEN or HF_TOKEN); skipping"
+        elif ! python3 -c 'import pyannote.audio' &>/dev/null; then
+            log_warning "Speaker labels need pyannote.audio (pip install pyannote.audio); skipping"
+        else
+            quality_args+=(--hf_token "$hf_token")
+        fi
+    fi
 
     # Decode once to 16 kHz mono WAV: whisper then skips its own ffmpeg pass over
     # the whole video, and the temp file is named so the output name is unchanged.
@@ -317,8 +446,14 @@ _generate_single_subtitle() {
     local expected_subtitle="${output_dir}/$(basename "${video_file%.*}").${format}"
 
     # timeout: kill whisper if it hangs (default 2 hours per file)
-    # stdout suppressed (raw transcription text); stderr shown live for progress
+    # stdout suppressed (raw transcription text). When one file runs at a time on a
+    # terminal, stderr goes to a log and is shown as one live progress line;
+    # otherwise it passes straight through.
     # Run in the background and wait, so Ctrl-C is handled straight away.
+    local wlog="" live=false
+    if [[ "${SUBTITLE_LIVE_PROGRESS:-true}" == true && "${SUBTITLE_PARALLEL_JOBS:-1}" -le 1 && -t 2 ]]; then
+        wlog="$(mktemp 2>/dev/null)" && live=true || wlog=""
+    fi
     trap _subtitle_on_interrupt INT TERM
     run_with_timeout "${SUBTITLE_TIMEOUT:-7200}" \
         "$whisper_cmd" "$input_file" \
@@ -329,10 +464,32 @@ _generate_single_subtitle() {
         --device "$device" \
         --verbose False \
         "${quality_args[@]}" \
-        "${fp16_args[@]}" >/dev/null &
+        "${fp16_args[@]}" >/dev/null 2>"${wlog:-/dev/stderr}" &
     _SUBTITLE_WPID=$!
     local rc=0
+    if [[ "$live" == true ]]; then
+        local prog pct elapsed eta started
+        started=$(date +%s)
+        while kill -0 "$_SUBTITLE_WPID" 2>/dev/null && [[ "$_SUBTITLE_INTERRUPTED" != true ]]; do
+            if prog="$(_whisper_progress_parse "$wlog")"; then
+                read -r pct elapsed eta <<< "$prog"
+                _subtitle_draw_progress "$pct" "$elapsed" "$eta"
+            else
+                local waited=$(( $(date +%s) - started ))
+                _subtitle_draw_progress 0 "$(printf '%02d:%02d' $(( waited / 60 )) $(( waited % 60 )))" "?" "Loading model / detecting speech"
+            fi
+            sleep 1 & wait $!
+        done
+    fi
     wait "$_SUBTITLE_WPID" || rc=$?
+    if [[ "$live" == true ]]; then
+        printf '\r\033[K' >&2
+        if [[ $rc -ne 0 && $rc -ne 124 && "$_SUBTITLE_INTERRUPTED" != true ]]; then
+            # Show why it failed, without tqdm frames or the harmless GPU-probe noise
+            tr '\r' '\n' < "$wlog" | grep -Ev '[0-9]+%\||onnxruntime|^[[:space:]]*$' | tail -n 15 >&2
+        fi
+        rm -f "$wlog"
+    fi
     if [[ "$_SUBTITLE_INTERRUPTED" == true ]]; then
         kill -TERM "$_SUBTITLE_WPID" 2>/dev/null
         wait "$_SUBTITLE_WPID" 2>/dev/null
@@ -381,6 +538,16 @@ _generate_single_subtitle() {
 
     if [[ "${SUBTITLE_AUTO_PUNCTUATION:-false}" == true && -f "$subtitle_file" ]]; then
         fix_punctuation "$subtitle_file"
+    fi
+
+    if [[ "${SUBTITLE_TIDY_TIMING:-true}" == true && -f "$subtitle_file" ]]; then
+        _tidy_subtitle_timing "$subtitle_file" "$format"
+    fi
+
+    local final_file
+    final_file="$(_subtitle_final_path "$video_file" "$format" "$language")"
+    if [[ "$final_file" != "$subtitle_file" && -f "$subtitle_file" ]]; then
+        mv -f "$subtitle_file" "$final_file" && subtitle_file="$final_file"
     fi
 
     if [[ "${SUBTITLE_INTERACTIVE_EDIT:-false}" == true && -f "$subtitle_file" && -t 0 ]]; then
@@ -525,6 +692,8 @@ generate_subtitles_in_directory() {
         local output_dir
         output_dir="$(dirname "$video_file")"
         local subtitle_file="${video_file%.*}.${format}"
+        local tagged_file
+        tagged_file="$(_subtitle_final_path "$video_file" "$format" "$language")"
 
         # Skip a video that was already found to have no speech
         if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true && -f "$(_no_speech_marker "$video_file")" ]]; then
@@ -538,8 +707,8 @@ generate_subtitles_in_directory() {
         # likely left behind by a previously interrupted whisper run — delete it
         # and fall through to reprocess.
         if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true ]]; then
-            if _is_valid_subtitle "$subtitle_file" "$format"; then
-                log_verbose "Skipping (exists): $(basename "$subtitle_file")"
+            if _is_valid_subtitle "$tagged_file" "$format" || _is_valid_subtitle "$subtitle_file" "$format"; then
+                log_verbose "Skipping (exists): $(basename "$tagged_file")"
                 STATS[files_skipped]=$(( STATS[files_skipped] + 1 ))
                 continue
             elif [[ -f "$subtitle_file" ]]; then

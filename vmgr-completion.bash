@@ -34,6 +34,11 @@ _vmgr_completion() {
         --backend
         --prompt
         --no-vad
+        --batched
+        --translate
+        --lang-tag
+        --no-tidy
+        --speaker-diarization
         --no-split-lines
         --no-extract-audio
         --organize
@@ -56,7 +61,7 @@ _vmgr_completion() {
     "
 
     # Whisper models
-    local models="tiny base small medium large"
+    local models="tiny base small medium large large-v3 turbo auto"
 
     # Subtitle formats
     local formats="srt vtt txt json"

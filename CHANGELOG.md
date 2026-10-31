@@ -12,11 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Faster subtitles**: `vmgr subtitles` now prefers `whisper-ctranslate2` (faster-whisper, int8 on CPU) when installed, and falls back to `whisper`. `--backend auto|faster|whisper` overrides it. Audio is decoded once to 16 kHz mono WAV with ffmpeg first (`--no-extract-audio` to skip).
 - **Fewer hallucinated cues**: Whisper now runs with `condition_on_previous_text False` and no-speech, logprob and compression thresholds, plus a VAD filter on faster-whisper (`--no-vad` to turn off). A video whose output has no cues counts as "no speech".
+- **More subtitle options**: `--model auto` (medium up to 10 min, small up to 45 min, base beyond), `--batched`, `--translate`, `--lang-tag` (`movie.en.srt`; skip-existing recognises both names), `--no-tidy`, and `--speaker-diarization` (needs pyannote.audio and a Hugging Face token; untested). SRT cues shorter than 1 s are stretched where there is room and overlaps are trimmed.
+- **Live progress per file**: while a video is transcribed, one line shows a bar, percent, elapsed time and ETA, read from Whisper's own progress output. It replaces Whisper's raw progress dump and the harmless GPU-probe warning, and appears only when one file runs at a time on a terminal (`SUBTITLE_LIVE_PROGRESS=false` restores the old output). Whisper's errors are still shown when a file fails.
 - **Readable cues**: lines wrap at 42 characters, 2 per cue, using word timestamps (`--no-split-lines` to turn off). `--prompt <text>` passes names and jargon to Whisper. `--punctuation` enables the capitalization fix.
 
 ### Fixed
 - Existing `.vtt` subtitles are no longer judged incomplete, deleted and regenerated on each run.
 - `fix_punctuation` now edits only cue text, not cue numbers, timestamps or the WEBVTT header.
+- The directory browser no longer freezes for tens of seconds on network folders (WSL 9p/NAS mounts): it lists with one `find` call instead of a stat per entry.
+- `--model large` works with `whisper-ctranslate2` (it is passed as `large-v3`).
+- The subtitle tests ran the real `whisper-ctranslate2`; they now drive a mock, and cover the new options.
 - `--edit` now opens each new subtitle in `$EDITOR`. The speaker-diarization option was never implemented and has been removed.
 
 - **Naming patterns for rename**: `vmgr --pattern <name> rename <dir>` chooses `bracket` (the default and previous behavior), `title-case`, `snake_case` or `strip-junk` (removes encoding tags such as `1080p`, `x264` and `WEB-DL`). Applies to `--dry-run`, undo and the `workflow` commands too.

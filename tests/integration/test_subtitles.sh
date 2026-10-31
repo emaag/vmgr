@@ -23,6 +23,10 @@ _setup() {
     SUBTITLE_SHOW_DIR_STATS=false
     SUBTITLE_INTERACTIVE_EDIT=false
     SUBTITLE_AUTO_PUNCTUATION=false
+    # Tests drive the mock "whisper"; the stub videos are empty files, so skip ffmpeg
+    SUBTITLE_BACKEND=whisper
+    SUBTITLE_EXTRACT_AUDIO=false
+    SUBTITLE_TIDY_TIMING=false
     # Reset relevant stats for isolation
     STATS[subtitles_generated]=0
     STATS[subtitles_failed]=0
@@ -47,8 +51,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --output_dir)     output_dir="$2"; shift 2 ;;
         --output_format)  format="$2";     shift 2 ;;
-        --model|--language|--device) shift 2 ;;
-        --verbose|--fp16) shift 2 ;;
+        --*) [[ -n "${MOCK_WHISPER_ARGS:-}" ]] && echo "$1 $2" >> "$MOCK_WHISPER_ARGS"; shift 2 ;;
         *) input_file="$1"; shift ;;
     esac
 done
@@ -73,6 +76,108 @@ MOCKEOF
 
 _restore_path() {
     export PATH="$_SAVED_PATH"
+}
+
+# ── Tests: backend, validity, cleanup, new options ───────────────────────────
+
+test_subtitles_get_whisper_command_backend() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/bin2"
+    printf '#!/bin/sh\n' > "$TEST_TMPDIR/bin2/whisper-ctranslate2"
+    printf '#!/bin/sh\n' > "$TEST_TMPDIR/bin2/whisper"
+    chmod +x "$TEST_TMPDIR/bin2/"*
+    local saved="$PATH"; export PATH="$TEST_TMPDIR/bin2:$PATH"
+    SUBTITLE_BACKEND=auto;    assert_equals "whisper-ctranslate2" "$(get_whisper_command)" "backend auto: prefers faster-whisper"
+    SUBTITLE_BACKEND=whisper; assert_equals "whisper" "$(get_whisper_command)" "backend whisper: forces openai-whisper"
+    SUBTITLE_BACKEND=faster;  assert_equals "whisper-ctranslate2" "$(get_whisper_command)" "backend faster: forces faster-whisper"
+    export PATH="$saved"
+    _teardown
+}
+
+test_subtitles_valid_vtt_and_srt() {
+    _setup
+    printf 'WEBVTT\n\n00:01.000 --> 00:02.000\nhi\n' > "$TEST_TMPDIR/a.vtt"
+    printf '1\n00:00:01,000 --> 00:00:02,000\nhi\n' > "$TEST_TMPDIR/a.srt"
+    : > "$TEST_TMPDIR/empty.vtt"
+    _is_valid_subtitle "$TEST_TMPDIR/a.vtt" vtt; assert_equals "0" "$?" "valid vtt is accepted"
+    _is_valid_subtitle "$TEST_TMPDIR/a.srt" srt; assert_equals "0" "$?" "valid srt is accepted"
+    _is_valid_subtitle "$TEST_TMPDIR/a.vtt" srt; assert_equals "1" "$?" "vtt is not a valid srt"
+    _is_valid_subtitle "$TEST_TMPDIR/empty.vtt" vtt; assert_equals "1" "$?" "empty vtt is rejected"
+    _teardown
+}
+
+test_subtitles_fix_punctuation_only_touches_text() {
+    _setup
+    printf '1\n00:00:01,000 --> 00:00:02,000\nwell i think i can\n' > "$TEST_TMPDIR/p.srt"
+    fix_punctuation "$TEST_TMPDIR/p.srt" >/dev/null 2>&1
+    local out; out="$(cat "$TEST_TMPDIR/p.srt")"
+    assert_contains "Well I think I can" "$out" "punctuation: text fixed"
+    assert_contains "00:00:01,000 --> 00:00:02,000" "$out" "punctuation: timestamps untouched"
+    _teardown
+}
+
+test_subtitles_tidy_timing() {
+    _setup
+    command -v perl >/dev/null || { assert_equals "1" "1" "tidy timing skipped (no perl)"; _teardown; return; }
+    printf '1\n00:00:01,000 --> 00:00:01,200\nshort\n\n2\n00:00:05,000 --> 00:00:07,000\nlong\n\n3\n00:00:06,500 --> 00:00:08,000\noverlap\n' > "$TEST_TMPDIR/t.srt"
+    _tidy_subtitle_timing "$TEST_TMPDIR/t.srt" srt
+    local out; out="$(cat "$TEST_TMPDIR/t.srt")"
+    assert_contains "00:00:01,000 --> 00:00:02,000" "$out" "tidy: short cue stretched to 1 s"
+    assert_contains "00:00:05,000 --> 00:00:06,460" "$out" "tidy: overlap trimmed"
+    assert_contains "00:00:06,500 --> 00:00:08,000" "$out" "tidy: later cue unchanged"
+    _teardown
+}
+
+test_subtitles_large_maps_to_large_v3_for_faster_backend() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/mock_bin" "$TEST_TMPDIR/v"
+    printf '#!/usr/bin/env bash\nwhile [ $# -gt 0 ]; do case "$1" in --model) echo "$2" >> "$MOCK_WHISPER_ARGS"; shift 2;; --output_dir) d="$2"; shift 2;; --*) shift 2;; *) f="$1"; shift;; esac; done\nb="$(basename "${f%%.*}")"\nprintf "1\\n00:00:00,000 --> 00:00:02,000\\nhi\\n" > "$d/$b.srt"\n' > "$TEST_TMPDIR/mock_bin/whisper-ctranslate2"
+    chmod +x "$TEST_TMPDIR/mock_bin/whisper-ctranslate2"
+    touch "$TEST_TMPDIR/v/x.mp4"
+    local saved="$PATH"; export PATH="$TEST_TMPDIR/mock_bin:$PATH"
+    SUBTITLE_BACKEND=faster
+    MOCK_WHISPER_ARGS="$TEST_TMPDIR/args" generate_subtitles_in_directory "$TEST_TMPDIR/v" large srt auto false >/dev/null 2>&1
+    export PATH="$saved"
+    assert_equals "large-v3" "$(head -n1 "$TEST_TMPDIR/args" 2>/dev/null)" "large: passed as large-v3 to whisper-ctranslate2"
+    _teardown
+}
+
+test_subtitles_lang_tag_names_and_skips() {
+    _setup; _setup_mock_whisper
+    mkdir -p "$TEST_TMPDIR/v"; touch "$TEST_TMPDIR/v/movie.mp4"
+    SUBTITLE_LANG_TAG=true
+    generate_subtitles_in_directory "$TEST_TMPDIR/v" base srt en false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/v/movie.en.srt" "lang tag: movie.en.srt created"
+    assert_file_not_exists "$TEST_TMPDIR/v/movie.srt" "lang tag: untagged file moved away"
+    MOCK_WHISPER_CALLS="$TEST_TMPDIR/calls" generate_subtitles_in_directory "$TEST_TMPDIR/v" base srt en false >/dev/null 2>&1
+    assert_file_not_exists "$TEST_TMPDIR/calls" "lang tag: second run skips the tagged subtitle"
+    SUBTITLE_LANG_TAG=false
+    _restore_path; _teardown
+}
+
+test_subtitles_options_reach_whisper() {
+    _setup; _setup_mock_whisper
+    mkdir -p "$TEST_TMPDIR/v"; touch "$TEST_TMPDIR/v/movie.mp4"
+    SUBTITLE_INITIAL_PROMPT="Grafana"; SUBTITLE_TRANSLATE=true
+    MOCK_WHISPER_ARGS="$TEST_TMPDIR/args" generate_subtitles_in_directory "$TEST_TMPDIR/v" base srt auto false >/dev/null 2>&1
+    local a; a="$(cat "$TEST_TMPDIR/args")"
+    assert_contains "--initial_prompt Grafana" "$a" "options: initial prompt passed"
+    assert_contains "--task translate" "$a" "options: translate passed"
+    assert_contains "--condition_on_previous_text False" "$a" "options: anti-hallucination flag passed"
+    assert_contains "--max_line_width 42" "$a" "options: line width passed"
+    SUBTITLE_INITIAL_PROMPT=""; SUBTITLE_TRANSLATE=false
+    _restore_path; _teardown
+}
+
+test_subtitles_progress_parse() {
+    _setup
+    printf '\r  0%%|  | 0/1749.67 [00:00<?, ?seconds/s]\r  3%%|███| 51.4/1749.67 [01:21<44:47,  1.58s/seconds]' > "$TEST_TMPDIR/log"
+    assert_equals "3 01:21 44:47" "$(_whisper_progress_parse "$TEST_TMPDIR/log")" "progress: newest frame parsed"
+    printf 'only a warning line\n' > "$TEST_TMPDIR/log2"
+    _whisper_progress_parse "$TEST_TMPDIR/log2" >/dev/null; assert_equals "1" "$?" "progress: no frame yet returns 1"
+    printf '100%%|██| 1234/1234 [00:10<00:00, 120frames/s]' > "$TEST_TMPDIR/log3"
+    assert_equals "100 00:10 00:00" "$(_whisper_progress_parse "$TEST_TMPDIR/log3")" "progress: openai-whisper frames parsed"
+    _teardown
 }
 
 # ── Tests: generate_subtitles_in_directory ────────────────────────────────────

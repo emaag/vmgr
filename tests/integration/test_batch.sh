@@ -125,7 +125,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --output_dir) out="$2"; shift 2 ;;
         --output_format) fmt="$2"; shift 2 ;;
-        --model|--language|--device|--verbose|--fp16) shift 2 ;;
+        --*) shift 2 ;;
         *) input="$1"; shift ;;
     esac
 done
@@ -143,6 +143,7 @@ MOCK
     SUBTITLE_MIN_SIZE_MB=0; SUBTITLE_MAX_SIZE_MB=0; SUBTITLE_MODIFIED_DAYS=0; SUBTITLE_MAX_FILES=0
     SUBTITLE_USE_GPU=false; SUBTITLE_SHOW_DIR_STATS=false; SUBTITLE_INTERACTIVE_EDIT=false
     SUBTITLE_AUTO_PUNCTUATION=false; SUBTITLE_INTERACTIVE_SELECT=false
+    SUBTITLE_BACKEND=whisper; SUBTITLE_EXTRACT_AUDIO=false; SUBTITLE_TIDY_TIMING=false
     WHISPER_MODEL=base; SUBTITLE_FORMAT=srt; SUBTITLE_LANGUAGE=auto
 }
 _teardown_batch_subtitles() { export PATH="$_SAVED_PATH"; _teardown; }

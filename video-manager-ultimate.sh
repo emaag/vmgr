@@ -100,7 +100,7 @@ ${COLOR_BOLD}OPTIONS:${COLOR_RESET}
     -i, --interactive       Launch interactive menu (default if no command)
 
 ${COLOR_BOLD}SUBTITLE OPTIONS:${COLOR_RESET}
-    --model <model>         Whisper model (tiny, base, small, medium, large)
+    --model <model>         Whisper model (tiny, base, small, medium, large[-v3], turbo, auto)
     --format <format>       Subtitle format (srt, vtt, txt, json)
     --language <lang>       Language code (en, es, fr, etc.) or 'auto'
 
@@ -114,6 +114,11 @@ ${COLOR_BOLD}ADVANCED SUBTITLE OPTIONS:${COLOR_RESET}
     --backend <name>        auto (default), faster (whisper-ctranslate2) or whisper
     --prompt <text>         Hint for names/jargon (Whisper initial prompt)
     --no-vad                Do not filter silence/music (faster-whisper)
+    --batched               Batched decoding (faster-whisper; can be much faster on long files)
+    --translate             Translate speech to English subtitles
+    --lang-tag              Name files video.<lang>.srt (use with --language <code>)
+    --no-tidy               Do not stretch short cues or trim overlapping cues (SRT)
+    --speaker-diarization   Label speakers (needs pyannote.audio and HF_TOKEN)
     --no-split-lines        Keep Whisper's own cue lengths (no 42x2 wrapping)
     --no-extract-audio      Pass the video straight to Whisper (skip ffmpeg step)
 
@@ -329,6 +334,26 @@ parse_arguments() {
                 ;;
             --no-vad)
                 SUBTITLE_VAD_FILTER=false
+                shift
+                ;;
+            --batched)
+                SUBTITLE_BATCHED=true
+                shift
+                ;;
+            --translate)
+                SUBTITLE_TRANSLATE=true
+                shift
+                ;;
+            --lang-tag)
+                SUBTITLE_LANG_TAG=true
+                shift
+                ;;
+            --no-tidy)
+                SUBTITLE_TIDY_TIMING=false
+                shift
+                ;;
+            --speaker-diarization)
+                SUBTITLE_SPEAKER_DIARIZATION=true
                 shift
                 ;;
             --no-split-lines)
