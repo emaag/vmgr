@@ -160,3 +160,11 @@ test_rename_rejects_unknown_pattern() {
     assert_file_exists "$TEST_TMPDIR/studio name.mp4" "rename: unknown pattern leaves files alone"
     _teardown
 }
+
+test_rename_dates_option_normalizes_dates() {
+    _setup
+    touch "$TEST_TMPDIR/Show 2024-03-05 final.mp4"
+    NORMALIZE_DATES=true RENAME_PATTERN=title-case rename_files_in_directory "$TEST_TMPDIR" false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/Show 05.03.2024 Final.mp4" "rename --dates: date rewritten after the pattern"
+    _teardown
+}

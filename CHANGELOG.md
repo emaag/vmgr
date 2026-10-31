@@ -10,9 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Naming patterns for rename**: `vmgr --pattern <name> rename <dir>` chooses `bracket` (the default and previous behavior), `title-case`, `snake_case` or `strip-junk` (removes encoding tags such as `1080p`, `x264` and `WEB-DL`). Applies to `--dry-run`, undo and the `workflow` commands too.
+- **Faster subtitles**: `vmgr subtitles` now prefers `whisper-ctranslate2` (faster-whisper, int8 on CPU) when installed, and falls back to `whisper`. `--backend auto|faster|whisper` overrides it. Audio is decoded once to 16 kHz mono WAV with ffmpeg first (`--no-extract-audio` to skip).
+- **Fewer hallucinated cues**: Whisper now runs with `condition_on_previous_text False` and no-speech, logprob and compression thresholds, plus a VAD filter on faster-whisper (`--no-vad` to turn off). A video whose output has no cues counts as "no speech".
+- **Readable cues**: lines wrap at 42 characters, 2 per cue, using word timestamps (`--no-split-lines` to turn off). `--prompt <text>` passes names and jargon to Whisper. `--punctuation` enables the capitalization fix.
 
 ### Fixed
+- Existing `.vtt` subtitles are no longer judged incomplete, deleted and regenerated on each run.
+- `fix_punctuation` now edits only cue text, not cue numbers, timestamps or the WEBVTT header.
+- `--edit` now opens each new subtitle in `$EDITOR`. The speaker-diarization option was never implemented and has been removed.
+
+- **Naming patterns for rename**: `vmgr --pattern <name> rename <dir>` chooses `bracket` (the default and previous behavior), `title-case`, `snake_case` or `strip-junk` (removes encoding tags such as `1080p`, `x264` and `WEB-DL`). Applies to `--dry-run`, undo and the `workflow` commands too.
+
+- **Dates as dd.mm.yyyy**: `vmgr --dates rename <dir>` rewrites dates in names (`2024-03-05`, `2024.03.05`, `20240305`, `05-03-2024`) as `05.03.2024`, after whichever naming pattern is in use. A date with the day first is read day first, and impossible dates are left alone.
+
+### Fixed
+- A space before the extension (`foo bar .mkv`) is removed by bracket notation.
 - Bracket notation no longer splits names that start with an accented or non-Latin letter (`Café - Title.mp4` was renamed `[Caf] é Title.mp4`); it now gives `[Café] Title.mp4`.
 - A name that is already just `[Studio].mp4` no longer gets a space inserted before the extension, and leading whitespace in a name is trimmed.
 

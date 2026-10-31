@@ -132,7 +132,13 @@ SUBTITLE_SKIP_EXISTING=true # Skip files that already have subtitles
 SUBTITLE_INTERACTIVE_SELECT=false # Interactively select files before processing
 
 # Advanced subtitle settings (referenced by ui.sh advanced menu)
-SUBTITLE_SPEAKER_DIARIZATION=false  # Speaker diarization (future: pyannote-audio)
+SUBTITLE_BACKEND="auto"             # auto | faster (whisper-ctranslate2) | whisper
+SUBTITLE_EXTRACT_AUDIO=true         # Decode to 16 kHz mono WAV with ffmpeg first
+SUBTITLE_VAD_FILTER=true            # Skip silence/music (faster-whisper only)
+SUBTITLE_SPLIT_LINES=true           # Word timestamps + line wrapping for readable cues
+SUBTITLE_MAX_LINE_WIDTH=42          # Characters per subtitle line
+SUBTITLE_MAX_LINE_COUNT=2           # Lines per cue
+SUBTITLE_INITIAL_PROMPT=""          # Names/jargon hint for Whisper
 SUBTITLE_AUTO_PUNCTUATION=false     # Run fix_punctuation() after generation
 SUBTITLE_INTERACTIVE_EDIT=false     # Open editor after each subtitle is generated
 SUBTITLE_AUTO_EDIT=false            # Auto-apply fixes without interactive prompt

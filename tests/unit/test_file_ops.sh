@@ -91,6 +91,12 @@ test_bracket_leading_whitespace_trimmed() {
     assert_equals "[Studio] name.mp4" "$result" "bracket: leading whitespace trimmed"
 }
 
+test_bracket_trailing_space_before_extension_trimmed() {
+    assert_equals "[Foo] bar.mkv" "$(cleanup_filename "foo bar .mkv")" "cleanup: space before extension removed"
+    assert_equals "[Asd].mp4" "$(cleanup_filename "asd  .mp4")" "cleanup: several spaces before extension removed"
+    assert_equals "[A] b.mp4" "$(cleanup_filename "[A] b .mp4")" "cleanup: already-bracketed name loses the space too"
+}
+
 test_cleanup_bracket_only_name_keeps_extension_attached() {
     local result
     result=$(cleanup_filename "[Studio].mp4")
@@ -133,6 +139,41 @@ test_pattern_lookup() {
     assert_equals "cleanup_filename" "$(rename_transform_for_pattern bracket)" "pattern: bracket maps to cleanup_filename"
     rename_transform_for_pattern nonsense >/dev/null
     assert_not_equals "0" "$?" "pattern: unknown name rejected"
+}
+
+# ── date formatting ───────────────────────────────────────────────────────────
+
+test_dates_year_first_formats() {
+    assert_equals "Show 05.03.2024.mp4" "$(normalize_dates_filename "Show 2024-03-05.mp4")" "dates: yyyy-mm-dd"
+    assert_equals "Show 05.03.2024.mp4" "$(normalize_dates_filename "Show 2024.03.05.mp4")" "dates: yyyy.mm.dd"
+    assert_equals "Show_05.03.2024.mp4" "$(normalize_dates_filename "Show_20240305.mp4")" "dates: yyyymmdd, surrounding text untouched"
+}
+
+test_dates_day_first_formats() {
+    assert_equals "Show 05.03.2024.mp4" "$(normalize_dates_filename "Show 05-03-2024.mp4")" "dates: dd-mm-yyyy"
+    assert_equals "Show 05.03.2024.mp4" "$(normalize_dates_filename "Show 05_03_2024.mp4")" "dates: dd_mm_yyyy"
+}
+
+test_dates_already_correct_is_unchanged() {
+    assert_equals "Show 05.03.2024.mp4" "$(normalize_dates_filename "Show 05.03.2024.mp4")" "dates: dd.mm.yyyy is idempotent"
+}
+
+test_dates_impossible_or_unrelated_numbers_left_alone() {
+    assert_equals "Show 2024-13-45.mp4" "$(normalize_dates_filename "Show 2024-13-45.mp4")" "dates: month 13 untouched"
+    assert_equals "Show 1920x1080 v2.mp4" "$(normalize_dates_filename "Show 1920x1080 v2.mp4")" "dates: resolution untouched"
+    assert_equals "Show 123456789.mp4" "$(normalize_dates_filename "Show 123456789.mp4")" "dates: long number untouched"
+}
+
+test_dates_several_in_one_name() {
+    assert_equals "A 01.02.2023 to 05.03.2024.mp4" "$(normalize_dates_filename "A 2023-02-01 to 2024-03-05.mp4")" "dates: every date in the name"
+}
+
+test_dates_combine_with_pattern() {
+    NORMALIZE_DATES=true
+    local base="$(snake_case_filename "My Show 2024-03-05.mp4")"
+    assert_equals "my_show_2024_03_05.mp4" "$base" "dates: snake_case writes the date with underscores"
+    assert_equals "my_show_05.03.2024.mp4" "$(normalize_dates_filename "$base")" "dates: normalized after the pattern"
+    unset NORMALIZE_DATES
 }
 
 # ── remove_dashes ────────────────────────────────────────────────────────────

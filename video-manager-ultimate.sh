@@ -109,8 +109,13 @@ ${COLOR_BOLD}ADVANCED SUBTITLE OPTIONS:${COLOR_RESET}
     --parallel <N>          Parallel jobs (1-8, default: 2)
     --no-optimize           Disable batch optimization
     --edit                  Enable interactive editing mode
-    --speaker-diarization   Enable speaker identification
-    --no-punctuation        Disable automatic punctuation fixes
+    --punctuation           Apply punctuation/capitalization fixes to cue text
+    --no-punctuation        Disable automatic punctuation fixes (default)
+    --backend <name>        auto (default), faster (whisper-ctranslate2) or whisper
+    --prompt <text>         Hint for names/jargon (Whisper initial prompt)
+    --no-vad                Do not filter silence/music (faster-whisper)
+    --no-split-lines        Keep Whisper's own cue lengths (no 42x2 wrapping)
+    --no-extract-audio      Pass the video straight to Whisper (skip ffmpeg step)
 
 ${COLOR_BOLD}RENAME OPTIONS:${COLOR_RESET}
     --pattern <name>        Naming pattern for rename (default: bracket)
@@ -118,6 +123,8 @@ ${COLOR_BOLD}RENAME OPTIONS:${COLOR_RESET}
                               title-case  "my_show.mp4"     -> "My Show.mp4"
                               snake_case  "My Show - 01.mp4" -> "my_show_01.mp4"
                               strip-junk  "Show.1080p.x264.mp4" -> "Show.mp4"
+    --dates                 Also write dates in names as dd.mm.yyyy
+                            (2024-03-05, 20240305 and 05-03-2024 -> 05.03.2024)
 
 ${COLOR_BOLD}ORGANIZE OPTIONS:${COLOR_RESET}
     --organize-target <dir> Set default target folder for organize
@@ -176,7 +183,7 @@ ${COLOR_BOLD}EXAMPLES:${COLOR_RESET}
     $0 --gpu --parallel 4 --model medium subtitles /mnt/c/Videos
 
     # Generate with speaker diarization
-    $0 --speaker-diarization --model large subtitles /mnt/c/Videos
+    $0 --prompt "Names: Kubernetes, Grafana" --model small subtitles /mnt/c/Videos
 
     # Full workflow for new collection
     $0 workflow-new /mnt/c/Users/Eric/Videos
@@ -289,14 +296,47 @@ parse_arguments() {
                 log_info "Interactive editing enabled"
                 shift
                 ;;
-            --speaker-diarization)
-                SUBTITLE_SPEAKER_DIARIZATION=true
-                log_info "Speaker diarization enabled"
+            --punctuation)
+                SUBTITLE_AUTO_PUNCTUATION=true
+                log_info "Auto-punctuation enabled"
                 shift
                 ;;
             --no-punctuation)
                 SUBTITLE_AUTO_PUNCTUATION=false
                 log_info "Auto-punctuation disabled"
+                shift
+                ;;
+            --backend)
+                shift
+                if [[ "$1" =~ ^(auto|faster|whisper)$ ]]; then
+                    SUBTITLE_BACKEND="$1"
+                    log_info "Whisper backend set to: $SUBTITLE_BACKEND"
+                    shift
+                else
+                    log_error "Invalid backend. Use auto, faster or whisper"
+                    exit 1
+                fi
+                ;;
+            --prompt)
+                shift
+                if [[ -n "$1" ]]; then
+                    SUBTITLE_INITIAL_PROMPT="$1"
+                    shift
+                else
+                    log_error "--prompt needs a text argument"
+                    exit 1
+                fi
+                ;;
+            --no-vad)
+                SUBTITLE_VAD_FILTER=false
+                shift
+                ;;
+            --no-split-lines)
+                SUBTITLE_SPLIT_LINES=false
+                shift
+                ;;
+            --no-extract-audio)
+                SUBTITLE_EXTRACT_AUDIO=false
                 shift
                 ;;
             --pattern)
@@ -309,6 +349,11 @@ parse_arguments() {
                     log_error "Invalid rename pattern '${1:-}'. Choose from: $RENAME_PATTERNS"
                     exit 1
                 fi
+                ;;
+            --dates)
+                NORMALIZE_DATES=true
+                log_info "Dates in names will be written as dd.mm.yyyy"
+                shift
                 ;;
             --organize)
                 command="organize"

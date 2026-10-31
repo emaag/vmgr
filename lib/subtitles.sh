@@ -7,8 +7,8 @@
 #
 # IMPLEMENTATION STATUS:
 #   Implemented:  Whisper/GPU detection helpers (check_whisper_installation, detect_gpu)
-#   Stub only:    generate_subtitles_in_directory, batch_generate_subtitles,
-#                 edit_subtitle_interactive
+#   Implemented:  generate_subtitles_in_directory, batch_generate_subtitles,
+#                 edit_subtitle_interactive, fix_punctuation
 #   Not started:  Resume/checkpoint system, subtitle translation, speaker diarization
 #
 # Dependencies: core.sh, logging.sh, platform.sh, utils.sh
@@ -49,22 +49,21 @@ detect_gpu() {
 # WHISPER INTEGRATION
 ################################################################################
 
-# Check if whisper is installed
+# Check if a whisper backend is installed
 check_whisper_installation() {
-    if command -v whisper &> /dev/null; then
-        return 0
-    elif command -v whisper.cpp &> /dev/null; then
-        return 0
-    else
-        return 1
-    fi
+    [[ -n "$(get_whisper_command)" ]]
 }
 
-# Get whisper command
+# Get whisper command. Prefers whisper-ctranslate2 (faster-whisper: ~4x faster
+# on CPU, same flags as openai-whisper) unless SUBTITLE_BACKEND=whisper.
+# SUBTITLE_BACKEND: auto (default) | faster | whisper
 get_whisper_command() {
-    if command -v whisper &> /dev/null; then
+    local backend="${SUBTITLE_BACKEND:-auto}"
+    if [[ "$backend" != "whisper" ]] && command -v whisper-ctranslate2 &> /dev/null; then
+        echo "whisper-ctranslate2"
+    elif [[ "$backend" != "faster" ]] && command -v whisper &> /dev/null; then
         echo "whisper"
-    elif command -v whisper.cpp &> /dev/null; then
+    elif [[ "$backend" != "faster" ]] && command -v whisper.cpp &> /dev/null; then
         echo "whisper.cpp"
     else
         echo ""
@@ -75,30 +74,29 @@ get_whisper_command() {
 # SUBTITLE PROCESSING AND EDITING
 ################################################################################
 
-# Apply basic punctuation and capitalization fixes to a subtitle file
-# Called internally by subtitle generation once that feature is implemented
+# Apply basic capitalization fixes to the cue text of an SRT/VTT file.
+# Only text lines are touched: cue numbers, timestamp lines and the WEBVTT
+# header pass through unchanged. Whisper already punctuates, so this mainly
+# repairs a lowercase "i" and cues that start in lowercase after a full stop.
 fix_punctuation() {
-    local subtitle_file="$1"
+    local subtitle_file="$1" tmp
+    [[ -f "$subtitle_file" ]] || { log_warning "Punctuation fix failed: file not found"; return 1; }
 
     log_verbose "Applying punctuation fixes to: $(basename "$subtitle_file")"
+    tmp="$(mktemp)" || { log_warning "Punctuation fix failed"; return 1; }
 
-    # Basic punctuation fixes (using platform-compatible sed)
-    if sed_inplace_backup "$subtitle_file" ".bak" \
-        -e 's/\bi\b/I/g' \
-        -e 's/^\([a-z]\)/\U\1/' \
-        -e 's/\. \([a-z]\)/. \U\1/g' \
-        -e 's/\? \([a-z]\)/? \U\1/g' \
-        -e 's/! \([a-z]\)/! \U\1/g' 2>/dev/null; then
-        rm -f "${subtitle_file}.bak"
-        log_verbose "Punctuation fixes applied"
-        return 0
-    else
-        log_warning "Punctuation fix failed"
-        return 1
-    fi
+    command -v perl &>/dev/null || { rm -f "$tmp"; log_warning "Punctuation fix needs perl"; return 1; }
+
+    perl -pe '
+        next if /^WEBVTT/ || /-->/ || /^\d+\s*$/ || /^\s*$/;
+        s/(?<![\w\x27])i(?![\w\x27])/I/g;
+        s/^([a-z])/\U$1/;
+    ' "$subtitle_file" > "$tmp" 2>/dev/null && [[ -s "$tmp" ]] || { rm -f "$tmp"; log_warning "Punctuation fix failed"; return 1; }
+
+    cat "$tmp" > "$subtitle_file"
+    rm -f "$tmp"
+    log_verbose "Punctuation fixes applied"
 }
-
-
 
 ################################################################################
 # SUBTITLE GENERATION
@@ -126,7 +124,7 @@ _print_subtitle_progress() {
 # Whisper writes filler such as "." or "..." with long timestamps; keeping it
 # makes a video look subtitled when it is not.
 # Rewrites SRT/VTT files in place (SRT cues are renumbered) and checks TXT files.
-# Returns 0 when real text remains, 1 when nothing but filler was found.
+# Returns 0 when real text remains, 1 when nothing but filler (or nothing) was found.
 # Sets _SUBTITLE_REMOVED_CUES to the number of cues dropped.
 _clean_subtitle_cues() {
     local file="$1" format="$2" tmp counts kept dropped
@@ -174,7 +172,8 @@ _clean_subtitle_cues() {
         cat "$tmp" > "$file"
     fi
     rm -f "$tmp"
-    (( kept > 0 )) || (( dropped == 0 ))
+    # No cues at all (VAD removed everything) also means no speech
+    (( kept > 0 ))
 }
 
 # Hidden marker that records "this video had no speech", so skip-existing does
@@ -226,10 +225,48 @@ _generate_single_subtitle() {
         lang_args=("--language" "$language")
     fi
 
-    # --fp16 False: prevent fp16 on CPU (avoids memory spikes in some whisper versions)
+    # CPU precision: openai-whisper needs --fp16 False; faster-whisper uses int8
     local -a fp16_args=()
     if [[ "$device" == "cpu" ]]; then
-        fp16_args=("--fp16" "False")
+        if [[ "$whisper_cmd" == "whisper-ctranslate2" ]]; then
+            fp16_args=("--compute_type" "int8")
+        else
+            fp16_args=("--fp16" "False")
+        fi
+    fi
+
+    # Anti-hallucination and cue-shaping options (shared by both backends).
+    # condition_on_previous_text False stops repeat loops; the thresholds reject
+    # low-confidence segments over silence and music.
+    local -a quality_args=(
+        --condition_on_previous_text False
+        --no_speech_threshold "${SUBTITLE_NO_SPEECH_THRESHOLD:-0.6}"
+        --logprob_threshold "${SUBTITLE_LOGPROB_THRESHOLD:--1.0}"
+        --compression_ratio_threshold "${SUBTITLE_COMPRESSION_THRESHOLD:-2.4}"
+    )
+    [[ -n "${SUBTITLE_INITIAL_PROMPT:-}" ]] && quality_args+=(--initial_prompt "$SUBTITLE_INITIAL_PROMPT")
+    if [[ "${SUBTITLE_SPLIT_LINES:-true}" == true ]]; then
+        quality_args+=(--word_timestamps True
+                       --max_line_width "${SUBTITLE_MAX_LINE_WIDTH:-42}"
+                       --max_line_count "${SUBTITLE_MAX_LINE_COUNT:-2}")
+    fi
+    [[ "$whisper_cmd" == "whisper-ctranslate2" && "${SUBTITLE_VAD_FILTER:-true}" == true ]] \
+        && quality_args+=(--vad_filter True)
+
+    # Decode once to 16 kHz mono WAV: whisper then skips its own ffmpeg pass over
+    # the whole video, and the temp file is named so the output name is unchanged.
+    local input_file="$video_file" audio_dir=""
+    if [[ "${SUBTITLE_EXTRACT_AUDIO:-true}" == true ]] && command -v ffmpeg &>/dev/null; then
+        audio_dir="$(mktemp -d 2>/dev/null)" || audio_dir=""
+        if [[ -n "$audio_dir" ]]; then
+            local wav="${audio_dir}/$(basename "${video_file%.*}").wav"
+            if ffmpeg -nostdin -loglevel error -y -i "$video_file" -vn -ac 1 -ar 16000 "$wav" 2>/dev/null; then
+                input_file="$wav"
+            else
+                log_verbose "Audio extraction failed; passing the video to whisper directly"
+                rm -rf "$audio_dir"; audio_dir=""
+            fi
+        fi
     fi
 
     # Print per-file header
@@ -284,13 +321,14 @@ _generate_single_subtitle() {
     # Run in the background and wait, so Ctrl-C is handled straight away.
     trap _subtitle_on_interrupt INT TERM
     run_with_timeout "${SUBTITLE_TIMEOUT:-7200}" \
-        "$whisper_cmd" "$video_file" \
+        "$whisper_cmd" "$input_file" \
         --model "$model" \
         --output_format "$format" \
         "${lang_args[@]}" \
         --output_dir "$output_dir" \
         --device "$device" \
         --verbose False \
+        "${quality_args[@]}" \
         "${fp16_args[@]}" >/dev/null &
     _SUBTITLE_WPID=$!
     local rc=0
@@ -299,10 +337,12 @@ _generate_single_subtitle() {
         kill -TERM "$_SUBTITLE_WPID" 2>/dev/null
         wait "$_SUBTITLE_WPID" 2>/dev/null
         _SUBTITLE_WPID=""
+        [[ -n "$audio_dir" ]] && rm -rf "$audio_dir"
         rm -f "$expected_subtitle"
         return 130
     fi
     _SUBTITLE_WPID=""
+    [[ -n "$audio_dir" ]] && rm -rf "$audio_dir"
 
     # On failure or timeout, remove any partial file whisper may have written so
     # the next run does not mistake it for a completed subtitle.
@@ -343,6 +383,10 @@ _generate_single_subtitle() {
         fix_punctuation "$subtitle_file"
     fi
 
+    if [[ "${SUBTITLE_INTERACTIVE_EDIT:-false}" == true && -f "$subtitle_file" && -t 0 ]]; then
+        edit_subtitle_interactive "$subtitle_file"
+    fi
+
     STATS[subtitles_generated]=$(( STATS[subtitles_generated] + 1 ))
     STATS[files_processed]=$(( STATS[files_processed] + 1 ))
 
@@ -359,12 +403,19 @@ _generate_single_subtitle() {
 }
 
 # Return 0 if a subtitle file exists, is non-empty, and contains at least one
-# SRT timestamp line (hh:mm:ss,ms --> hh:mm:ss,ms).  Partial files written by a
-# killed whisper process pass the -f/-s tests but fail the timestamp check.
+# timestamp line (SRT hh:mm:ss,ms --> ...; VTT uses "." and may omit hours).
+# Partial files written by a killed whisper process pass the -f/-s tests but
+# fail the timestamp check. Formats without timestamps (txt, json) only need
+# to be non-empty.
+# Args: file [format]
 _is_valid_subtitle() {
-    local file="$1"
+    local file="$1" format="${2:-srt}"
     [[ -f "$file" && -s "$file" ]] || return 1
-    grep -qE '[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} --> ' "$file" 2>/dev/null
+    case "$format" in
+        srt) grep -qE '[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3} --> ' "$file" 2>/dev/null ;;
+        vtt) grep -qE '([0-9]{2}:)?[0-9]{2}:[0-9]{2}\.[0-9]{3} --> ' "$file" 2>/dev/null ;;
+        *) return 0 ;;
+    esac
 }
 
 # Generate subtitles for all videos in a directory using OpenAI Whisper.
@@ -401,6 +452,10 @@ generate_subtitles_in_directory() {
     local device="cpu"
     if [[ "${SUBTITLE_USE_GPU:-false}" == true ]] && detect_gpu; then
         device="cuda"
+    fi
+
+    if [[ "$device" == "cpu" && "${SUBTITLE_PARALLEL_JOBS:-1}" -gt 1 ]]; then
+        log_warning "Parallel jobs on CPU compete for cores and RAM; ${SUBTITLE_PARALLEL_JOBS} jobs is rarely faster than 1"
     fi
 
     # 5. Build find arguments
@@ -483,7 +538,7 @@ generate_subtitles_in_directory() {
         # likely left behind by a previously interrupted whisper run — delete it
         # and fall through to reprocess.
         if [[ "${SUBTITLE_SKIP_EXISTING:-true}" == true ]]; then
-            if _is_valid_subtitle "$subtitle_file"; then
+            if _is_valid_subtitle "$subtitle_file" "$format"; then
                 log_verbose "Skipping (exists): $(basename "$subtitle_file")"
                 STATS[files_skipped]=$(( STATS[files_skipped] + 1 ))
                 continue

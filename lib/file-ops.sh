@@ -35,6 +35,8 @@ apply_bracket_notation() {
 
     # Leading whitespace would hide the first word
     name="${name#"${name%%[![:space:]]*}"}"
+    # ...and trailing whitespace would end up as a space before the extension
+    name="${name%"${name##*[![:space:]]}"}"
 
     # Match and extract first word and the rest (letters in any script count)
     if [[ "$name" =~ ^([[:alnum:]_]+)[.\ \-]?(.*)$ ]]; then
@@ -144,6 +146,47 @@ strip_junk_filename() {
         out+="${out:+ }$word"
     done
     echo "${out:-$_FN_NAME}$_FN_EXT"
+}
+
+# Rewrite every date matched by regex $1 as dd.mm.yyyy inside string $3.
+# $2 says which way round the groups are: "ymd" or "dmy". Impossible dates
+# (month 13, day 32, ...) are left as they were.
+_reformat_dates() {
+    local re="$1" order="$2" s="$3" out="" whole lead trail before d mo y
+    while [[ "$s" =~ $re ]]; do
+        whole="${BASH_REMATCH[0]}"; lead="${BASH_REMATCH[1]}"; trail="${BASH_REMATCH[6]}"
+        if [[ "$order" == ymd ]]; then
+            y="${BASH_REMATCH[2]}"; mo="${BASH_REMATCH[4]}"; d="${BASH_REMATCH[5]}"
+        else
+            d="${BASH_REMATCH[2]}"; mo="${BASH_REMATCH[3]}"; y="${BASH_REMATCH[4]}"
+        fi
+        before="${s%%"$whole"*}"
+        s="${s#*"$whole"}"
+        if (( 10#$mo >= 1 && 10#$mo <= 12 && 10#$d >= 1 && 10#$d <= 31 )); then
+            out+="$before$lead$d.$mo.$y"
+            s="$trail$s"
+        else
+            out+="$before$whole"
+        fi
+    done
+    echo "$out$s"
+}
+
+# Write dates in the name as dd.mm.yyyy. Understands yyyy-mm-dd, yyyymmdd and
+# dd-mm-yyyy (separators - . _); a date with the day first is read day first,
+# so 03-04-2024 is 3 April.
+normalize_dates_filename() {
+    _split_filename "$1"
+    local name="$_FN_NAME" ext="$_FN_EXT"
+    name=$(_reformat_dates '(^|[^0-9])((19|20)[0-9]{2})[-._]([0-9]{2})[-._]([0-9]{2})([^0-9]|$)' ymd "$name")
+    name=$(_reformat_dates '(^|[^0-9])((19|20)[0-9]{2})([0-9]{2})([0-9]{2})([^0-9]|$)' ymd "$name")
+    name=$(_reformat_dates '(^|[^0-9])([0-9]{2})[-._]([0-9]{2})[-._]((19|20)[0-9]{2})([^0-9]|$)' dmy "$name")
+    echo "$name$ext"
+}
+
+# The pattern's transform, then date normalization when --dates is on
+_pattern_then_dates() {
+    normalize_dates_filename "$("$_RENAME_BASE_FN" "$1")"
 }
 
 # Name of the transform function for a pattern; non-zero for unknown patterns
@@ -266,6 +309,10 @@ rename_files_in_directory() {
     if ! transform_fn=$(rename_transform_for_pattern "${RENAME_PATTERN:-bracket}"); then
         log_error "Unknown rename pattern: $RENAME_PATTERN (choose from: $RENAME_PATTERNS)"
         return 1
+    fi
+    if [[ "${NORMALIZE_DATES:-false}" == true ]]; then
+        _RENAME_BASE_FN="$transform_fn"
+        transform_fn="_pattern_then_dates"
     fi
     _apply_transform_to_directory "$1" "$2" "$transform_fn"
 }

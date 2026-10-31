@@ -29,12 +29,18 @@ _vmgr_completion() {
         --parallel
         --no-optimize
         --edit
-        --speaker-diarization
+        --punctuation
         --no-punctuation
+        --backend
+        --prompt
+        --no-vad
+        --no-split-lines
+        --no-extract-audio
         --organize
         --organize-target
         --organize-search
         --pattern
+        --dates
         --undo-organize
         --list-undo
         --empty-trash
@@ -69,6 +75,13 @@ _vmgr_completion() {
             ;;
         --language)
             COMPREPLY=( $(compgen -W "${languages}" -- ${cur}) )
+            return 0
+            ;;
+        --backend)
+            COMPREPLY=( $(compgen -W "auto faster whisper" -- ${cur}) )
+            return 0
+            ;;
+        --prompt)
             return 0
             ;;
         --parallel)

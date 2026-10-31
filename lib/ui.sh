@@ -749,16 +749,15 @@ _handle_subtitle_advanced() {
     ui_item_toggle 1 "Toggle GPU Acceleration" "$SUBTITLE_USE_GPU"
     ui_item 2 "Set Parallel Jobs" "now: $SUBTITLE_PARALLEL_JOBS"
     ui_item_toggle 3 "Toggle Batch Optimization" "$SUBTITLE_OPTIMIZE_BATCH"
-    ui_item_toggle 4 "Toggle Speaker Diarization" "$SUBTITLE_SPEAKER_DIARIZATION"
-    ui_item_toggle 5 "Toggle Auto-Punctuation" "$SUBTITLE_AUTO_PUNCTUATION"
-    ui_item_toggle 6 "Toggle Interactive Editing" "$SUBTITLE_INTERACTIVE_EDIT"
-    ui_item_toggle 7 "Toggle Auto-Edit" "$SUBTITLE_AUTO_EDIT"
+    ui_item_toggle 4 "Toggle Auto-Punctuation" "$SUBTITLE_AUTO_PUNCTUATION"
+    ui_item_toggle 5 "Toggle Interactive Editing" "$SUBTITLE_INTERACTIVE_EDIT"
+    ui_item_toggle 6 "Toggle Auto-Edit" "$SUBTITLE_AUTO_EDIT"
     echo ""
     ui_section "Recursive Scanning"
-    ui_item_toggle 8 "Toggle Recursive Mode" "$SUBTITLE_RECURSIVE"
-    ui_item 9 "Set Max Depth" "now: $SUBTITLE_MAX_DEPTH"
-    ui_item 10 "Set Max Files" "now: $SUBTITLE_MAX_FILES"
-    ui_item 11 "Configure Filters & Selection"
+    ui_item_toggle 7 "Toggle Recursive Mode" "$SUBTITLE_RECURSIVE"
+    ui_item 8 "Set Max Depth" "now: $SUBTITLE_MAX_DEPTH"
+    ui_item 9 "Set Max Files" "now: $SUBTITLE_MAX_FILES"
+    ui_item 10 "Configure Filters & Selection"
     echo ""
     ui_ask adv_choice "Select option (or Enter to skip)"
 
@@ -790,22 +789,18 @@ _handle_subtitle_advanced() {
             log_success "Batch optimization toggled"
             ;;
         4)
-            [[ "$SUBTITLE_SPEAKER_DIARIZATION" == true ]] && SUBTITLE_SPEAKER_DIARIZATION=false || SUBTITLE_SPEAKER_DIARIZATION=true
-            log_success "Speaker diarization toggled"
-            ;;
-        5)
             [[ "$SUBTITLE_AUTO_PUNCTUATION" == true ]] && SUBTITLE_AUTO_PUNCTUATION=false || SUBTITLE_AUTO_PUNCTUATION=true
             log_success "Auto-punctuation toggled"
             ;;
-        6)
+        5)
             [[ "$SUBTITLE_INTERACTIVE_EDIT" == true ]] && SUBTITLE_INTERACTIVE_EDIT=false || SUBTITLE_INTERACTIVE_EDIT=true
             log_success "Interactive editing toggled"
             ;;
-        7)
+        6)
             [[ "$SUBTITLE_AUTO_EDIT" == true ]] && SUBTITLE_AUTO_EDIT=false || SUBTITLE_AUTO_EDIT=true
             log_success "Auto-edit toggled"
             ;;
-        8)
+        7)
             if [[ "$SUBTITLE_RECURSIVE" == true ]]; then
                 SUBTITLE_RECURSIVE=false
                 log_info "Recursive mode DISABLED - will only scan current directory"
@@ -815,7 +810,7 @@ _handle_subtitle_advanced() {
                 log_info "Max depth: $SUBTITLE_MAX_DEPTH levels | Max files: $SUBTITLE_MAX_FILES files"
             fi
             ;;
-        9)
+        8)
             ui_ask depth "Enter maximum recursion depth (1-50)"
             if [[ $depth -ge 1 && $depth -le 50 ]]; then
                 SUBTITLE_MAX_DEPTH=$depth
@@ -824,7 +819,7 @@ _handle_subtitle_advanced() {
                 log_error "Invalid depth. Must be 1-50"
             fi
             ;;
-        10)
+        9)
             ui_ask max_files "Enter maximum files to process (1-10000)"
             if [[ $max_files -ge 1 && $max_files -le 10000 ]]; then
                 SUBTITLE_MAX_FILES=$max_files
@@ -833,7 +828,7 @@ _handle_subtitle_advanced() {
                 log_error "Invalid number. Must be 1-10000"
             fi
             ;;
-        11)
+        10)
             # Filters & Selection submenu
             show_screen "Advanced Filters & Selection"
             ui_section "Current Filters"
