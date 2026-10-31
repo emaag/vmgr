@@ -149,6 +149,7 @@ SUBTITLE_LANG_TAG=false             # Name files video.<lang>.srt (needs an expl
 SUBTITLE_TIDY_TIMING=true           # Stretch very short cues and trim overlaps (SRT)
 SUBTITLE_MIN_CUE_SEC=1.0
 SUBTITLE_MAX_CUE_SEC=10
+SUBTITLE_DROP_RUNAWAY=true          # Drop near-empty cues that outlast the cap (hallucinations)
 SUBTITLE_SPEAKER_DIARIZATION=false  # Speaker labels (faster-whisper + pyannote + HF token)
 SUBTITLE_HF_TOKEN=""
 SUBTITLE_AUTO_PUNCTUATION=false     # Run fix_punctuation() after generation

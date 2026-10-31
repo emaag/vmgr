@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Live progress per file**: while a video is transcribed, one line shows a bar, percent, elapsed time and ETA, read from Whisper's own progress output. It replaces Whisper's raw progress dump and the harmless GPU-probe warning, and appears only when one file runs at a time on a terminal (`SUBTITLE_LIVE_PROGRESS=false` restores the old output). Whisper's errors are still shown when a file fails.
 - **Safer auto language**: `--language auto` no longer trusts Whisper's guess from the first 30 seconds, which is often music and made it pick a wrong language and invent text. vmgr now samples three points with the tiny model and votes, and falls back to English (`SUBTITLE_FALLBACK_LANGUAGE`) when confidence is low (faster-whisper only; adds about 35 s per file; `SUBTITLE_DETECT_LANGUAGE=false` turns it off).
 - **Runaway cues**: SRT cues longer than 10 s (`SUBTITLE_MAX_CUE_SEC`) are cut to 10 s. Whisper sometimes stretches one hallucinated line over minutes of music or silence.
+- **Hallucinated cues dropped**: a cue that outlasts the 10 s cap and holds 3 words or fewer (or one repeated word) is removed instead of being cut to 10 s. `SUBTITLE_DROP_RUNAWAY=false` keeps and cuts it instead.
+- **Faster language detection**: the tiny model loads once for all three samples (about 30 s per file, against several minutes with three separate runs on a slow file). Falls back to the old method when `faster_whisper` can't be imported.
 - **Readable cues**: lines wrap at 42 characters, 2 per cue, using word timestamps (`--no-split-lines` to turn off). `--prompt <text>` passes names and jargon to Whisper. `--punctuation` enables the capitalization fix.
 
 ### Fixed

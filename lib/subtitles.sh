@@ -178,7 +178,8 @@ _clean_subtitle_cues() {
 
 # Tidy SRT timing: stretch cues shorter than SUBTITLE_MIN_CUE_SEC (default 1.0)
 # where the next cue leaves room, cut cues longer than SUBTITLE_MAX_CUE_SEC
-# (default 10), and trim overlaps so cues never overlap.
+# (default 10; a very short text over the cap is dropped as a hallucination
+# unless SUBTITLE_DROP_RUNAWAY=false), and trim overlaps so cues never overlap.
 # SRT only; other formats are left alone. Returns 0 (also when skipped).
 _tidy_subtitle_timing() {
     local file="$1" format="$2" tmp
@@ -187,6 +188,7 @@ _tidy_subtitle_timing() {
     tmp="$(mktemp)" || return 0
     SUBTITLE_MIN_CUE_MS=$(awk -v s="${SUBTITLE_MIN_CUE_SEC:-1.0}" 'BEGIN{printf "%d", s*1000}') \
     SUBTITLE_MAX_CUE_MS=$(awk -v s="${SUBTITLE_MAX_CUE_SEC:-10}" 'BEGIN{printf "%d", s*1000}') \
+    SUBTITLE_DROP_RUNAWAY="${SUBTITLE_DROP_RUNAWAY:-true}" \
     perl -0777 -e '
         my $min = $ENV{SUBTITLE_MIN_CUE_MS} // 1000; my $max = $ENV{SUBTITLE_MAX_CUE_MS} // 10000; my $gap = 40;
         sub ms { my ($h,$m,$s,$f)=@_; (($h*60+$m)*60+$s)*1000+$f }
@@ -198,6 +200,20 @@ _tidy_subtitle_timing() {
             if ($i >= @l) { push @cues, { raw => $blk }; next }
             $l[$i] =~ /(\d+):(\d+):(\d+),(\d+)\s*-->\s*(\d+):(\d+):(\d+),(\d+)(.*)/ or do { push @cues, { raw => $blk }; next };
             push @cues, { s => ms($1,$2,$3,$4), e => ms($5,$6,$7,$8), tail => $9, text => [@l[$i+1..$#l]] };
+        }
+        # A cue that outlasts the cap and holds almost no text ("Please", "Ha, ha, ha")
+        # is a hallucination stretched over music or silence: drop it. Longer lines
+        # are real speech with a bad end time, so they are cut to the cap below.
+        if (($ENV{SUBTITLE_DROP_RUNAWAY} // "true") eq "true") {
+            @cues = grep {
+                my $c = $_;
+                if (!exists $c->{s} || $c->{e} - $c->{s} <= $max) { 1 }
+                else {
+                    my @w = map { lc } (join(" ", @{$c->{text}}) =~ /[\w\x27]+/g);
+                    my %d = map { $_ => 1 } @w;
+                    !(@w <= 3 || keys(%d) <= 1);
+                }
+            } @cues;
         }
         my @t = grep { exists $_->{s} } @cues;
         for my $k (0..$#t) {
@@ -286,14 +302,14 @@ _subtitle_draw_progress() {
         "$pct" "${UI_DIM:-}" "$label" "$elapsed" "$eta" "${COLOR_RESET:-}" >&2
 }
 
-# Guess the spoken language for --language auto. Whisper alone looks only at the
+# Slow fallback for _detect_language: one whisper-ctranslate2 run per sample. Whisper alone looks only at the
 # first 30 s, which is often music or silence and can pick a wrong language that
 # then makes it invent text. Sample 30 s at 20%, 50% and 80% of the video with
 # the tiny model, add up the probabilities per language, and use the winner.
 # Prints a language name (accepted by whisper-ctranslate2) and returns 0, or
 # prints the fallback language and returns 1 when confidence is too low or the
 # tools are missing. Args: video_file whisper_cmd
-_detect_language() {
+_detect_language_cli() {
     local video="$1" cmd="$2" fallback="${SUBTITLE_FALLBACK_LANGUAGE:-en}"
     command -v ffmpeg &>/dev/null && command -v ffprobe &>/dev/null || { echo "$fallback"; return 1; }
     local dur
@@ -325,6 +341,64 @@ _detect_language() {
     done
     # Average probability of the winner across all samples must reach 0.2
     if [[ -n "$best" ]] && awk -v a="$best_score" -v n="$samples" 'BEGIN{exit !(n>0 && a/n>=0.2)}'; then
+        echo "$best"; return 0
+    fi
+    echo "$fallback"; return 1
+}
+
+# Guess the spoken language for --language auto. Whisper alone looks only at the
+# first 30 s, which is often music or silence and can pick a wrong language that
+# then makes it invent text. Sample 30 s at 20%, 50% and 80% of the video, run
+# the tiny model once over all three (model loaded a single time), add up the
+# probabilities per language, and use the winner.
+# Prints a language code and returns 0, or prints the fallback language and
+# returns 1 when confidence is too low or the tools are missing.
+# Falls back to _detect_language_cli when faster_whisper cannot be imported.
+# Args: video_file whisper_cmd
+_detect_language() {
+    local video="$1" cmd="$2" fallback="${SUBTITLE_FALLBACK_LANGUAGE:-en}"
+    command -v ffmpeg &>/dev/null && command -v ffprobe &>/dev/null || { echo "$fallback"; return 1; }
+    python3 -c 'import faster_whisper' &>/dev/null || { _detect_language_cli "$@"; return $?; }
+
+    local dur
+    dur="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video" 2>/dev/null | head -n1)"
+    dur="${dur%%.*}"
+    [[ "$dur" =~ ^[0-9]+$ && $dur -gt 0 ]] || { echo "$fallback"; return 1; }
+
+    local tmp frac pos i=0
+    local -a clips=()
+    tmp="$(mktemp -d 2>/dev/null)" || { echo "$fallback"; return 1; }
+    for frac in 20 50 80; do
+        pos=$(( dur * frac / 100 ))
+        (( dur < 40 )) && pos=0
+        i=$(( i + 1 ))
+        ffmpeg -nostdin -loglevel error -y -ss "$pos" -t 30 -i "$video" -vn -ac 1 -ar 16000 "$tmp/s$i.wav" 2>/dev/null \
+            && clips+=("$tmp/s$i.wav")
+        (( dur < 40 )) && break
+    done
+
+    local result=""
+    if (( ${#clips[@]} > 0 )); then
+        result="$(run_with_timeout 300 python3 -c '
+import sys
+from faster_whisper import WhisperModel
+from faster_whisper.audio import decode_audio
+m = WhisperModel("tiny", device="cpu", compute_type="int8")
+score, n = {}, 0
+for p in sys.argv[1:]:
+    lang, prob, _ = m.detect_language(decode_audio(p, sampling_rate=16000))
+    score[lang] = score.get(lang, 0.0) + prob
+    n += 1
+if n:
+    best = max(score, key=score.get)
+    print(best, score[best] / n)
+' "${clips[@]}" 2>/dev/null </dev/null | tail -n1)"
+    fi
+    rm -rf "$tmp"
+
+    # Average probability of the winner across all samples must reach 0.2
+    local best="${result%% *}" avg="${result##* }"
+    if [[ -n "$best" && "$best" != "$result" ]] && awk -v a="$avg" 'BEGIN{exit !(a>=0.2)}'; then
         echo "$best"; return 0
     fi
     echo "$fallback"; return 1

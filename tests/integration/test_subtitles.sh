@@ -125,9 +125,20 @@ test_subtitles_tidy_timing() {
     assert_contains "00:00:01,000 --> 00:00:02,000" "$out" "tidy: short cue stretched to 1 s"
     assert_contains "00:00:05,000 --> 00:00:06,460" "$out" "tidy: overlap trimmed"
     assert_contains "00:00:06,500 --> 00:00:08,000" "$out" "tidy: later cue unchanged"
-    printf '1\n00:00:51,060 --> 00:14:38,450\nHa, ha, ha\n' > "$TEST_TMPDIR/long.srt"
+    printf '1\n00:00:51,060 --> 00:14:38,450\nTake it slow and easy now\n' > "$TEST_TMPDIR/long.srt"
     _tidy_subtitle_timing "$TEST_TMPDIR/long.srt" srt
-    assert_contains "00:00:51,060 --> 00:01:01,060" "$(cat "$TEST_TMPDIR/long.srt")" "tidy: runaway cue cut to 10 s"
+    assert_contains "00:00:51,060 --> 00:01:01,060" "$(cat "$TEST_TMPDIR/long.srt")" "tidy: runaway cue with some text cut to 10 s"
+    printf '1\n00:00:01,000 --> 00:00:03,000\nReal line here today\n\n2\n00:00:07,390 --> 00:15:09,640\nPlease.\n\n3\n00:15:10,000 --> 00:15:12,000\nNext real line one two\n' > "$TEST_TMPDIR/drop.srt"
+    _tidy_subtitle_timing "$TEST_TMPDIR/drop.srt" srt
+    local d; d="$(cat "$TEST_TMPDIR/drop.srt")"
+    assert_not_contains "Please." "$d" "tidy: near-empty runaway cue dropped"
+    assert_contains "2
+00:15:10,000 --> 00:15:12,000" "$d" "tidy: cues renumbered after a drop"
+    SUBTITLE_DROP_RUNAWAY=false
+    printf '1\n00:00:07,390 --> 00:15:09,640\nPlease.\n' > "$TEST_TMPDIR/keep.srt"
+    _tidy_subtitle_timing "$TEST_TMPDIR/keep.srt" srt
+    SUBTITLE_DROP_RUNAWAY=true
+    assert_contains "00:00:07,390 --> 00:00:17,390" "$(cat "$TEST_TMPDIR/keep.srt")" "tidy: SUBTITLE_DROP_RUNAWAY=false keeps and caps it"
     _teardown
 }
 
