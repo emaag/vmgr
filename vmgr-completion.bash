@@ -9,7 +9,7 @@ _vmgr_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Main commands
-    local commands="rename flatten cleanup duplicates subtitles workflow-new workflow-clean batch reddit catalog catalog-list catalog-search catalog-duplicates catalog-report catalog-export reddit-setup"
+    local commands="rename flatten cleanup duplicates similar subtitles workflow-new workflow-clean batch reddit catalog catalog-list catalog-search catalog-duplicates catalog-report catalog-export reddit-setup"
 
     # Special commands (prefixed with --)
     local special_commands="--organize --undo-organize --list-undo --empty-trash"
@@ -46,6 +46,10 @@ _vmgr_completion() {
         --organize-search
         --pattern
         --dates
+        --date-format
+        --date-first
+        --tidy
+        --studios
         --undo-organize
         --list-undo
         --empty-trash
@@ -97,6 +101,10 @@ _vmgr_completion() {
             COMPREPLY=( $(compgen -W "bracket title-case snake_case strip-junk" -- ${cur}) )
             return 0
             ;;
+        --date-format)
+            COMPREPLY=( $(compgen -W "dd.mm.yyyy yy.mm.dd yyyy-mm-dd" -- ${cur}) )
+            return 0
+            ;;
         --sort)
             COMPREPLY=( $(compgen -W "hot new top rising controversial" -- ${cur}) )
             return 0
@@ -121,7 +129,7 @@ _vmgr_completion() {
             COMPREPLY=( $(compgen -W "${commands} ${options}" -- ${cur}) )
             return 0
             ;;
-        rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|catalog)
+        rename|flatten|cleanup|duplicates|similar|subtitles|workflow-new|workflow-clean|catalog)
             # After a command, offer directory completion
             COMPREPLY=( $(compgen -d -- ${cur}) )
             return 0

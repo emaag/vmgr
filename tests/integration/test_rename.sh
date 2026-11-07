@@ -161,6 +161,14 @@ test_rename_rejects_unknown_pattern() {
     _teardown
 }
 
+test_rename_tidy_option() {
+    _setup
+    touch "$TEST_TMPDIR/[Adultauditions] 25.02.21.yuri.my.pre.audition.480p.mp4"
+    TIDY_NAMES=true rename_files_in_directory "$TEST_TMPDIR" false >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/[AdultAuditions] 25.02.21 Yuri My Pre Audition.mp4" "rename --tidy: studio, dotted name and junk"
+    _teardown
+}
+
 test_rename_dates_option_normalizes_dates() {
     _setup
     touch "$TEST_TMPDIR/Show 2024-03-05 final.mp4"

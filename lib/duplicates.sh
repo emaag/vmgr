@@ -196,6 +196,94 @@ find_duplicates() {
 }
 
 ################################################################################
+# SAME-NAME DETECTION (vmgr similar <dir>)
+################################################################################
+
+# "studio|date|title" for a file name, after the same standardizing that
+# rename --date-format yy.mm.dd --date-first --tidy applies, so "[5kporn] Title
+# (21.01.2026) rq" and "[5KPorn] 26.01.21 Title 1080p" get the same key.
+# Needs file-ops.sh and load_studio_aliases to have run in this shell.
+_similar_key() {
+    local n tag="" date="" title
+    n=$(DATE_FORMAT=yy.mm.dd DATE_FIRST=true normalize_dates_filename "$1")
+    n=$(tidy_filename "$n")
+    _split_filename "$n"; n="$_FN_NAME"
+    if [[ "$n" =~ ^(\[[^]]*\])[[:space:]]*(.*)$ ]]; then tag="${BASH_REMATCH[1]}"; n="${BASH_REMATCH[2]}"; fi
+    if [[ "$n" =~ ^([0-9]{2}\.[0-9]{2}\.[0-9]{2})([^0-9]|$)(.*)$ ]]; then
+        date="${BASH_REMATCH[1]}"; n="${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+    fi
+    title=$(printf '%s' "${n,,}" | tr -cd '[:alnum:]')
+    tag="${tag,,}"
+    echo "$tag|$date|$title"
+}
+
+# Report files that look like the same scene: identical standardized name
+# (same studio, date and title), and, separately, same studio and date with
+# different titles. Report only: names are a hint, not proof, so nothing is
+# deleted; run `vmgr duplicates` to compare contents.
+find_similar_names() {
+    local directory="$1" file key tag date count=0
+    declare -A by_key=() by_date=()
+    load_studio_aliases
+
+    log_info "Looking for files with the same standardized name in: $directory"
+    while IFS= read -r -d '' file; do
+        is_video_file "$file" || continue
+        ((count++))
+        key=$(_similar_key "$(basename "$file")")
+        by_key["$key"]+="$file"$'\n'
+        IFS='|' read -r tag date _ <<< "$key"
+        [[ -n "$tag" && -n "$date" ]] && by_date["$tag|$date"]+="$file"$'\n'
+    done < <(find "$directory" -type f ! -path '*/.vmgr-trash/*' -print0 | sort -z)
+
+    local found=0 k files line
+    echo ""
+    for k in "${!by_key[@]}"; do
+        files="${by_key[$k]}"
+        (( $(grep -c . <<< "$files") > 1 )) || continue
+        [[ "${k##*|}" == "" ]] && continue
+        ((found++))
+        echo -e "${COLOR_MAGENTA}Same name${COLOR_RESET}  ${k//|/  }"
+        _similar_print_group "$directory" "$files"
+    done
+
+    local nd=0
+    for k in "${!by_date[@]}"; do
+        files="${by_date[$k]}"
+        (( $(grep -c . <<< "$files") > 1 )) || continue
+        # skip when every file is already in one same-name group
+        local keys=""
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            keys+="$(_similar_key "$(basename "$line")")"$'\n'
+        done <<< "$files"
+        (( $(sort -u <<< "$keys" | grep -c .) > 1 )) || continue
+        ((nd++))
+        echo -e "${COLOR_YELLOW}Same studio and date, different titles${COLOR_RESET}  ${k//|/  }"
+        _similar_print_group "$directory" "$files"
+    done
+
+    if (( found == 0 && nd == 0 )); then
+        echo "No files share a standardized name ($count videos checked)"
+    else
+        echo "$found same-name groups, $nd same-date groups ($count videos checked)."
+        echo "Names are only a hint; vmgr duplicates compares contents."
+    fi
+}
+
+_similar_print_group() {
+    local directory="$1" files="$2" line size
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        size=$(get_file_size "$line")
+        printf '%s\t%s\n' "$size" "$line"
+    done <<< "$files" | sort -rn | while IFS=$'\t' read -r size line; do
+        printf '    %10s  %s\n' "$(format_bytes "$size")" "${line#"$directory"/}"
+    done
+    echo ""
+}
+
+################################################################################
 # CATALOG-BASED DUPLICATE DETECTION
 ################################################################################
 

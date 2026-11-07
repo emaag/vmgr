@@ -130,6 +130,19 @@ ${COLOR_BOLD}RENAME OPTIONS:${COLOR_RESET}
                               strip-junk  "Show.1080p.x264.mp4" -> "Show.mp4"
     --dates                 Also write dates in names as dd.mm.yyyy
                             (2024-03-05, 20240305 and 05-03-2024 -> 05.03.2024)
+    --date-format <fmt>     Like --dates, in the format you choose:
+                              yy.mm.dd    "26 11 03", "2026-11-03", "11.03.2026" -> 26.11.03
+                              yyyy-mm-dd  "26 11 03" -> 2026-11-03
+                              dd.mm.yyyy  "26 11 03" -> 03.11.2026
+                            Two-digit years (00-39) are read year first;
+                            a month over 12 marks mm.dd.yyyy (08.26.2015).
+    --tidy                  Also tidy names after the studio tag: one spelling per
+                            studio, dotted names to words, drop 1080p/x265/XXX/rq
+                            and hash ids, drop stray dashes, collapse "Name 4023 Name"
+    --studios <file>        Studio spellings for --tidy: lines of alias=Canonical
+                            (default ~/.config/vmgr/studios.conf, plus built-ins)
+    --date-first            Also move the date to just after the [Studio] tag:
+                            "[Studio] Title (26.10.31)" -> "[Studio] 26.10.31 Title"
 
 ${COLOR_BOLD}ORGANIZE OPTIONS:${COLOR_RESET}
     --organize-target <dir> Set default target folder for organize
@@ -140,6 +153,8 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     flatten <dir>           Move all videos to top directory
     cleanup <dir>           Full cleanup (rename + spacing fixes)
     duplicates <dir>        Find duplicate files
+    similar <dir>           List files with the same studio, date and title once
+                            names are standardized (report only)
     subtitles <dir>         Generate subtitles for videos
     workflow-new <dir>      New collection setup workflow
     workflow-clean <dir>    Deep clean workflow
@@ -377,8 +392,41 @@ parse_arguments() {
                 ;;
             --dates)
                 NORMALIZE_DATES=true
-                log_info "Dates in names will be written as dd.mm.yyyy"
+                log_info "Dates in names will be written as ${DATE_FORMAT:-dd.mm.yyyy}"
                 shift
+                ;;
+            --tidy)
+                TIDY_NAMES=true
+                log_info "Names will be tidied (studio spelling, dotted names, junk words)"
+                shift
+                ;;
+            --studios)
+                shift
+                if [[ -n "${1:-}" ]]; then
+                    STUDIO_ALIASES_FILE="$1"
+                    shift
+                else
+                    log_error "--studios needs a file of alias=Canonical lines"
+                    exit 1
+                fi
+                ;;
+            --date-first)
+                DATE_FIRST=true
+                NORMALIZE_DATES=true
+                log_info "Dates will be moved to just after the [Studio] tag"
+                shift
+                ;;
+            --date-format)
+                shift
+                if [[ " $DATE_FORMATS " == *" ${1:-} "* ]]; then
+                    DATE_FORMAT="$1"
+                    NORMALIZE_DATES=true
+                    log_info "Dates in names will be written as $DATE_FORMAT"
+                    shift
+                else
+                    log_error "Invalid date format '${1:-}'. Choose from: $DATE_FORMATS"
+                    exit 1
+                fi
                 ;;
             --organize)
                 command="organize"
@@ -516,7 +564,7 @@ parse_arguments() {
                     shift
                 fi
                 ;;
-            rename|flatten|cleanup|duplicates|subtitles|workflow-new|workflow-clean|batch|catalog)
+            rename|flatten|cleanup|duplicates|similar|subtitles|workflow-new|workflow-clean|batch|catalog)
                 command="$1"
                 shift
                 if [[ -n "$1" && "$1" != -* ]]; then
@@ -571,6 +619,11 @@ parse_arguments() {
         duplicates)
             start_operation "Find Duplicates"
             find_duplicates "$directory" "report"
+            end_operation
+            ;;
+        similar)
+            start_operation "Find Same-Name Files"
+            find_similar_names "$directory"
             end_operation
             ;;
         subtitles)

@@ -130,6 +130,23 @@ chmod +x video-manager-ultimate.sh
 # Also write dates in names as dd.mm.yyyy (2024-03-05, 20240305, 05-03-2024 -> 05.03.2024)
 ./video-manager-ultimate.sh --dates rename /path
 
+# Choose the date format: yy.mm.dd, yyyy-mm-dd or dd.mm.yyyy
+# ("26 11 03", "2026-11-03" and "11.03.2026" -> 26.11.03 with yy.mm.dd)
+./video-manager-ultimate.sh --date-format yy.mm.dd rename /path
+
+# Also move the date to just after the [Studio] tag
+# ("[Studio] Title (26.10.31)" -> "[Studio] 26.10.31 Title")
+./video-manager-ultimate.sh --date-format yy.mm.dd --date-first rename /path
+
+# Tidy names after the studio tag: one spelling per studio (5kporn -> 5KPorn),
+# dotted names to words, drop 1080p / x265 / XXX / rq / hash ids, stray dashes.
+# Extra studio spellings go in ~/.config/vmgr/studios.conf as alias=Canonical lines
+./video-manager-ultimate.sh --date-format yy.mm.dd --date-first --tidy rename /path
+
+# List files that are the same scene once names are standardized (same studio,
+# date and title, whatever the spelling or encoding tags); report only
+./video-manager-ultimate.sh similar /path
+
 # Flatten directory structure
 ./video-manager-ultimate.sh flatten /path
 

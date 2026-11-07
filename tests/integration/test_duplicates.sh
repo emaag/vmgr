@@ -174,3 +174,39 @@ test_clean_scan_leaves_no_empty_report_dir() {
     assert_equals "0" "$(find "$TEST_TMPDIR/logs" -mindepth 2 -type d 2>/dev/null | wc -l | tr -d ' ')" "report: a clean scan leaves no empty report folder"
     _teardown
 }
+
+# ── same-name detection ───────────────────────────────────────────────────────
+
+test_similar_names_groups_same_scene_in_different_spellings() {
+    _setup
+    load_module_under_test "file-ops.sh"
+    echo a > "$TEST_TMPDIR/[5kporn] Julia Cute (21.01.2026) rq.mp4"
+    echo bb > "$TEST_TMPDIR/[5KPorn] 26.01.21 Julia Cute 1080p.mp4"
+    echo c > "$TEST_TMPDIR/[Tushy] 26.11.01 Rissa May.mp4"
+    local out; out=$(find_similar_names "$TEST_TMPDIR" 2>&1)
+    assert_contains "1 same-name groups" "$out" "similar: one same-name group"
+    assert_contains "Julia Cute (21.01.2026) rq.mp4" "$out" "similar: lists the first spelling"
+    assert_contains "26.01.21 Julia Cute 1080p.mp4" "$out" "similar: lists the second spelling"
+    assert_not_contains "Rissa" "$out" "similar: unrelated file not listed"
+    _teardown
+}
+
+test_similar_names_same_date_different_title() {
+    _setup
+    load_module_under_test "file-ops.sh"
+    echo a > "$TEST_TMPDIR/[Tushy] 26.11.01 Rissa May.mp4"
+    echo b > "$TEST_TMPDIR/[Tushy] 26.11.01 Someone Else.mp4"
+    local out; out=$(find_similar_names "$TEST_TMPDIR" 2>&1)
+    assert_contains "0 same-name groups, 1 same-date" "$out" "similar: same date reported separately"
+    _teardown
+}
+
+test_similar_names_nothing_to_report() {
+    _setup
+    load_module_under_test "file-ops.sh"
+    echo a > "$TEST_TMPDIR/[Tushy] 26.11.01 Rissa May.mp4"
+    echo b > "$TEST_TMPDIR/[Tushy] 26.11.02 Other.mp4"
+    local out; out=$(find_similar_names "$TEST_TMPDIR" 2>&1)
+    assert_contains "No files share" "$out" "similar: clean folder"
+    _teardown
+}

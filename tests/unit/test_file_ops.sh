@@ -176,6 +176,76 @@ test_dates_combine_with_pattern() {
     unset NORMALIZE_DATES
 }
 
+test_dates_two_digit_year_to_yy_mm_dd() {
+    DATE_FORMAT=yy.mm.dd
+    assert_equals "[Deeper] 26.10.22 Leana.mp4" "$(normalize_dates_filename "[Deeper] 26 10 22 Leana.mp4")" "dates: yy mm dd with spaces"
+    assert_equals "[Tushy] 26.11.01 Rissa.mp4" "$(normalize_dates_filename "[Tushy] 26.11.01 Rissa.mp4")" "dates: yy.mm.dd is idempotent"
+    assert_equals "[Nubiles] 26.11.04.nellie.mp4" "$(normalize_dates_filename "[Nubiles] 26.11.04.nellie.mp4")" "dates: date followed by a dot"
+    assert_equals "Show 26.03.05.mp4" "$(normalize_dates_filename "Show 2026-03-05.mp4")" "dates: yyyy-mm-dd to yy.mm.dd"
+    assert_equals "Show 15.08.26 x.mp4" "$(normalize_dates_filename "Show 08.26.2015 x.mp4")" "dates: mm.dd.yyyy (month over 12) to yy.mm.dd"
+    assert_equals "Show 15.03.04.mp4" "$(normalize_dates_filename "Show 04-03-2015.mp4")" "dates: dd-mm-yyyy still read day first"
+    unset DATE_FORMAT
+}
+
+test_dates_other_target_formats() {
+    DATE_FORMAT=yyyy-mm-dd
+    assert_equals "Show 2026-11-03.mp4" "$(normalize_dates_filename "Show 26 11 03.mp4")" "dates: yy mm dd to yyyy-mm-dd"
+    DATE_FORMAT=dd.mm.yyyy
+    assert_equals "Show 03.11.2026.mp4" "$(normalize_dates_filename "Show 26 11 03.mp4")" "dates: yy mm dd to dd.mm.yyyy"
+    unset DATE_FORMAT
+}
+
+test_dates_two_digit_leaves_unrelated_numbers() {
+    DATE_FORMAT=yy.mm.dd
+    assert_equals "Show 99 11 03.mp4" "$(normalize_dates_filename "Show 99 11 03.mp4")" "dates: year over 39 untouched"
+    assert_equals "Show 26 13 03.mp4" "$(normalize_dates_filename "Show 26 13 03.mp4")" "dates: month 13 untouched"
+    assert_equals "Show 5.1 audio.mp4" "$(normalize_dates_filename "Show 5.1 audio.mp4")" "dates: 5.1 untouched"
+    unset DATE_FORMAT
+}
+
+test_dates_first_moves_date_after_tag() {
+    DATE_FORMAT=yy.mm.dd DATE_FIRST=true
+    assert_equals "[AnalMom] 26.10.31 Rebel Rhyder You Can Have My Ass.mp4" "$(normalize_dates_filename "[AnalMom] Rebel Rhyder You Can Have My Ass (26.10.31).mp4")" "date-first: parenthesised date at the end"
+    assert_equals "[Ali] 25.09.03 Jones Jonesing For Ali_480p.mp4" "$(normalize_dates_filename "[Ali] Jones Jonesing For Ali (03.09.2025)_480p.mp4")" "date-first: converts, then moves"
+    assert_equals "[Tushy] 26.11.01 Rissa May.mp4" "$(normalize_dates_filename "[Tushy] 26.11.01 Rissa May.mp4")" "date-first: already in place"
+    assert_equals "[ALSScan] 26.01.12.Alicia.Williams.mp4" "$(normalize_dates_filename "[ALSScan] 26.01.12.Alicia.Williams.mp4")" "date-first: dotted name untouched"
+    assert_equals "[AdultTime] Millie Morgan.mp4" "$(normalize_dates_filename "[AdultTime] Millie Morgan.mp4")" "date-first: no date, unchanged"
+    assert_equals "Show Title (26.10.31).mp4" "$(normalize_dates_filename "Show Title (26.10.31).mp4")" "date-first: no leading tag, unchanged"
+    unset DATE_FORMAT DATE_FIRST
+}
+
+# ── tidy ──────────────────────────────────────────────────────────────────────
+
+test_tidy_studio_spelling() {
+    load_studio_aliases
+    assert_equals "[5KPorn] 26.01.21 Julia.mp4" "$(tidy_filename "[5kporn] 26.01.21 Julia.mp4")" "tidy: alias to canonical"
+    assert_equals "[ALSScan] 22.05.19 Vanna.mp4" "$(tidy_filename "[ALSScan.com] 22.05.19 Vanna.mp4")" "tidy: .com alias"
+    assert_equals "[Unknownstudio] Title.mp4" "$(tidy_filename "[Unknownstudio] Title.mp4")" "tidy: unknown studio untouched"
+}
+
+test_tidy_studio_user_file() {
+    local f; f=$(mktemp)
+    printf '# mine\nmystudio = MyStudio\n' > "$f"
+    STUDIO_ALIASES_FILE="$f" load_studio_aliases
+    assert_equals "[MyStudio] x.mp4" "$(tidy_filename "[mystudio] x.mp4")" "tidy: user alias file"
+    rm -f "$f"; load_studio_aliases
+}
+
+test_tidy_dotted_names() {
+    load_studio_aliases
+    assert_equals "[Nubiles] 26.11.04 Nellie Pull My Hair.mp4" "$(tidy_filename "[Nubiles] 26.11.04.nellie.pull.my.hair.480p.mp4")" "tidy: dotted slug to words, junk dropped"
+    assert_equals "[Amatrices] Sans Retenue Vol2.mp4" "$(tidy_filename "[Amatrices] -sans-retenue-vol2-1080p.mp4")" "tidy: dashed slug, leading dash"
+}
+
+test_tidy_junk_and_stray_characters() {
+    load_studio_aliases
+    assert_equals "[Ali] 25.09.03 Jones.mp4" "$(tidy_filename "[Ali] 25.09.03 Jones_480p.mp4")" "tidy: underscore junk"
+    assert_equals "[X] Vanna Treat.mp4" "$(tidy_filename "[X] Vanna Treat(2160p).mp4")" "tidy: junk in parentheses"
+    assert_equals "[X] Cadey 17.08.09.mp4" "$(tidy_filename "[X] Cadey 17.08.09 rq_340621a3.mp4")" "tidy: rq and hash id"
+    assert_equals "[ArgentinaCasting] Martina, 18.mp4" "$(tidy_filename "[ArgentinaCasting] – Martina – 2923 – Martina, 18.mp4")" "tidy: en dashes and repeated name"
+    assert_equals "[1].mp4" "$(tidy_filename "[1].mp4")" "tidy: placeholder untouched"
+}
+
 # ── remove_dashes ────────────────────────────────────────────────────────────
 
 test_remove_dashes_basic() {

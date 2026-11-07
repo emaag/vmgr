@@ -148,22 +148,38 @@ strip_junk_filename() {
     echo "${out:-$_FN_NAME}$_FN_EXT"
 }
 
-# Rewrite every date matched by regex $1 as dd.mm.yyyy inside string $3.
-# $2 says which way round the groups are: "ymd" or "dmy". Impossible dates
-# (month 13, day 32, ...) are left as they were.
+# Date formats --date-format accepts; the first is the default.
+DATE_FORMATS="dd.mm.yyyy yy.mm.dd yyyy-mm-dd"
+
+# Write day $1, month $2, four-digit year $3 in the chosen DATE_FORMAT.
+_emit_date() {
+    case "${DATE_FORMAT:-dd.mm.yyyy}" in
+        yy.mm.dd)   echo "${3:2:2}.$2.$1" ;;
+        yyyy-mm-dd) echo "$3-$2-$1" ;;
+        *)          echo "$1.$2.$3" ;;
+    esac
+}
+
+# Rewrite every date matched by regex $1 inside string $3 in DATE_FORMAT.
+# The regex captures lead (1), three number groups (2-4) and trail (5).
+# $2 says what the groups are: ymd, dmy (a mm.dd.yyyy date is recognised by
+# a month over 12), or yymmdd (two-digit year, read as 20yy). Impossible
+# dates (month 13, day 32, ...) are left as they were.
 _reformat_dates() {
-    local re="$1" order="$2" s="$3" out="" whole lead trail before d mo y
+    local re="$1" order="$2" s="$3" out="" whole lead trail before d mo y a b c tmp
     while [[ "$s" =~ $re ]]; do
-        whole="${BASH_REMATCH[0]}"; lead="${BASH_REMATCH[1]}"; trail="${BASH_REMATCH[6]}"
-        if [[ "$order" == ymd ]]; then
-            y="${BASH_REMATCH[2]}"; mo="${BASH_REMATCH[4]}"; d="${BASH_REMATCH[5]}"
-        else
-            d="${BASH_REMATCH[2]}"; mo="${BASH_REMATCH[3]}"; y="${BASH_REMATCH[4]}"
-        fi
+        whole="${BASH_REMATCH[0]}"; lead="${BASH_REMATCH[1]}"; trail="${BASH_REMATCH[5]}"
+        a="${BASH_REMATCH[2]}"; b="${BASH_REMATCH[3]}"; c="${BASH_REMATCH[4]}"
+        case "$order" in
+            ymd)    y="$a"; mo="$b"; d="$c" ;;
+            yymmdd) y="20$a"; mo="$b"; d="$c" ;;
+            *)      d="$a"; mo="$b"; y="$c"
+                    if (( 10#$mo > 12 && 10#$d <= 12 )); then tmp="$d"; d="$mo"; mo="$tmp"; fi ;;
+        esac
         before="${s%%"$whole"*}"
         s="${s#*"$whole"}"
-        if (( 10#$mo >= 1 && 10#$mo <= 12 && 10#$d >= 1 && 10#$d <= 31 )); then
-            out+="$before$lead$d.$mo.$y"
+        if (( 10#$mo >= 1 && 10#$mo <= 12 && 10#$d >= 1 && 10#$d <= 31 && 10#$y >= 1900 && 10#$y <= 2099 )); then
+            out+="$before$lead$(_emit_date "$d" "$mo" "$y")"
             s="$trail$s"
         else
             out+="$before$whole"
@@ -172,21 +188,157 @@ _reformat_dates() {
     echo "$out$s"
 }
 
-# Write dates in the name as dd.mm.yyyy. Understands yyyy-mm-dd, yyyymmdd and
-# dd-mm-yyyy (separators - . _); a date with the day first is read day first,
-# so 03-04-2024 is 3 April.
+# Write dates in the name in DATE_FORMAT (default dd.mm.yyyy). Understands
+# yyyy-mm-dd, yyyymmdd, dd-mm-yyyy, mm-dd-yyyy (when the month is over 12) and
+# yy-mm-dd with two-digit years 00-39; separators are - . _ or a space. A date
+# with the day first is read day first, so 03-04-2024 is 3 April.
 normalize_dates_filename() {
     _split_filename "$1"
-    local name="$_FN_NAME" ext="$_FN_EXT"
-    name=$(_reformat_dates '(^|[^0-9])((19|20)[0-9]{2})[-._]([0-9]{2})[-._]([0-9]{2})([^0-9]|$)' ymd "$name")
-    name=$(_reformat_dates '(^|[^0-9])((19|20)[0-9]{2})([0-9]{2})([0-9]{2})([^0-9]|$)' ymd "$name")
-    name=$(_reformat_dates '(^|[^0-9])([0-9]{2})[-._]([0-9]{2})[-._]((19|20)[0-9]{2})([^0-9]|$)' dmy "$name")
+    local name="$_FN_NAME" ext="$_FN_EXT" sep='[-._ ]'
+    name=$(_reformat_dates "(^|[^0-9])([0-9]{4})$sep([0-9]{2})$sep([0-9]{2})([^0-9]|\$)" ymd "$name")
+    name=$(_reformat_dates '(^|[^0-9])([0-9]{4})([0-9]{2})([0-9]{2})([^0-9]|$)' ymd "$name")
+    name=$(_reformat_dates "(^|[^0-9])([0-9]{2})$sep([0-9]{2})$sep([0-9]{4})([^0-9]|\$)" dmy "$name")
+    name=$(_reformat_dates "(^|[^0-9])([0-3][0-9])$sep([0-9]{2})$sep([0-9]{2})([^0-9]|\$)" yymmdd "$name")
+    [[ "${DATE_FIRST:-false}" == true ]] && name=$(_move_date_first "$name")
     echo "$name$ext"
 }
 
-# The pattern's transform, then date normalization when --dates is on
-_pattern_then_dates() {
-    normalize_dates_filename "$("$_RENAME_BASE_FN" "$1")"
+# "[Studio] Title (26.10.31)" -> "[Studio] 26.10.31 Title": move the first date
+# (already in DATE_FORMAT) to just after a leading [tag], dropping the
+# parentheses around it. Names with no leading tag or no date are unchanged.
+_move_date_first() {
+    local name="$1" dre tag rest before after date
+    case "${DATE_FORMAT:-dd.mm.yyyy}" in
+        yy.mm.dd)   dre='[0-9]{2}\.[0-9]{2}\.[0-9]{2}' ;;
+        yyyy-mm-dd) dre='[0-9]{4}-[0-9]{2}-[0-9]{2}' ;;
+        *)          dre='[0-9]{2}\.[0-9]{2}\.[0-9]{4}' ;;
+    esac
+    [[ "$name" =~ ^(\[[^]]*\])[[:space:]]*(.*)$ ]] || { echo "$name"; return; }
+    tag="${BASH_REMATCH[1]}"; rest="${BASH_REMATCH[2]}"
+    [[ "$rest" =~ ^$dre([^0-9]|$) ]] && { echo "$name"; return; }
+    [[ "$rest" =~ (^|[^0-9])($dre)([^0-9]|$) ]] || { echo "$name"; return; }
+    date="${BASH_REMATCH[2]}"
+    before="${rest%%"$date"*}"
+    after="${rest#*"$date"}"
+    if [[ "$before" == *"(" && "$after" == ")"* ]]; then
+        before="${before%(}"; after="${after#)}"
+    fi
+    [[ "$after" == [_.]* ]] && before="${before%"${before##*[! ]}"}"
+    rest="$before$after"
+    rest=$(printf '%s' "$rest" | sed -E 's/  +/ /g; s/^ //; s/ +$//')
+    echo "$tag $date${rest:+ $rest}"
+}
+
+# ── tidy (--tidy): studio aliases, slug names, junk words, stray characters ──
+
+# Built-in studio spellings, "lowercase tag text=Canonical". Extend or override
+# in ${STUDIO_ALIASES_FILE:-~/.config/vmgr/studios.conf} (same format, # comments).
+_STUDIO_DEFAULTS="5kporn=5KPorn
+adultauditions=AdultAuditions
+alsscan=ALSScan
+alsscan.com=ALSScan
+atkgirlfriends=ATKGirlfriends
+atkexotics=ATKExotics
+atkhairy=ATKHairy
+bangbus=BangBus
+bangbros=BangBros
+bangbrosclips=BangBrosClips
+analmom=AnalMom
+onlytarts=OnlyTarts
+brattysis=BrattySis
+mylfofthemonth=MylfOfTheMonth
+mylfofthemonth.com=MylfOfTheMonth
+glowingdesire=GlowingDesire
+clubsweethearts=ClubSweethearts
+herlimit=HerLimit
+evilangel=EvilAngel
+exxxtrasmall=ExxxtraSmall
+argentinacasting=ArgentinaCasting
+backroomcastingcouch=BackroomCastingCouch
+badteenspunished=BadTeensPunished
+adulttime=AdultTime"
+
+declare -gA _STUDIO_ALIAS=()
+
+# Fill _STUDIO_ALIAS from the built-ins and the user's file. Call in the parent
+# shell (not inside $(...)) so the table is visible to later calls.
+load_studio_aliases() {
+    _STUDIO_ALIAS=()
+    local file="${STUDIO_ALIASES_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/vmgr/studios.conf}" line key val
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+        key="${line%%=*}"; val="${line#*=}"
+        key="${key,,}"; key="${key//[[:space:]]/}"
+        val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+        [[ -n "$key" && -n "$val" ]] && _STUDIO_ALIAS["$key"]="$val"
+    done <<< "$_STUDIO_DEFAULTS"$'\n'"$( [[ -r "$file" ]] && cat "$file" )"
+}
+
+# [bangbus] / [Bangbus] -> [BangBus]; unknown studios keep their spelling
+canonical_studio_tag() {
+    local text="${1#[}"; text="${text%]}"
+    local canon="${_STUDIO_ALIAS[${text,,}]:-}"
+    echo "[${canon:-$text}]"
+}
+
+_DATE_ANY='[0-9]{2}\.[0-9]{2}\.[0-9]{2}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}\.[0-9]{2}\.[0-9]{4}'
+_TIDY_EXTRA_JUNK=" xxx prt rq "
+
+# Tidy what follows the studio tag:
+#  - canonical studio spelling (see load_studio_aliases)
+#  - en/em dashes and a leading dash are dropped
+#  - dotted or dashed slugs become words: "25.12.19.katerina.karson.480p"
+#    -> "25.12.19 Katerina Karson" (a leading date is kept as is)
+#  - encoding/release junk words and trailing hash ids are removed
+#  - a repeated name with a code is collapsed: "Morena 4023 Morena, 18" -> "Morena, 18"
+# Run after --dates so dates are already in the chosen format.
+tidy_filename() {
+    _split_filename "$1"
+    local name="${_FN_NAME//[–—]/ }" ext="$_FN_EXT" tag="" rest word bare out="" date="" slug=false
+    if [[ "$name" =~ ^(\[[^]]*\])[[:space:]]*(.*)$ ]]; then
+        tag=$(canonical_studio_tag "${BASH_REMATCH[1]}"); rest="${BASH_REMATCH[2]}"
+    else
+        rest="$name"
+    fi
+    rest=$(printf '%s' "$rest" | sed -E 's/^[ -]+//')
+
+    # a leading date is set aside so its dots survive
+    if [[ "$rest" =~ ^($_DATE_ANY)([^0-9]|$)(.*)$ ]]; then
+        date="${BASH_REMATCH[1]}"
+        rest="${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+        rest=$(printf '%s' "$rest" | sed -E 's/^[._ -]+//')
+    fi
+
+    # a name with no spaces and several separators is a slug
+    if [[ "$rest" != *" "* && "$rest" =~ [._-].*[._-] ]]; then
+        slug=true
+        rest=$(printf '%s' "$rest" | sed -E 's/([^0-9])[._-]/\1 /g; s/[._-]([^0-9])/ \1/g; s/([0-9])[._-]([0-9]{3,4}p)/\1 \2/g')
+    fi
+    rest="${rest//_/ }"
+    rest=$(printf '%s' "$rest" | sed -E 's/([^ ])\(/\1 (/g')
+
+    for word in $rest; do
+        bare="${word#[[(]}"; bare="${bare%[])]}"; bare="${bare,,}"
+        [[ "$_JUNK_WORDS$_TIDY_EXTRA_JUNK" == *" $bare "* ]] && continue
+        [[ "$bare" =~ ^[0-9a-f]{8}$ && "$bare" =~ [0-9] && "$bare" =~ [a-f] ]] && continue
+        [[ "$slug" == true && "$word" == "${word,,}" ]] && word="${word^}"
+        out+="${out:+ }$word"
+    done
+    rest=$(printf '%s' "$out" | sed -E 's/^([[:alpha:]]+) [0-9]{3,4} \1\b/\1/')
+
+    out="$tag"
+    [[ -n "$date" ]] && out+="${out:+ }$date"
+    [[ -n "$rest" ]] && out+="${out:+ }$rest"
+    echo "${out:-$_FN_NAME}$ext"
+}
+
+# The pattern's transform, then the optional passes: dates, then tidy
+_pattern_then_extras() {
+    local n
+    n=$("$_RENAME_BASE_FN" "$1")
+    [[ "${NORMALIZE_DATES:-false}" == true ]] && n=$(normalize_dates_filename "$n")
+    [[ "${TIDY_NAMES:-false}" == true ]] && n=$(tidy_filename "$n")
+    echo "$n"
 }
 
 # Name of the transform function for a pattern; non-zero for unknown patterns
@@ -310,9 +462,10 @@ rename_files_in_directory() {
         log_error "Unknown rename pattern: $RENAME_PATTERN (choose from: $RENAME_PATTERNS)"
         return 1
     fi
-    if [[ "${NORMALIZE_DATES:-false}" == true ]]; then
+    if [[ "${NORMALIZE_DATES:-false}" == true || "${TIDY_NAMES:-false}" == true ]]; then
         _RENAME_BASE_FN="$transform_fn"
-        transform_fn="_pattern_then_dates"
+        transform_fn="_pattern_then_extras"
+        [[ "${TIDY_NAMES:-false}" == true ]] && load_studio_aliases
     fi
     _apply_transform_to_directory "$1" "$2" "$transform_fn"
 }
