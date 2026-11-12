@@ -256,7 +256,8 @@ exxxtrasmall=ExxxtraSmall
 argentinacasting=ArgentinaCasting
 backroomcastingcouch=BackroomCastingCouch
 badteenspunished=BadTeensPunished
-adulttime=AdultTime"
+adulttime=AdultTime
+muchasexo=MuchaSexo"
 
 declare -gA _STUDIO_ALIAS=()
 
@@ -282,7 +283,7 @@ canonical_studio_tag() {
 }
 
 _DATE_ANY='[0-9]{2}\.[0-9]{2}\.[0-9]{2}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}\.[0-9]{2}\.[0-9]{4}'
-_TIDY_EXTRA_JUNK=" xxx prt rq "
+_TIDY_EXTRA_JUNK=" xxx prt rq xfans "
 
 # Tidy what follows the studio tag:
 #  - canonical studio spelling (see load_studio_aliases)
@@ -310,12 +311,13 @@ tidy_filename() {
     fi
 
     # a name with no spaces and several separators is a slug
-    if [[ "$rest" != *" "* && "$rest" =~ [._-].*[._-] ]]; then
+    # (two separators, or one dot/underscore between letters: "Diosa.Xaxa")
+    if [[ "$rest" != *" "* && ( "$rest" =~ [._-].*[._-] || "$rest" =~ [[:alpha:]][._][[:alpha:]] ) ]]; then
         slug=true
         rest=$(printf '%s' "$rest" | sed -E 's/([^0-9])[._-]/\1 /g; s/[._-]([^0-9])/ \1/g; s/([0-9])[._-]([0-9]{3,4}p)/\1 \2/g')
     fi
     rest="${rest//_/ }"
-    rest=$(printf '%s' "$rest" | sed -E 's/([^ ])\(/\1 (/g')
+    rest=$(printf '%s' "$rest" | sed -E "s/([^ ])\\(/\\1 (/g; s/([[:alpha:]])-'/\\1'/g")
 
     for word in $rest; do
         bare="${word#[[(]}"; bare="${bare%[])]}"; bare="${bare,,}"
@@ -425,7 +427,7 @@ _apply_transform_to_directory() {
         if [[ "$filename" != "$new_filename" ]]; then
             local new_path="$directory/$new_filename"
 
-            if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+            if [[ -e "$new_path" && "$new_path" != "$file" && ! "$new_path" -ef "$file" ]]; then
                 new_filename=$(get_safe_filename "$directory" "$new_filename")
                 new_path="$directory/$new_filename"
             fi
@@ -636,7 +638,7 @@ convert_images_to_jpg() {
         fi
 
         # Check for conflicts
-        if [[ -e "$new_path" && "$new_path" != "$file" ]]; then
+        if [[ -e "$new_path" && "$new_path" != "$file" && ! "$new_path" -ef "$file" ]]; then
             new_filename=$(get_safe_filename "$filedir" "$new_filename")
             new_path="$filedir/$new_filename"
         fi

@@ -234,6 +234,8 @@ test_tidy_studio_user_file() {
 test_tidy_dotted_names() {
     load_studio_aliases
     assert_equals "[Nubiles] 26.11.04 Nellie Pull My Hair.mp4" "$(tidy_filename "[Nubiles] 26.11.04.nellie.pull.my.hair.480p.mp4")" "tidy: dotted slug to words, junk dropped"
+    assert_equals "[X] Violet Moon I'm SO WET.mp4" "$(tidy_filename "[X] Violet Moon I-'m SO WET.mp4")" "tidy: hyphen before apostrophe"
+    assert_equals "[X] 26.10.01 Diosa Xaxa.mp4" "$(tidy_filename "[X] 26.10.01 Diosa.Xaxa.mp4")" "tidy: single dot between names"
     assert_equals "[Amatrices] Sans Retenue Vol2.mp4" "$(tidy_filename "[Amatrices] -sans-retenue-vol2-1080p.mp4")" "tidy: dashed slug, leading dash"
 }
 
