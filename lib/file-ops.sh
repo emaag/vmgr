@@ -341,6 +341,25 @@ _pattern_then_extras() {
     echo "$n"
 }
 
+# What a file name becomes under the current rename options (for the menu's
+# example line). Prints the name unchanged for an unknown pattern.
+rename_preview_name() {
+    local fn
+    fn=$(rename_transform_for_pattern "${RENAME_PATTERN:-bracket}") || { echo "$1"; return; }
+    [[ "${TIDY_NAMES:-false}" == true ]] && load_studio_aliases
+    _RENAME_BASE_FN="$fn"
+    _pattern_then_extras "$1"
+}
+
+# Short description of the current rename options, e.g. "bracket, yy.mm.dd, date first, tidy"
+rename_options_summary() {
+    local out="${RENAME_PATTERN:-bracket}"
+    [[ "${NORMALIZE_DATES:-false}" == true ]] && out+=", ${DATE_FORMAT:-dd.mm.yyyy}"
+    [[ "${DATE_FIRST:-false}" == true ]] && out+=", date first"
+    [[ "${TIDY_NAMES:-false}" == true ]] && out+=", tidy"
+    echo "$out"
+}
+
 # Name of the transform function for a pattern; non-zero for unknown patterns
 rename_transform_for_pattern() {
     case "$1" in

@@ -199,3 +199,14 @@ test_pty_reddit_setup_can_test_and_delete_saved_credentials() {
     assert_file_not_exists "$CONF" "reddit setup: delete removes the credentials"
     _teardown
 }
+
+test_pty_rename_options_menu() {
+    _setup
+    # File Operations > R (Rename Options) > 4 (tidy on) > 2 (dates -> yy.mm.dd) > Esc > Esc
+    local out
+    out=$(DRV_FIND='RENAME OPTIONS,yy.mm.dd,[5KPorn] Julia Cute (26.01.21)' _drive '1R42\033\033')
+    assert_equals "1" "$(cut -d'|' -f1 <<< "$out" | sed 's/^[1-9][0-9]*$/1/')" "rename options: menu opens from File Operations"
+    assert_matches '^[1-9][0-9]*$' "$(cut -d'|' -f2 <<< "$out")" "rename options: date format shown after choosing it"
+    assert_matches '^[1-9][0-9]*$' "$(cut -d'|' -f3 <<< "$out")" "rename options: example shows the tidied, re-dated name"
+    _teardown
+}

@@ -85,6 +85,15 @@ DRY_RUN=false
 VERBOSE=false
 INTERACTIVE=true
 
+# Rename options (File Operations > Rename Options, or the --pattern / --dates /
+# --date-format / --date-first / --tidy flags)
+RENAME_PATTERN="${RENAME_PATTERN:-bracket}"
+NORMALIZE_DATES="${NORMALIZE_DATES:-false}"
+DATE_FORMAT="${DATE_FORMAT:-dd.mm.yyyy}"
+DATE_FIRST="${DATE_FIRST:-false}"
+TIDY_NAMES="${TIDY_NAMES:-false}"
+STUDIO_ALIASES_FILE="${STUDIO_ALIASES_FILE:-}"
+
 # Organize by Subfolder Settings
 ORGANIZE_DEFAULT_TARGET="."
 ORGANIZE_DEFAULT_SEARCH="."

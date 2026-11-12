@@ -74,7 +74,7 @@ show_single_operations_menu() {
     show_header
 
     ui_title "FILE OPERATIONS"
-    ui_item 1 "Rename Files" "Bracket Notation"
+    ui_item 1 "Rename Files" "$(rename_options_summary)"
     ui_item 2 "Remove Dashes"
     ui_item 3 "Fix Bracket Spacing"
     ui_item 4 "Flatten Directory" "Move All to Top"
@@ -85,10 +85,100 @@ show_single_operations_menu() {
     ui_item 7 "Batch Processing" "Several folders at once ${SYMBOL_ARROW}"
     ui_item 8 "Automated Workflows" "Clean up a collection ${SYMBOL_ARROW}"
     echo ""
+    ui_item R "Rename Options" "Pattern, dates, tidy ${SYMBOL_ARROW}"
     ui_item_toggle D "Toggle Dry Run" "$DRY_RUN"
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
+}
+
+# Rename options: pattern, date format, date position, tidy, studio spellings
+show_rename_options_menu() {
+    show_header
+
+    ui_title "RENAME OPTIONS"
+    ui_item 1 "Naming pattern" "${RENAME_PATTERN:-bracket}"
+    if [[ "${NORMALIZE_DATES:-false}" == true ]]; then
+        ui_item 2 "Dates" "${DATE_FORMAT:-dd.mm.yyyy}"
+    else
+        ui_item 2 "Dates" "left as they are"
+    fi
+    ui_item_toggle 3 "Date right after [Studio]" "${DATE_FIRST:-false}"
+    ui_item_toggle 4 "Tidy names" "${TIDY_NAMES:-false}"
+    ui_item 5 "Studio spellings file" "${STUDIO_ALIASES_FILE:-~/.config/vmgr/studios.conf}"
+    ui_item 6 "Reset to defaults"
+    echo ""
+    ui_section "Example"
+    ui_kv "Before" "5kporn Julia Cute (21.01.2026) 1080p rq.mp4"
+    ui_kv "After" "$(rename_preview_name "5kporn Julia Cute (21.01.2026) 1080p rq.mp4")"
+    echo ""
+    ui_item B "Back" "" back
+    ui_prompt
+}
+
+# Next entry after $1 in the space-separated list $2 (wraps around)
+_cycle_word() {
+    local cur="$1" w first="" take=false
+    for w in $2; do
+        [[ -z "$first" ]] && first="$w"
+        if $take; then echo "$w"; return; fi
+        [[ "$w" == "$cur" ]] && take=true
+    done
+    echo "$first"
+}
+
+_handle_rename_options_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            RENAME_PATTERN=$(_cycle_word "${RENAME_PATTERN:-bracket}" "$RENAME_PATTERNS")
+            return 0
+            ;;
+        2)
+            # off -> yy.mm.dd -> yyyy-mm-dd -> dd.mm.yyyy -> off
+            if [[ "${NORMALIZE_DATES:-false}" != true ]]; then
+                NORMALIZE_DATES=true; DATE_FORMAT=yy.mm.dd
+            else
+                case "$DATE_FORMAT" in
+                    yy.mm.dd)   DATE_FORMAT=yyyy-mm-dd ;;
+                    yyyy-mm-dd) DATE_FORMAT=dd.mm.yyyy ;;
+                    *)          NORMALIZE_DATES=false; DATE_FIRST=false ;;
+                esac
+            fi
+            return 0
+            ;;
+        3)
+            if [[ "${DATE_FIRST:-false}" == true ]]; then
+                DATE_FIRST=false
+            else
+                DATE_FIRST=true
+                if [[ "${NORMALIZE_DATES:-false}" != true ]]; then
+                    NORMALIZE_DATES=true; DATE_FORMAT=yy.mm.dd
+                fi
+            fi
+            return 0
+            ;;
+        4)
+            toggle_flag TIDY_NAMES
+            return 0
+            ;;
+        5)
+            echo ""
+            ui_ask STUDIO_ALIASES_FILE "File of alias=Canonical lines (empty for the default)"
+            return 0
+            ;;
+        6)
+            RENAME_PATTERN=bracket; NORMALIZE_DATES=false; DATE_FORMAT=dd.mm.yyyy
+            DATE_FIRST=false; TIDY_NAMES=false; STUDIO_ALIASES_FILE=""
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+handle_rename_options() {
+    run_menu_loop show_rename_options_menu _handle_rename_options_choice false
 }
 
 show_image_ops_menu() {
@@ -380,7 +470,7 @@ _handle_single_operations_choice() {
         1)
             if get_directory_input; then
                 if [[ "$DRY_RUN" == true ]] || confirm_destructive_op "Rename Files" "$TARGET_FOLDER"; then
-                    start_operation "Rename Files (Bracket Notation)"
+                    start_operation "Rename Files ($(rename_options_summary))"
                     rename_files_in_directory "$TARGET_FOLDER" "$DRY_RUN"
                     end_operation
                     if [[ "$DRY_RUN" == true ]]; then
@@ -480,6 +570,10 @@ _handle_single_operations_choice() {
             ;;
         8)
             handle_workflows
+            return 0
+            ;;
+        r|R)
+            handle_rename_options
             return 0
             ;;
         d|D)

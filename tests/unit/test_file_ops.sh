@@ -327,3 +327,12 @@ test_cleanup_preserves_extension() {
     result=$(cleanup_filename "studio name.mkv")
     assert_contains ".mkv" "$result" "cleanup: extension preserved"
 }
+
+test_rename_options_summary_and_preview() {
+    RENAME_PATTERN=bracket NORMALIZE_DATES=false DATE_FORMAT=dd.mm.yyyy DATE_FIRST=false TIDY_NAMES=false
+    assert_equals "bracket" "$(rename_options_summary)" "options summary: defaults"
+    NORMALIZE_DATES=true DATE_FORMAT=yy.mm.dd DATE_FIRST=true TIDY_NAMES=true
+    assert_equals "bracket, yy.mm.dd, date first, tidy" "$(rename_options_summary)" "options summary: everything on"
+    assert_equals "[5KPorn] 26.01.21 Julia Cute.mp4" "$(rename_preview_name "5kporn Julia Cute (21.01.2026) 1080p rq.mp4")" "preview: runs the whole pipeline"
+    RENAME_PATTERN=bracket NORMALIZE_DATES=false DATE_FORMAT=dd.mm.yyyy DATE_FIRST=false TIDY_NAMES=false
+}

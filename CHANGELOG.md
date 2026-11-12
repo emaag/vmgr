@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Rename Options menu** (File Operations > `R`): pick the naming pattern, date format (off, yy.mm.dd, yyyy-mm-dd, dd.mm.yyyy), date placement, tidy and the studio spellings file without CLI flags, with a live before/after example. The File Operations menu shows the current choice next to Rename Files, and the settings are saved with configuration profiles.
 - **`vmgr similar <dir>`**: lists files that look like the same scene after standardizing names (same studio, date and title, ignoring spelling, `(21.01.2026)` versus `26.01.21`, and tags like `1080p` or `rq`), largest first, plus files that share a studio and date with different titles. Report only; `vmgr duplicates` still compares contents.
 - **`--tidy`** (rename): one spelling per studio from a built-in table plus `~/.config/vmgr/studios.conf` (or `--studios <file>`, lines of `alias=Canonical`); dotted and dashed names become title-cased words (`26.11.04.nellie.pull.my.hair.480p` -> `26.11.04 Nellie Pull My Hair`); encoding tags, `XXX`, `PRT`, `rq` and trailing hash ids are dropped; en/em dashes and a leading dash are removed; `Name 4023 Name, 18` collapses to `Name, 18`. Runs after `--dates`/`--date-first`.
 - **`--date-first`**: moves the date to just after a leading `[Studio]` tag (`[Studio] Title (26.10.31)` -> `[Studio] 26.10.31 Title`), dropping its parentheses. Names with no tag or no date are left alone. Implies `--dates`.

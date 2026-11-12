@@ -127,6 +127,8 @@ chmod +x video-manager-ultimate.sh
 # snake_case or strip-junk (drops tags like 1080p, x264, WEB-DL)
 ./video-manager-ultimate.sh --pattern strip-junk rename /path
 
+# (All rename options can also be set in the menu: File Operations > R)
+
 # Also write dates in names as dd.mm.yyyy (2024-03-05, 20240305, 05-03-2024 -> 05.03.2024)
 ./video-manager-ultimate.sh --dates rename /path
 
