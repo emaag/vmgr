@@ -445,7 +445,12 @@ _apply_transform_to_directory() {
                 ((STATS[files_previewed]++))
                 log_message "DRYRUN" "Would rename: $filename -> $new_filename"
             else
-                mv -- "$file" "$new_path" 2>/dev/null
+                if [[ -e "$new_path" && "$new_path" -ef "$file" ]]; then
+                    # case-only rename on a case-insensitive filesystem: go via a temp name
+                    mv -- "$file" "$file.vmgr-tmp.$$" 2>/dev/null && mv -- "$file.vmgr-tmp.$$" "$new_path" 2>/dev/null
+                else
+                    mv -- "$file" "$new_path" 2>/dev/null
+                fi
                 if [[ $? -eq 0 ]]; then
                     if [[ "$(type -t ui_change)" == "function" ]]; then
                         ui_change "$filename" "$new_filename"
