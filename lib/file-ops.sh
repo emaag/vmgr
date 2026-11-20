@@ -404,7 +404,7 @@ _apply_transform_to_directory() {
     echo ""
 
     while IFS= read -r -d '' file; do
-        [[ "$(basename "$file")" == .* ]] && continue
+        [[ "${file##*/}" == .* ]] && continue
 
         if ! is_video_file "$file"; then
             continue
@@ -414,7 +414,7 @@ _apply_transform_to_directory() {
         ((STATS[files_processed]++))
 
         local filename
-        filename=$(basename "$file")
+        filename="${file##*/}"
         local new_filename
         new_filename=$("$transform_fn" "$filename")
 
@@ -516,7 +516,7 @@ flatten_directory() {
     while IFS= read -r file; do
         ((STATS[files_processed]++))
 
-        local base_name=$(basename "$file")
+        local base_name="${file##*/}"
         local target="$top_dir/$base_name"
 
         log_verbose "Found: $file"
@@ -593,7 +593,7 @@ convert_images_to_jpg() {
     local recursive="${4:-false}"
     local rename_only="${5:-false}"
 
-    local ext_upper=$(echo "$source_ext" | tr '[:lower:]' '[:upper:]')
+    local ext_upper="${source_ext^^}"
     log_info "Converting $ext_upper to JPG in: $directory"
     [[ "$recursive" == true ]] && log_info "Recursive mode: ON"
 
@@ -624,13 +624,13 @@ convert_images_to_jpg() {
     echo ""
 
     while IFS= read -r -d '' file; do
-        [[ "$(basename "$file")" == .* ]] && continue
+        [[ "${file##*/}" == .* ]] && continue
 
         ((file_count++))
         ((STATS[files_processed]++))
 
-        local filename=$(basename "$file")
-        local filedir=$(dirname "$file")
+        local filename="${file##*/}"
+        local filedir="${file%/*}"
         local basename="${filename%.*}"
         local new_filename="${basename}.jpg"
         local new_path="$filedir/$new_filename"

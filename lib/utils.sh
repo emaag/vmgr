@@ -26,12 +26,7 @@ is_video_file() {
     local ext="${file##*.}"
     ext="${ext,,}" # Convert to lowercase
 
-    for video_ext in "${DEFAULT_VIDEO_EXTENSIONS[@]}"; do
-        if [[ "$ext" == "$video_ext" ]]; then
-            return 0
-        fi
-    done
-    return 1
+    [[ " ${DEFAULT_VIDEO_EXTENSIONS[*]} " == *" $ext "* ]]
 }
 
 # Check if file is an image
@@ -40,12 +35,7 @@ is_image_file() {
     local ext="${file##*.}"
     ext="${ext,,}" # Convert to lowercase
 
-    for img_ext in "${DEFAULT_IMAGE_EXTENSIONS[@]}"; do
-        if [[ "$ext" == "$img_ext" ]]; then
-            return 0
-        fi
-    done
-    return 1
+    [[ " ${DEFAULT_IMAGE_EXTENSIONS[*]} " == *" $ext "* ]]
 }
 
 # Check if file is an audio file

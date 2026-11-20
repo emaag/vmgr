@@ -447,8 +447,8 @@ organize_by_subfolder_names() {
 
     # For each subfolder, search for matching files
     for subfolder in "${subfolders[@]}"; do
-        local subfolder_name=$(basename "$subfolder")
-        local subfolder_name_lower=$(echo "$subfolder_name" | tr '[:upper:]' '[:lower:]')
+        local subfolder_name="${subfolder##*/}"
+        local subfolder_name_lower="${subfolder_name,,}"
 
         log_info "Searching for files matching: $subfolder_name"
 
@@ -459,20 +459,20 @@ organize_by_subfolder_names() {
             [[ ! -f "$file" ]] && continue
 
             # Get parent directory
-            local parent_dir=$(dirname "$file")
-            local parent_basename=$(basename "$parent_dir")
-            local parent_basename_lower=$(echo "$parent_basename" | tr '[:upper:]' '[:lower:]')
+            local parent_dir="${file%/*}"
+            local parent_basename="${parent_dir##*/}"
+            local parent_basename_lower="${parent_basename,,}"
 
             # Skip if already in the target subfolder
             if [[ "$parent_dir" == "$subfolder" ]]; then
-                log_verbose "Skipping (already in target): $(basename "$file")"
+                log_verbose "Skipping (already in target): ${file##*/}"
                 ((skipped_count++))
                 continue
             fi
 
             # Skip if in a "full" folder
             if [[ "$parent_basename_lower" == "full" ]] || [[ "$file" =~ /[Ff][Uu][Ll][Ll]/ ]]; then
-                log_verbose "Skipping (in 'full' folder): $(basename "$file")"
+                log_verbose "Skipping (in 'full' folder): ${file##*/}"
                 ((skipped_count++))
                 continue
             fi
@@ -504,7 +504,7 @@ organize_by_subfolder_names() {
                     fi
                 fi
 
-                local filename=$(basename "$file")
+                local filename="${file##*/}"
                 local dest="$subfolder/$filename"
 
                 # Check if destination already exists

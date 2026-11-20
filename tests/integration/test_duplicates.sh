@@ -210,3 +210,61 @@ test_similar_names_nothing_to_report() {
     assert_contains "No files share" "$out" "similar: clean folder"
     _teardown
 }
+
+# ── Prefilter: only plausible duplicates get a full hash ──────────────────────
+
+_report_count() { find "$TEST_TMPDIR" -name duplicates.txt 2>/dev/null | wc -l | tr -d ' '; }
+
+test_prefilter_same_size_different_content_not_duplicate() {
+    _setup
+    printf 'AAAA' > "$TEST_TMPDIR/a.mp4"
+    printf 'BBBB' > "$TEST_TMPDIR/b.mp4"
+    find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
+    assert_equals "0" "$(_report_count)" "prefilter: same size, different content is not a duplicate"
+    _teardown
+}
+
+test_prefilter_identical_head_and_tail_different_middle() {
+    _setup
+    DUP_QUICK_BYTES=1024
+    head -c 8192 /dev/zero > "$TEST_TMPDIR/a.mp4"
+    cp "$TEST_TMPDIR/a.mp4" "$TEST_TMPDIR/b.mp4"
+    printf 'X' | dd of="$TEST_TMPDIR/b.mp4" bs=1 seek=4000 conv=notrunc 2>/dev/null
+    _dup_find_candidates "$TEST_TMPDIR"
+    assert_equals "2" "${#DUP_CANDIDATES[@]}" "prefilter: matching head/tail still goes on to the full hash"
+    find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
+    assert_equals "0" "$(_report_count)" "prefilter: a difference in the middle is caught by the full hash"
+    unset DUP_QUICK_BYTES
+    _teardown
+}
+
+test_prefilter_true_duplicate_in_large_files() {
+    _setup
+    DUP_QUICK_BYTES=1024
+    head -c 8192 /dev/zero > "$TEST_TMPDIR/a.mp4"
+    cp "$TEST_TMPDIR/a.mp4" "$TEST_TMPDIR/b.mp4"
+    find_duplicates "$TEST_TMPDIR" report >/dev/null 2>&1
+    assert_equals "1" "$(_report_count)" "prefilter: identical large files are still reported"
+    unset DUP_QUICK_BYTES
+    _teardown
+}
+
+test_prefilter_unique_sizes_are_not_hashed() {
+    _setup
+    echo "one" > "$TEST_TMPDIR/a.mp4"
+    echo "twotwo" > "$TEST_TMPDIR/b.mp4"
+    _dup_find_candidates "$TEST_TMPDIR"
+    assert_equals "0" "${#DUP_CANDIDATES[@]}" "prefilter: unique sizes produce no candidates"
+    _teardown
+}
+
+test_prefilter_different_head_same_size_skipped() {
+    _setup
+    DUP_QUICK_BYTES=1024
+    head -c 8192 /dev/zero > "$TEST_TMPDIR/a.mp4"
+    head -c 8192 /dev/zero | tr '\0' 'x' > "$TEST_TMPDIR/b.mp4"
+    _dup_find_candidates "$TEST_TMPDIR"
+    assert_equals "0" "${#DUP_CANDIDATES[@]}" "prefilter: same size but different head is dropped before the full hash"
+    unset DUP_QUICK_BYTES
+    _teardown
+}

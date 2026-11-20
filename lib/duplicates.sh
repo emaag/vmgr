@@ -19,6 +19,57 @@
 # DIRECTORY-BASED DUPLICATE DETECTION
 ################################################################################
 
+# SHA-256 of stdin
+_dup_hash_stdin() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | cut -d' ' -f1
+    else
+        shasum -a 256 | cut -d' ' -f1
+    fi
+}
+
+# Cheap fingerprint of a file: its first and last DUP_QUICK_BYTES bytes
+_dup_quick_hash() {
+    local file="$1" n="${DUP_QUICK_BYTES:-1048576}"
+    { head -c "$n" "$file"; tail -c "$n" "$file"; } 2>/dev/null | _dup_hash_stdin
+}
+
+# Fill DUP_CANDIDATES (sorted) with the videos under $1 that share both their
+# size and their quick fingerprint with at least one other video.
+_dup_find_candidates() {
+    local directory="$1" file size key qh
+    local -a files=()
+    local -A fsize=() size_count=() fkey=() key_count=()
+    DUP_CANDIDATES=()
+
+    while IFS= read -r -d '' file; do
+        is_video_file "$file" || continue
+        size=$(get_file_size "$file")
+        size="${size:-0}"
+        files+=("$file")
+        fsize["$file"]="$size"
+        size_count["$size"]=$(( ${size_count[$size]:-0} + 1 ))
+    done < <(find "$directory" -type f ! -path '*/.vmgr-trash/*' -print0 | sort -z)
+
+    local same_size=0
+    for file in "${files[@]}"; do
+        size="${fsize[$file]}"
+        (( ${size_count[$size]} > 1 )) || continue
+        ((same_size++))
+        qh=$(_dup_quick_hash "$file")
+        key="$size:$qh"
+        fkey["$file"]="$key"
+        key_count["$key"]=$(( ${key_count[$key]:-0} + 1 ))
+    done
+
+    for file in "${files[@]}"; do
+        key="${fkey[$file]:-}"
+        [[ -n "$key" ]] && (( ${key_count[$key]} > 1 )) && DUP_CANDIDATES+=("$file")
+    done
+
+    log_info "${#files[@]} videos: ${same_size} share a size with another, ${#DUP_CANDIDATES[@]} need a full hash"
+}
+
 find_duplicates() {
     local directory="$1"
     local action="${2:-report}" # report or delete
@@ -42,26 +93,20 @@ find_duplicates() {
 
     echo ""
 
-    # Count the videos first so the progress bar has a total (terminal only)
-    local total_videos=0
-    if [[ -t 1 ]]; then
-        total_videos=$(find "$directory" -type f ! -path '*/.vmgr-trash/*' \( \
-            -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
-            -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
-            -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \) 2>/dev/null | wc -l)
-        total_videos=$(( total_videos ))
-    fi
+    # Only files that could be duplicates get a full hash: same size first, then
+    # the same first and last megabytes. A unique file is never read in full.
+    _dup_find_candidates "$directory"
+    local total_videos=${#DUP_CANDIDATES[@]}
 
-    # Find all video files and calculate hashes. The scan is sorted so the copy
-    # that is kept (the first one seen) is always the first alphabetically.
-    local file_count=0
-    while IFS= read -r -d '' file; do
-        is_video_file "$file" || continue
+    # DUP_CANDIDATES is sorted, so the copy that is kept (the first one seen) is
+    # always the first alphabetically.
+    local file_count=0 file
+    for file in "${DUP_CANDIDATES[@]}"; do
         ((file_count++))
         ((STATS[files_processed]++))
 
-        local filename=$(basename "$file")
-        if [[ "$(type -t ui_progress)" == "function" && $total_videos -gt 0 ]]; then
+        local filename="${file##*/}"
+        if [[ "$(type -t ui_progress)" == "function" && $total_videos -gt 0 && -t 1 ]]; then
             ui_progress "$file_count" "$total_videos" "Hashing" "$filename"
         else
             echo -ne "\r${COLOR_CYAN}Hashing: [$file_count files] Current: ${filename:0:50}...${COLOR_RESET}"
@@ -91,7 +136,7 @@ find_duplicates() {
         else
             hash_map[$hash]="$file"
         fi
-    done < <(find "$directory" -type f ! -path '*/.vmgr-trash/*' -print0 | sort -z)
+    done
 
     echo -ne "\r\033[K" # Clear line
 
