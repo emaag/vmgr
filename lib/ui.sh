@@ -65,6 +65,7 @@ show_main_menu() {
     ui_item 5 "Utilities"            "Logs, system info, testing"
     ui_item 6 "Settings"             "Options and preferences"
     ui_item 7 "Reddit Downloader"    "Images from a subreddit"
+    ui_item 8 "Cover Art Check"      "Find folders missing folder.jpg"
     echo ""
     ui_item Q "Quit" "" back
     ui_prompt "Choose"
@@ -229,6 +230,24 @@ show_duplicate_menu() {
     ui_item 1 "Find Duplicates" "Report Only"
     ui_item 2 "Find and Delete Duplicates"
     ui_item 3 "Find Duplicates" "Dry Run"
+    echo ""
+    ui_item B "Back to Main Menu" "" back
+    ui_prompt
+}
+
+show_covers_menu() {
+    show_header
+
+    ui_title "COVER ART CHECK"
+    ui_item 1 "Check a folder" "Report folders missing a cover"
+    echo ""
+    ui_section "Settings"
+    ui_item 2 "Cover file names" "${COVER_FILENAMES:-folder.jpg}"
+    ui_item_toggle 3 "Only folders without subfolders" "${COVER_LEAF_ONLY:-true}"
+    ui_item_toggle 4 "Only folders that hold videos" "${COVER_REQUIRE_VIDEOS:-false}"
+    ui_item_toggle 5 "Ignore upper/lower case" "${COVER_CASE_INSENSITIVE:-true}"
+    ui_item_toggle 6 "Also list folders that have a cover" "${COVER_SHOW_PRESENT:-false}"
+    ui_item 7 "Save missing list to file" "${COVER_REPORT_FILE:-off}"
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
@@ -781,6 +800,43 @@ _handle_duplicates_choice() {
         b|B) return 1 ;;
         *) return 2 ;;
     esac
+}
+
+# Choice handler for the cover art menu
+_handle_covers_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            if get_directory_input; then
+                start_operation "Check Cover Art"
+                check_cover_art "$TARGET_FOLDER"
+                end_operation
+                ui_pause
+            fi
+            return 0
+            ;;
+        2)
+            echo ""
+            ui_ask COVER_FILENAMES "Names that count as a cover, comma-separated (now: ${COVER_FILENAMES:-folder.jpg})"
+            [[ -z "$COVER_FILENAMES" ]] && COVER_FILENAMES="folder.jpg"
+            return 0
+            ;;
+        3) toggle_flag COVER_LEAF_ONLY; return 0 ;;
+        4) toggle_flag COVER_REQUIRE_VIDEOS; return 0 ;;
+        5) toggle_flag COVER_CASE_INSENSITIVE; return 0 ;;
+        6) toggle_flag COVER_SHOW_PRESENT; return 0 ;;
+        7)
+            echo ""
+            ui_ask COVER_REPORT_FILE "File to write the missing folders to (empty for none)"
+            return 0
+            ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+handle_covers() {
+    run_menu_loop show_covers_menu _handle_covers_choice false
 }
 
 # Handle duplicate detection (using generic menu loop)
@@ -1701,6 +1757,10 @@ _handle_main_menu_choice() {
             ;;
         7)
             handle_reddit
+            return 0
+            ;;
+        8)
+            handle_covers
             return 0
             ;;
         q|Q)

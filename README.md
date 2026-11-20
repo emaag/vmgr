@@ -149,6 +149,10 @@ chmod +x video-manager-ultimate.sh
 # date and title, whatever the spelling or encoding tags); report only
 ./video-manager-ultimate.sh similar /path
 
+# Report folders missing a cover image (folder.jpg); report only
+./video-manager-ultimate.sh covers /path
+./video-manager-ultimate.sh covers /path --cover-name folder.jpg,cover.jpg --all-folders --cover-report missing.txt
+
 # Flatten directory structure
 ./video-manager-ultimate.sh flatten /path
 

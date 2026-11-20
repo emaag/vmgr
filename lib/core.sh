@@ -181,6 +181,13 @@ CATALOG_DRIVES_DB="$HOME/.video-manager-drives.json" # Known drives database
 CATALOG_AUTO_SCAN=false # Auto-scan on drive connect
 CATALOG_INCLUDE_METADATA=true # Extract metadata (duration, resolution, dimensions, etc.)
 CATALOG_INCLUDE_HASH=true # Calculate file hashes (slower but detects duplicates)
+# Cover art check (folder.jpg)
+COVER_FILENAMES="folder.jpg"   # Comma-separated names that count as a cover (e.g. folder.jpg,cover.jpg)
+COVER_CASE_INSENSITIVE=true    # Match Folder.JPG, FOLDER.jpg ...
+COVER_LEAF_ONLY=true           # Only check folders with no subfolders
+COVER_REQUIRE_VIDEOS=false     # Only check folders that directly contain a video
+COVER_SHOW_PRESENT=false       # Also list folders that already have a cover
+COVER_REPORT_FILE=""           # Also write the missing folders to this file
 DUPLICATE_REPORT_GROUPS=200 # Groups the duplicate report prints (the summary always counts all)
 CATALOG_STALE_DAYS=30       # Warn when a drive has not been scanned for this many days
 CATALOG_OFFLINE_RETENTION=90 # Days to keep offline drive data (0=forever)

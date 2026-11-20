@@ -9,7 +9,7 @@ _vmgr_completion() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Main commands
-    local commands="rename flatten cleanup duplicates similar subtitles workflow-new workflow-clean batch reddit catalog catalog-list catalog-search catalog-duplicates catalog-report catalog-export reddit-setup"
+    local commands="rename flatten cleanup duplicates similar covers subtitles workflow-new workflow-clean batch reddit catalog catalog-list catalog-search catalog-duplicates catalog-report catalog-export reddit-setup"
 
     # Special commands (prefixed with --)
     local special_commands="--organize --undo-organize --list-undo --empty-trash"
@@ -48,6 +48,12 @@ _vmgr_completion() {
         --dates
         --date-format
         --date-first
+        --cover-name
+        --all-folders
+        --with-videos-only
+        --cover-case
+        --show-present
+        --cover-report
         --tidy
         --studios
         --undo-organize
@@ -119,6 +125,10 @@ _vmgr_completion() {
             COMPREPLY=()
             return 0
             ;;
+        --cover-report)
+            COMPREPLY=( $(compgen -f -- ${cur}) )
+            return 0
+            ;;
         --organize-target|--organize-search)
             # After organize options, complete directories
             COMPREPLY=( $(compgen -d -- ${cur}) )
@@ -129,7 +139,7 @@ _vmgr_completion() {
             COMPREPLY=( $(compgen -W "${commands} ${options}" -- ${cur}) )
             return 0
             ;;
-        rename|flatten|cleanup|duplicates|similar|subtitles|workflow-new|workflow-clean|catalog)
+        rename|flatten|cleanup|duplicates|similar|covers|subtitles|workflow-new|workflow-clean|catalog)
             # After a command, offer directory completion
             COMPREPLY=( $(compgen -d -- ${cur}) )
             return 0

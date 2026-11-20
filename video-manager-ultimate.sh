@@ -62,6 +62,7 @@ load_module "config.sh"
 load_module "utils.sh"
 load_module "file-ops.sh"
 load_module "duplicates.sh"
+load_module "covers.sh"
 load_module "organize.sh"
 load_module "subtitles.sh"
 load_module "catalog.sh"
@@ -144,6 +145,15 @@ ${COLOR_BOLD}RENAME OPTIONS:${COLOR_RESET}
     --date-first            Also move the date to just after the [Studio] tag:
                             "[Studio] Title (26.10.31)" -> "[Studio] 26.10.31 Title"
 
+${COLOR_BOLD}COVER OPTIONS:${COLOR_RESET}
+    --cover-name <names>    Names that count as a cover, comma-separated
+                            (default folder.jpg; e.g. folder.jpg,cover.jpg)
+    --all-folders           Check every folder, not only those without subfolders
+    --with-videos-only      Only check folders that directly contain a video
+    --cover-case            Match the cover name case-sensitively
+    --show-present          Also list the folders that already have a cover
+    --cover-report <file>   Also write the missing folders to a file
+
 ${COLOR_BOLD}ORGANIZE OPTIONS:${COLOR_RESET}
     --organize-target <dir> Set default target folder for organize
     --organize-search <dir> Set default search path for organize
@@ -153,6 +163,7 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     flatten <dir>           Move all videos to top directory
     cleanup <dir>           Full cleanup (rename + spacing fixes)
     duplicates <dir>        Find duplicate files
+    covers <dir>            Report folders missing a cover image (folder.jpg)
     similar <dir>           List files with the same studio, date and title once
                             names are standardized (report only)
     subtitles <dir>         Generate subtitles for videos
@@ -410,6 +421,42 @@ parse_arguments() {
                     exit 1
                 fi
                 ;;
+            --cover-name)
+                shift
+                if [[ -n "${1:-}" ]]; then
+                    COVER_FILENAMES="$1"
+                    shift
+                else
+                    log_error "--cover-name needs a file name (e.g. folder.jpg)"
+                    exit 1
+                fi
+                ;;
+            --all-folders)
+                COVER_LEAF_ONLY=false
+                shift
+                ;;
+            --with-videos-only)
+                COVER_REQUIRE_VIDEOS=true
+                shift
+                ;;
+            --cover-case)
+                COVER_CASE_INSENSITIVE=false
+                shift
+                ;;
+            --show-present)
+                COVER_SHOW_PRESENT=true
+                shift
+                ;;
+            --cover-report)
+                shift
+                if [[ -n "${1:-}" ]]; then
+                    COVER_REPORT_FILE="$1"
+                    shift
+                else
+                    log_error "--cover-report needs a file path"
+                    exit 1
+                fi
+                ;;
             --date-first)
                 DATE_FIRST=true
                 NORMALIZE_DATES=true
@@ -564,7 +611,7 @@ parse_arguments() {
                     shift
                 fi
                 ;;
-            rename|flatten|cleanup|duplicates|similar|subtitles|workflow-new|workflow-clean|batch|catalog)
+            rename|flatten|cleanup|duplicates|similar|covers|subtitles|workflow-new|workflow-clean|batch|catalog)
                 command="$1"
                 shift
                 if [[ -n "$1" && "$1" != -* ]]; then
@@ -619,6 +666,11 @@ parse_arguments() {
         duplicates)
             start_operation "Find Duplicates"
             find_duplicates "$directory" "report"
+            end_operation
+            ;;
+        covers)
+            start_operation "Check Cover Art"
+            check_cover_art "$directory"
             end_operation
             ;;
         similar)
