@@ -53,7 +53,9 @@ log_message() {
     local level="$1"
     shift
     local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # printf %T is a builtin (bash 4.2+): no date process per log line
+    local timestamp
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1 2>/dev/null || timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE" 2>/dev/null
 }
 

@@ -402,7 +402,7 @@ pause_for_key() {
 # Move off an in-place progress line before printing a message: wipes the bar
 # when the theme is loaded, a plain newline otherwise.
 progress_break() {
-    if [[ "$(type -t ui_progress_clear)" == "function" ]]; then
+    if declare -F ui_progress_clear >/dev/null; then
         ui_progress_clear
     else
         echo ""

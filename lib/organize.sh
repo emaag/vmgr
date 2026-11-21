@@ -375,7 +375,7 @@ organize_by_subfolder_names() {
     # Get all subdirectories (exclude hidden, "full", and common system dirs)
     local -a subfolders
     while IFS= read -r dir; do
-        local basename=$(basename "$dir")
+        local basename="${dir##*/}"
         # Skip hidden, full, and system directories
         if [[ ! "$basename" =~ ^\. ]] && \
            [[ "$basename" != "full" ]] && \
@@ -398,7 +398,7 @@ organize_by_subfolder_names() {
     # Show folders
     echo -e "${COLOR_BRIGHT_CYAN}Subfolders:${COLOR_RESET}"
     for dir in "${subfolders[@]}"; do
-        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} $(basename "$dir")"
+        echo -e "  ${COLOR_CYAN}${SYMBOL_BULLET}${COLOR_RESET} ${dir##*/}"
     done
     echo ""
 
@@ -435,29 +435,46 @@ organize_by_subfolder_names() {
     local _f _b
     while IFS= read -r -d '' _f; do
         is_video_file "$_f" || continue
+        [[ "$_f" == *$'\n'* ]] && continue
         scan_files+=("$_f")
         _b="${_f##*/}"
         scan_lower+=("${_b,,}")
     done < <(find "$search_path" -type f ! -path '*/.vmgr-trash/*' -print0 2>/dev/null)
 
-    # First pass: count total files to process
+    # Match every subfolder name against every file name in ONE awk pass (a
+    # literal, case-insensitive substring test; names are lowercased here).
+    # match_list[s] holds the scan indexes for subfolder s, in scan order.
+    local -a sub_lower=() match_list=()
+    local _s _i _n
+    for subfolder in "${subfolders[@]}"; do
+        _n="${subfolder##*/}"
+        sub_lower+=("${_n,,}")
+    done
+    while read -r _s _i; do
+        match_list[_s]+="$_i "
+        ((total_files++))
+    done < <(awk 'NR == FNR { sub_name[++ns] = $0; next }
+                  { nm[++nf] = $0 }
+                  END { for (s = 1; s <= ns; s++)
+                            for (f = 1; f <= nf; f++)
+                                if (index(nm[f], sub_name[s])) print s - 1, f - 1 }' \
+                 <(printf '%s\n' "${sub_lower[@]}") <(printf '%s\n' "${scan_lower[@]}"))
+
     if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
-        log_verbose "Counting files to process..."
-        local _i _n
-        for subfolder in "${subfolders[@]}"; do
-            _n="${subfolder##*/}"; _n="${_n,,}"
-            for _i in "${!scan_lower[@]}"; do
-                [[ "${scan_lower[$_i]}" == *"$_n"* ]] && ((total_files++))
-            done
-        done
         log_info "Total files to process: $total_files"
         echo ""
     fi
 
+    # Checked once, not per file (each $(type -t ...) is a subshell)
+    local _have_ui_progress=false
+    declare -F ui_progress >/dev/null && _have_ui_progress=true
+
     local processed=0
 
     # For each subfolder, search for matching files
-    for subfolder in "${subfolders[@]}"; do
+    local s
+    for s in "${!subfolders[@]}"; do
+        subfolder="${subfolders[$s]}"
         local subfolder_name="${subfolder##*/}"
         local subfolder_name_lower="${subfolder_name,,}"
 
@@ -469,8 +486,7 @@ organize_by_subfolder_names() {
         sub_abs=$(cd "$subfolder" 2>/dev/null && pwd -P)
         [[ "$sub_abs/" == "$search_abs/"* ]] && in_search=true
 
-        for i in "${!scan_files[@]}"; do
-            [[ "${scan_lower[$i]}" == *"$subfolder_name_lower"* ]] || continue
+        for i in ${match_list[$s]:-}; do
             file="${scan_files[$i]}"
 
             # Skip if file doesn't exist
@@ -511,7 +527,7 @@ organize_by_subfolder_names() {
 
                 # Show progress
                 if [[ "$ORGANIZE_SHOW_PROGRESS" == true && $total_files -gt 0 ]]; then
-                    if [[ "$(type -t ui_progress)" == "function" ]]; then
+                    if $_have_ui_progress; then
                         ui_progress "$processed" "$total_files" "Organizing"
                     else
                         local percent=$((processed * 100 / total_files))
@@ -542,7 +558,7 @@ organize_by_subfolder_names() {
                 else
                     if mv "$file" "$dest"; then
                         # Keep the scan list in step with the disk
-                        if $in_search; then scan_files[$i]="$dest"; else scan_lower[$i]=""; fi
+                        if $in_search; then scan_files[$i]="$dest"; else scan_files[$i]=""; fi
                         # Log for undo
                         if [[ -n "$undo_log" ]]; then
                             _log_move_operation "$undo_log" "$file" "$dest"
