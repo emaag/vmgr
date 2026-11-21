@@ -10,10 +10,15 @@
 [![Modular](https://img.shields.io/badge/architecture-modular-orange.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20WSL-lightgrey.svg)](#setup-instructions)
 
-### Status at a glance — v1.11.0: Catalog Export and Range Search
+### Status at a glance — v1.12.0: Cover Art, Junk Cleanup and Speed
 
 | Change | State |
 |--------|-------|
+| `vmgr covers`: report folders with no `folder.jpg`; `--make-covers` creates them from an image or a video frame | ✅ Shipped |
+| `vmgr junk`: find leftover `.nfo`, `.parts`, `Thumbs.db` and similar; `--apply` moves them to the undoable trash | ✅ Shipped |
+| Much faster duplicates (size and partial-hash prefilter) and organize (one scan; 329 s to 22 s on 3,000 files) | ✅ Shipped |
+| Cover Art Check and Junk Cleanup entries on the main menu | ✅ Shipped |
+| Multi-drive catalog: incremental scans, search that works for unplugged drives, duplicates across drives | ✅ Shipped |
 | Multi-drive catalog: incremental scans, search that works for unplugged drives, duplicates across drives | ✅ Shipped |
 | Guided Reddit API setup that checks the login before saving; galleries and full-speed downloads | ✅ Shipped |
 | Reddit downloader no longer leaves empty folders and explains why nothing downloaded | ✅ Shipped |
@@ -26,7 +31,7 @@
 | Progress bars and a summary card after every operation | ✅ Shipped |
 | Quiet output by default (`--verbose` for detail); `NO_COLOR` and ASCII fallbacks | ✅ Shipped |
 | Subtitle generation (OpenAI Whisper backend, GPU, parallel jobs, skip-existing, dry-run) | ✅ Shipped |
-| 798-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
+| 965-test automated suite, including pseudo-terminal tests of the menus and browser | ✅ Shipped |
 
 [See the changelog →](CHANGELOG.md)
 
