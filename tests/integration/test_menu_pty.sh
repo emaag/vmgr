@@ -20,9 +20,12 @@ if pid == 0:
         os.environ['PATH'] = os.environ['DRV_PATH'] + ':' + os.environ['PATH']
     os.execvp('bash', ['bash', script, '-i'])
 
-def drain(timeout):
+def drain(first_wait, quiet):
+    """Read until `quiet` seconds pass with no output, but wait up to
+    `first_wait` for the first byte (the app can be slow under load)."""
     out = b''
-    while select.select([fd], [], [], timeout)[0]:
+    wait = first_wait
+    while select.select([fd], [], [], wait)[0]:
         try:
             chunk = os.read(fd, 65536)
         except OSError:
@@ -30,17 +33,28 @@ def drain(timeout):
         if not chunk:
             break
         out += chunk
+        wait = quiet
     return out.decode(errors='replace')
 
-log = drain(2.0)
+log = drain(20.0, 0.6)
 # Arrow sequences and short keys go one at a time; long typed text in one write
 for k in re.findall(rb'\x1b\[[A-D]|[^\x1b\r]{8,}|.', keys, re.S):
     os.write(fd, k)
     time.sleep(0.4)
-    log += drain(0.3)
-log += drain(0.8)
+    log += drain(0.6, 0.5)
+log += drain(1.0, 0.8)
+done = 0
+if 'Goodbye' in log:
+    # the app is exiting: give it a moment to finish
+    end = time.time() + 5.0
+    while time.time() < end:
+        done, _ = os.waitpid(pid, os.WNOHANG)
+        if done != 0:
+            break
+        time.sleep(0.1)
+else:
+    done, _ = os.waitpid(pid, os.WNOHANG)
 text = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', log)
-done, _ = os.waitpid(pid, os.WNOHANG)
 if os.environ.get('DRV_FIND'):
     print('|'.join(str(text.count(t)) for t in os.environ['DRV_FIND'].split(',')))
     sys.exit(0)

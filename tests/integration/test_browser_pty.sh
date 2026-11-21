@@ -27,9 +27,12 @@ if pid == 0:
     os.environ['TERM'] = 'xterm'
     os.execvp('bash', ['bash', '-c', script])
 
-def drain(timeout):
+def drain(first_wait, quiet):
+    """Read until `quiet` seconds pass with no output, but wait up to
+    `first_wait` for the first byte (bash can be slow to start under load)."""
     out = b''
-    while select.select([fd], [], [], timeout)[0]:
+    wait = first_wait
+    while select.select([fd], [], [], wait)[0]:
         try:
             chunk = os.read(fd, 65536)
         except OSError:
@@ -37,16 +40,33 @@ def drain(timeout):
         if not chunk:
             break
         out += chunk
+        wait = quiet
     return out
 
-first = drain(1.0).decode(errors='replace')
+def read_until(marker, deadline):
+    """Read until `marker` shows up (the browser exited) or `deadline` seconds pass."""
+    out = b''
+    end = time.time() + deadline
+    while time.time() < end and marker not in out:
+        if select.select([fd], [], [], 0.2)[0]:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out += chunk
+    return out
+
+first = drain(20.0, 0.5).decode(errors='replace')
 for k in re.findall(rb'\x1b\[[A-D]|\x1b.|.', keys, re.S):
     os.write(fd, k)
     time.sleep(0.12)
-screen = first + drain(1.0).decode(errors='replace')
 if os.environ.get('DRV_TIP'):
+    screen = first + drain(3.0, 0.8).decode(errors='replace')
     print(screen.count('Nothing here yet'))
     sys.exit(0)
+screen = first + read_until(b'RESULT rc=', 20.0).decode(errors='replace')
 m = re.search(r'RESULT rc=(\d+) T=(.*)', screen)
 print(f'{m.group(1)}|{m.group(2).strip()}' if m else 'NORESULT')
 PY
