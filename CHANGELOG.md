@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`vmgr covers <dir>`**: reports the folders that have no `folder.jpg`, with a summary of how many do and don't. By default it checks only folders without subfolders (`--all-folders` checks every folder), matches names case-insensitively, and can look for several names (`--cover-name folder.jpg,cover.jpg`), restrict itself to folders that hold videos (`--with-videos-only`), list the folders that already have a cover (`--show-present`) and write the missing ones to a file (`--cover-report <file>`). With no directory it uses the current folder. There is a Cover Art Check entry on the main menu, and every setting is saved with configuration profiles.
+- **`--make-covers`** (covers): creates the missing covers. A folder with a `folder.png` (or `.jpeg`/`.webp`/`.bmp`) gets it converted; otherwise a frame from the folder's first video is used (`--cover-position <pct>`, default 10; `--cover-width <px>`, default 640, never enlarges; needs ffmpeg). It never overwrites a cover, skips folders with nothing to make one from and says so, and `--dry-run` lists what it would create.
+- **`vmgr junk <dir>`**: finds leftover files beside the videos (`.nfo`, `.parts`, `.url`, `.lnk`, `Thumbs.db`, `.DS_Store`, `desktop.ini` by default; `--junk-ext` changes the list). It only reports; `--apply` moves them to the `.vmgr-trash` folder so Undo can restore them, and honors `--dry-run`. Unfinished downloads (`.!qB`, `.part`, `.crdownload`, ...) are only included with `--junk-partial`. With no directory it uses the current folder; `--apply` always needs one. A Junk Cleanup entry is on the main menu, and the settings are saved with configuration profiles.
+- A missing directory now prints a one-line usage hint instead of the whole help text.
 - **Rename Options menu** (File Operations > `R`): pick the naming pattern, date format (off, yy.mm.dd, yyyy-mm-dd, dd.mm.yyyy), date placement, tidy and the studio spellings file without CLI flags, with a live before/after example. The File Operations menu shows the current choice next to Rename Files, and the settings are saved with configuration profiles.
 - **`vmgr similar <dir>`**: lists files that look like the same scene after standardizing names (same studio, date and title, ignoring spelling, `(21.01.2026)` versus `26.01.21`, and tags like `1080p` or `rq`), largest first, plus files that share a studio and date with different titles. Report only; `vmgr duplicates` still compares contents.
 - **`--tidy`** (rename): one spelling per studio from a built-in table plus `~/.config/vmgr/studios.conf` (or `--studios <file>`, lines of `alias=Canonical`); dotted and dashed names become title-cased words (`26.11.04.nellie.pull.my.hair.480p` -> `26.11.04 Nellie Pull My Hair`); encoding tags, `XXX`, `PRT`, `rq` and trailing hash ids are dropped; en/em dashes and a leading dash are removed; `Name 4023 Name, 18` collapses to `Name, 18`. Runs after `--dates`/`--date-first`.
@@ -25,7 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Faster language detection**: the tiny model loads once for all three samples (about 30 s per file, against several minutes with three separate runs on a slow file). Falls back to the old method when `faster_whisper` can't be imported.
 - **Readable cues**: lines wrap at 42 characters, 2 per cue, using word timestamps (`--no-split-lines` to turn off). `--prompt <text>` passes names and jargon to Whisper. `--punctuation` enables the capitalization fix.
 
+### Changed
+- **`vmgr duplicates` is much faster on large collections**: a file is only hashed in full when another video has the same size and the same first and last megabyte; files with a unique size are never read. Results are unchanged.
+- **`organize` scans once**: it reads the search path a single time and matches subfolder names against that list (one `awk` pass) instead of running a `find` per subfolder. A real run of 3,000 files and 100 subfolders went from 329 s to 22 s.
+- **No process per log line or per file**: `log_message` formats its timestamp with the `printf` builtin instead of forking `date` (every command logs, and forks are slow on WSL); the `basename`, `dirname`, `tr` and `type -t` calls in the rename, organize and progress loops use parameter expansion; `is_video_file` and `is_image_file` no longer loop over the extension list.
+- Folder names in `organize` match file names literally. Before, `[2006] Show` was used as a `find` pattern, so the brackets acted as a character class.
+
 ### Fixed
+- `organize` no longer retries files it already moved for an earlier subfolder (each subfolder's matches piled up in one list, which produced "Failed to move" errors).
+- The pseudo-terminal tests for the browser and the menus no longer fail under load: the drivers wait for the first screen and for the exit marker instead of reading fixed one-second windows.
 - Existing `.vtt` subtitles are no longer judged incomplete, deleted and regenerated on each run.
 - `fix_punctuation` now edits only cue text, not cue numbers, timestamps or the WEBVTT header.
 - The directory browser no longer freezes for tens of seconds on network folders (WSL 9p/NAS mounts): it lists with one `find` call instead of a stat per entry.

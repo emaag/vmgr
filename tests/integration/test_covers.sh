@@ -73,3 +73,74 @@ test_covers_report_file() {
     assert_equals "$TEST_TMPDIR/Cat/Lacks" "$(cat "$COVER_REPORT_FILE")" "covers: report file lists missing folder"
     _teardown
 }
+
+# ── Creating covers (needs ffmpeg) ────────────────────────────────────────────
+
+_have_ffmpeg() { command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; }
+
+_make_setup() {
+    _setup
+    COVER_MAKE=true; COVER_FRAME_PERCENT=10; COVER_WIDTH=640; COVER_QUALITY=3; DRY_RUN=false
+    mkdir -p "$TEST_TMPDIR/Make/Plain" "$TEST_TMPDIR/Make/Png" "$TEST_TMPDIR/Make/Empty"
+    ffmpeg -v error -y -f lavfi -i testsrc=duration=10:size=1280x720:rate=10 "$TEST_TMPDIR/Make/Plain/scene.mp4" </dev/null
+    ffmpeg -v error -y -f lavfi -i testsrc=duration=1:size=300x200:rate=1 -frames:v 1 "$TEST_TMPDIR/Make/Png/folder.png" </dev/null
+    echo note > "$TEST_TMPDIR/Make/Empty/notes.txt"
+}
+
+test_covers_make_creates_from_video_frame() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    check_cover_art "$TEST_TMPDIR/Make" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/Make/Plain/folder.jpg" "covers make: cover created from the video"
+    local w; w=$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TEST_TMPDIR/Make/Plain/folder.jpg" 2>/dev/null)
+    assert_equals "640" "$w" "covers make: wide frame scaled down to COVER_WIDTH"
+    _teardown
+}
+
+test_covers_make_converts_png_without_upscaling() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    check_cover_art "$TEST_TMPDIR/Make" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/Make/Png/folder.jpg" "covers make: folder.png converted to folder.jpg"
+    local w; w=$(ffprobe -v error -show_entries stream=width -of csv=p=0 "$TEST_TMPDIR/Make/Png/folder.jpg" 2>/dev/null)
+    assert_equals "300" "$w" "covers make: a small image is not enlarged"
+    assert_file_exists "$TEST_TMPDIR/Make/Png/folder.png" "covers make: the original png is kept"
+    _teardown
+}
+
+test_covers_make_skips_folder_with_nothing_to_use() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    local out; out=$(check_cover_art "$TEST_TMPDIR/Make" 2>&1)
+    assert_file_not_exists "$TEST_TMPDIR/Make/Empty/folder.jpg" "covers make: no cover invented without a source"
+    assert_contains "nothing to make one from" "$out" "covers make: reports folders it could not fill"
+    _teardown
+}
+
+test_covers_make_never_overwrites() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    echo keep > "$TEST_TMPDIR/Make/Plain/folder.jpg"
+    check_cover_art "$TEST_TMPDIR/Make" >/dev/null 2>&1
+    assert_equals "keep" "$(cat "$TEST_TMPDIR/Make/Plain/folder.jpg")" "covers make: an existing cover is left alone"
+    _teardown
+}
+
+test_covers_make_dry_run_writes_nothing() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    DRY_RUN=true
+    local out; out=$(check_cover_art "$TEST_TMPDIR/Make" 2>&1)
+    assert_file_not_exists "$TEST_TMPDIR/Make/Plain/folder.jpg" "covers make: dry run creates nothing"
+    assert_contains "Would create" "$out" "covers make: dry run says what it would do"
+    _teardown
+}
+
+test_covers_make_off_by_default_reports_only() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    COVER_MAKE=false
+    check_cover_art "$TEST_TMPDIR/Make" >/dev/null 2>&1
+    assert_file_not_exists "$TEST_TMPDIR/Make/Plain/folder.jpg" "covers make: nothing created unless asked"
+    _teardown
+}

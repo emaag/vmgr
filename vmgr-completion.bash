@@ -52,6 +52,9 @@ _vmgr_completion() {
         --junk-partial
         --apply
         --cover-name
+        --make-covers
+        --cover-position
+        --cover-width
         --all-folders
         --with-videos-only
         --cover-case

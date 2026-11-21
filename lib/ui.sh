@@ -265,6 +265,11 @@ show_covers_menu() {
     ui_item_toggle 6 "Also list folders that have a cover" "${COVER_SHOW_PRESENT:-false}"
     ui_item 7 "Save missing list to file" "${COVER_REPORT_FILE:-off}"
     echo ""
+    ui_section "Create covers"
+    ui_item 8 "Create the missing covers" "Frame from the first video (needs ffmpeg)"
+    ui_item 9 "Frame position" "${COVER_FRAME_PERCENT:-10}% into the video"
+    ui_item 0 "Cover width" "${COVER_WIDTH:-640} px"
+    echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
 }
@@ -888,6 +893,37 @@ _handle_covers_choice() {
         7)
             echo ""
             ui_ask COVER_REPORT_FILE "File to write the missing folders to (empty for none)"
+            return 0
+            ;;
+        8)
+            if get_directory_input; then
+                start_operation "Check Cover Art"
+                local _show="$COVER_SHOW_PRESENT"; COVER_SHOW_PRESENT=false
+                COVER_MAKE=false
+                check_cover_art "$TARGET_FOLDER"
+                COVER_SHOW_PRESENT="$_show"
+                echo ""
+                if ui_confirm "Create the missing covers now?"; then
+                    COVER_MAKE=true
+                    check_cover_art "$TARGET_FOLDER" >/dev/null
+                    COVER_MAKE=false
+                    log_success "Done. Remove a cover you do not like and run again, or replace it by hand."
+                fi
+                end_operation
+                ui_pause
+            fi
+            return 0
+            ;;
+        9)
+            echo ""
+            ui_ask COVER_FRAME_PERCENT "Take the frame this many percent into the video, 1-99 (now: ${COVER_FRAME_PERCENT:-10})"
+            [[ "$COVER_FRAME_PERCENT" =~ ^[0-9]+$ ]] && (( COVER_FRAME_PERCENT >= 1 && COVER_FRAME_PERCENT <= 99 )) || COVER_FRAME_PERCENT=10
+            return 0
+            ;;
+        0)
+            echo ""
+            ui_ask COVER_WIDTH "Width in pixels, 0 for the original size (now: ${COVER_WIDTH:-640})"
+            [[ "$COVER_WIDTH" =~ ^[0-9]+$ ]] || COVER_WIDTH=640
             return 0
             ;;
         b|B) return 1 ;;

@@ -194,6 +194,10 @@ COVER_LEAF_ONLY=true           # Only check folders with no subfolders
 COVER_REQUIRE_VIDEOS=false     # Only check folders that directly contain a video
 COVER_SHOW_PRESENT=false       # Also list folders that already have a cover
 COVER_REPORT_FILE=""           # Also write the missing folders to this file
+COVER_MAKE=false               # Create the missing covers (needs ffmpeg)
+COVER_FRAME_PERCENT=10         # Where in the video to take the frame
+COVER_WIDTH=640                # Width of a created cover in pixels (0 = original)
+COVER_QUALITY=3                # ffmpeg JPEG quality, 2 (best) to 31
 DUPLICATE_REPORT_GROUPS=200 # Groups the duplicate report prints (the summary always counts all)
 CATALOG_STALE_DAYS=30       # Warn when a drive has not been scanned for this many days
 CATALOG_OFFLINE_RETENTION=90 # Days to keep offline drive data (0=forever)

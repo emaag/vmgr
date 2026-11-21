@@ -153,9 +153,13 @@ chmod +x video-manager-ultimate.sh
 ./video-manager-ultimate.sh junk /path
 ./video-manager-ultimate.sh junk /path --junk-ext nfo,url --junk-partial --apply
 
-# Report folders missing a cover image (folder.jpg); report only
+# Report folders missing a cover image (folder.jpg)
 ./video-manager-ultimate.sh covers /path
 ./video-manager-ultimate.sh covers /path --cover-name folder.jpg,cover.jpg --all-folders --cover-report missing.txt
+
+# Create the missing covers: a frame from the first video, or folder.png converted (needs ffmpeg)
+./video-manager-ultimate.sh --dry-run covers /path --make-covers
+./video-manager-ultimate.sh covers /path --make-covers --cover-position 20 --cover-width 480
 
 # Flatten directory structure
 ./video-manager-ultimate.sh flatten /path

@@ -161,6 +161,10 @@ ${COLOR_BOLD}COVER OPTIONS:${COLOR_RESET}
     --cover-case            Match the cover name case-sensitively
     --show-present          Also list the folders that already have a cover
     --cover-report <file>   Also write the missing folders to a file
+    --make-covers           Create the missing covers: a frame from the folder's first
+                            video, or folder.png converted (needs ffmpeg; honors --dry-run)
+    --cover-position <pct>  Where in the video to take the frame, 1-99 (default 10)
+    --cover-width <px>      Width of a created cover (default 640, 0 = original size)
 
 ${COLOR_BOLD}ORGANIZE OPTIONS:${COLOR_RESET}
     --organize-target <dir> Set default target folder for organize
@@ -173,7 +177,8 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     duplicates <dir>        Find duplicate files
     junk <dir>              Report leftover files (.nfo, .url, Thumbs.db ...);
                             with --apply, move them to the trash
-    covers <dir>            Report folders missing a cover image (folder.jpg)
+    covers <dir>            Report folders missing a cover image (folder.jpg);
+                            with --make-covers, create them
     similar <dir>           List files with the same studio, date and title once
                             names are standardized (report only)
     subtitles <dir>         Generate subtitles for videos
@@ -474,6 +479,30 @@ parse_arguments() {
             --show-present)
                 COVER_SHOW_PRESENT=true
                 shift
+                ;;
+            --make-covers)
+                COVER_MAKE=true
+                shift
+                ;;
+            --cover-position)
+                shift
+                if [[ "${1:-}" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 99 )); then
+                    COVER_FRAME_PERCENT="$1"
+                    shift
+                else
+                    log_error "--cover-position needs a number from 1 to 99"
+                    exit 1
+                fi
+                ;;
+            --cover-width)
+                shift
+                if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+                    COVER_WIDTH="$1"
+                    shift
+                else
+                    log_error "--cover-width needs a number of pixels (0 = original size)"
+                    exit 1
+                fi
                 ;;
             --cover-report)
                 shift
