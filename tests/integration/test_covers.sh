@@ -144,3 +144,37 @@ test_covers_make_off_by_default_reports_only() {
     assert_file_not_exists "$TEST_TMPDIR/Make/Plain/folder.jpg" "covers make: nothing created unless asked"
     _teardown
 }
+
+test_covers_make_converts_jpeg_input() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    mkdir -p "$TEST_TMPDIR/Make/Jpeg"
+    ffmpeg -v error -y -f lavfi -i testsrc=duration=1:size=300x200:rate=1 -frames:v 1 "$TEST_TMPDIR/Make/Jpeg/folder.jpeg" </dev/null
+    check_cover_art "$TEST_TMPDIR/Make" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/Make/Jpeg/folder.jpg" "covers make: folder.jpeg converted (no -ss on a still image)"
+    _teardown
+}
+
+test_covers_make_unreadable_video_uses_its_thumbnail() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    mkdir -p "$TEST_TMPDIR/Make/Broken"
+    head -c 4096 /dev/urandom > "$TEST_TMPDIR/Make/Broken/clip.mp4"
+    ffmpeg -v error -y -f lavfi -i testsrc=duration=1:size=320x240:rate=1 -frames:v 1 "$TEST_TMPDIR/Make/Broken/clip.mp4.jpg" </dev/null
+    local out; out=$(check_cover_art "$TEST_TMPDIR/Make" 2>&1)
+    assert_file_exists "$TEST_TMPDIR/Make/Broken/folder.jpg" "covers make: unreadable video falls back to its thumbnail"
+    assert_contains "used its thumbnail clip.mp4.jpg" "$out" "covers make: says where the cover came from"
+    _teardown
+}
+
+test_covers_make_unreadable_video_without_thumbnail_fails_cleanly() {
+    if ! _have_ffmpeg; then assert_equals "1" "1" "covers make: skipped (no ffmpeg)"; return; fi
+    _make_setup
+    mkdir -p "$TEST_TMPDIR/Make/Broken"
+    head -c 4096 /dev/urandom > "$TEST_TMPDIR/Make/Broken/clip.mp4"
+    local out; out=$(check_cover_art "$TEST_TMPDIR/Make" 2>&1)
+    assert_file_not_exists "$TEST_TMPDIR/Make/Broken/folder.jpg" "covers make: no cover from an unreadable video"
+    assert_contains "failed" "$out" "covers make: failure reported"
+    assert_equals "0" "$(find "$TEST_TMPDIR/Make/Broken" -name '.vmgr-cover*' | wc -l | tr -d ' ')" "covers make: no temp file left behind"
+    _teardown
+}

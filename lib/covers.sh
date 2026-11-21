@@ -63,22 +63,50 @@ _cover_make_one() {
         return 0
     fi
 
-    local ss=0 dur tmp="$dir/.vmgr-cover.$$.jpg"
-    local -a vf=()
-    (( ${COVER_WIDTH:-0} > 0 )) && vf=(-vf "scale=min(${COVER_WIDTH}\\,iw):-2")
+    local ss="" dur tmp="$dir/.vmgr-cover.$$.jpg" err="" rc
     if [[ "$kind" == frame* ]]; then
         dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$source" 2>/dev/null </dev/null | head -n1)
         ss=$(awk -v d="${dur:-0}" -v p="$COVER_FRAME_PERCENT" 'BEGIN { printf "%.2f", (d > 0 ? d * p / 100 : 5) }')
     fi
-    if ffmpeg -v error -y -ss "$ss" -i "$source" -frames:v 1 "${vf[@]}" -q:v "${COVER_QUALITY:-3}" "$tmp" </dev/null 2>/dev/null \
-       && [[ -s "$tmp" ]] && mv -n -- "$tmp" "$target" 2>/dev/null; then
+    err=$(_cover_encode "$source" "$tmp" "$ss"); rc=$?
+
+    # Unreadable video: use the thumbnail saved next to it (video.mp4.jpg), if any
+    if (( rc != 0 )) && [[ "$kind" == frame* ]]; then
+        local thumb
+        for thumb in "$source.jpg" "$source.jpeg" "${source%.*}.jpg" "${source%.*}.jpeg"; do
+            if [[ -f "$thumb" ]]; then
+                err=$(_cover_encode "$thumb" "$tmp" ""); rc=$?
+                (( rc == 0 )) && kind="video unreadable, used its thumbnail ${thumb##*/}"
+                break
+            fi
+        done
+    fi
+
+    if (( rc == 0 )) && mv -n -- "$tmp" "$target" 2>/dev/null; then
         rm -f "$tmp" 2>/dev/null
         echo -e "  ${COLOR_GREEN}created${COLOR_RESET} $target_name ($kind): $rel"
         return 0
     fi
     rm -f "$tmp" 2>/dev/null
-    echo -e "  ${COLOR_RED}failed${COLOR_RESET} to create $target_name from ${source##*/}: $rel"
+    err="${err##*$'\n'}"
+    echo -e "  ${COLOR_RED}failed${COLOR_RESET} to create $target_name from ${source##*/}${err:+ ($err)}: $rel"
     return 2
+}
+
+# ffmpeg: write one JPEG from an image or from one video frame.
+# Args: $1 source, $2 output, $3 seek seconds (empty for an image). Prints the
+# last ffmpeg error line on failure. -ss is only for video: on a JPEG it makes
+# ffmpeg write an empty file without any error.
+_cover_encode() {
+    local src="$1" out="$2" ss="${3:-}" msg
+    local -a seek=() vf=()
+    [[ -n "$ss" ]] && seek=(-ss "$ss")
+    (( ${COVER_WIDTH:-0} > 0 )) && vf=(-vf "scale=min(${COVER_WIDTH}\\,iw):-2")
+    msg=$(ffmpeg -v error -y "${seek[@]}" -i "$src" -frames:v 1 "${vf[@]}" -q:v "${COVER_QUALITY:-3}" "$out" 2>&1 </dev/null)
+    if [[ -s "$out" ]]; then return 0; fi
+    rm -f "$out" 2>/dev/null
+    printf '%s\n' "${msg:-no frame written}"
+    return 1
 }
 
 # Report folders under a directory that lack a cover image

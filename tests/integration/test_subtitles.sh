@@ -523,6 +523,10 @@ test_interrupt_stops_the_run_and_removes_the_partial_subtitle() {
     assert_equals "130" "$rc" "interrupt: returns 130"
     assert_equals "0" "$(( took < 10 ? 0 : 1 ))" "interrupt: stops promptly instead of finishing the file"
     assert_file_not_exists "$TEST_TMPDIR/a.srt" "interrupt: partial subtitle removed"
-    assert_equals "1" "$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')" "interrupt: remaining videos not started"
+    # whisper ran for the first video, or the signal came before it started (none);
+    # either way the second video is never started
+    local calls=0
+    [[ -f "$TEST_TMPDIR/calls" ]] && calls=$(wc -l < "$TEST_TMPDIR/calls" | tr -d ' ')
+    assert_equals "0" "$(( calls <= 1 ? 0 : 1 ))" "interrupt: remaining videos not started"
     _teardown
 }

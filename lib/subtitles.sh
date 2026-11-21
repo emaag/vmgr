@@ -588,6 +588,13 @@ _generate_single_subtitle() {
         wlog="$(mktemp 2>/dev/null)" && live=true || wlog=""
     fi
     trap _subtitle_on_interrupt INT TERM
+    # A signal that arrived during the preparation above is only handled once that
+    # foreground command ends; if it already fired, do not start whisper at all.
+    if [[ "$_SUBTITLE_INTERRUPTED" == true ]]; then
+        [[ -n "$wlog" ]] && rm -f "$wlog"
+        [[ -n "$audio_dir" ]] && rm -rf "$audio_dir"
+        return 130
+    fi
     run_with_timeout "${SUBTITLE_TIMEOUT:-7200}" \
         "$whisper_cmd" "$input_file" \
         --model "$model" \
@@ -599,6 +606,8 @@ _generate_single_subtitle() {
         "${quality_args[@]}" \
         "${fp16_args[@]}" >/dev/null 2>"${wlog:-/dev/stderr}" &
     _SUBTITLE_WPID=$!
+    # ... and one that lands between the launch and this line found no PID to kill
+    [[ "$_SUBTITLE_INTERRUPTED" == true ]] && kill -TERM "$_SUBTITLE_WPID" 2>/dev/null
     local rc=0
     if [[ "$live" == true ]]; then
         local prog pct elapsed eta started
