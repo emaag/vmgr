@@ -663,9 +663,16 @@ parse_arguments() {
 
     # Validate directory for commands that need it
     if [[ "$command" != "batch" && "$command" != "list-undo" && "$command" != "empty-trash" && "$command" != "reddit-setup" && "$command" != "catalog-list" && "$command" != "catalog-search" && "$command" != "catalog-duplicates" && "$command" != "catalog-report" && "$command" != "catalog-export" && "$command" != "undo-organize" && "$command" != "organize" && "$command" != "reddit" ]]; then
+        # The read-only reports default to the current folder; changing files
+        # (junk --apply) always needs an explicit directory.
+        if [[ -z "$directory" ]] && { [[ "$command" == "covers" ]] || [[ "$command" == "junk" && "${JUNK_APPLY:-false}" != true ]]; }; then
+            directory="."
+            log_info "No directory given, using the current folder: $PWD"
+        fi
+
         if [[ -z "$directory" ]]; then
             log_error "No directory specified for command: $command"
-            show_usage
+            echo "Usage: $(basename "$0") $command <directory>   (see $(basename "$0") --help)" >&2
             exit 1
         fi
 
