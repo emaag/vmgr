@@ -66,6 +66,7 @@ show_main_menu() {
     ui_item 6 "Settings"             "Options and preferences"
     ui_item 7 "Reddit Downloader"    "Images from a subreddit"
     ui_item 8 "Cover Art Check"      "Find folders missing folder.jpg"
+    ui_item 9 "Junk Cleanup"         ".nfo, .url and other leftovers"
     echo ""
     ui_item Q "Quit" "" back
     ui_prompt "Choose"
@@ -230,6 +231,21 @@ show_duplicate_menu() {
     ui_item 1 "Find Duplicates" "Report Only"
     ui_item 2 "Find and Delete Duplicates"
     ui_item 3 "Find Duplicates" "Dry Run"
+    echo ""
+    ui_item B "Back to Main Menu" "" back
+    ui_prompt
+}
+
+show_junk_menu() {
+    show_header
+
+    ui_title "JUNK CLEANUP"
+    ui_item 1 "Report junk files" "Nothing is changed"
+    ui_item 2 "Move junk files to the trash" "Undo restores them"
+    echo ""
+    ui_section "Settings"
+    ui_item 3 "Junk extensions" "${JUNK_EXTENSIONS:-none}"
+    ui_item_toggle 4 "Also unfinished downloads" "${JUNK_INCLUDE_PARTIAL:-false}"
     echo ""
     ui_item B "Back to Main Menu" "" back
     ui_prompt
@@ -800,6 +816,50 @@ _handle_duplicates_choice() {
         b|B) return 1 ;;
         *) return 2 ;;
     esac
+}
+
+# Choice handler for the junk cleanup menu
+_handle_junk_choice() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            if get_directory_input; then
+                start_operation "Report Junk Files"
+                clean_junk "$TARGET_FOLDER" false
+                end_operation
+                ui_pause
+            fi
+            return 0
+            ;;
+        2)
+            if get_directory_input; then
+                start_operation "Clean Junk Files"
+                clean_junk "$TARGET_FOLDER" false
+                echo ""
+                if ui_confirm "Move these files to the trash?"; then
+                    clean_junk "$TARGET_FOLDER" true >/dev/null
+                    log_success "Done. Utilities > Undo Last Operation puts them back."
+                else
+                    log_warning "Operation cancelled"
+                fi
+                end_operation
+                ui_pause
+            fi
+            return 0
+            ;;
+        3)
+            echo ""
+            ui_ask JUNK_EXTENSIONS "Extensions that count as junk, comma-separated (now: ${JUNK_EXTENSIONS:-none})"
+            return 0
+            ;;
+        4) toggle_flag JUNK_INCLUDE_PARTIAL; return 0 ;;
+        b|B) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+handle_junk() {
+    run_menu_loop show_junk_menu _handle_junk_choice false
 }
 
 # Choice handler for the cover art menu
@@ -1761,6 +1821,10 @@ _handle_main_menu_choice() {
             ;;
         8)
             handle_covers
+            return 0
+            ;;
+        9)
+            handle_junk
             return 0
             ;;
         q|Q)

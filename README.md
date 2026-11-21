@@ -149,6 +149,10 @@ chmod +x video-manager-ultimate.sh
 # date and title, whatever the spelling or encoding tags); report only
 ./video-manager-ultimate.sh similar /path
 
+# Report leftover files (.nfo, .url, Thumbs.db ...); --apply moves them to the trash
+./video-manager-ultimate.sh junk /path
+./video-manager-ultimate.sh junk /path --junk-ext nfo,url --junk-partial --apply
+
 # Report folders missing a cover image (folder.jpg); report only
 ./video-manager-ultimate.sh covers /path
 ./video-manager-ultimate.sh covers /path --cover-name folder.jpg,cover.jpg --all-folders --cover-report missing.txt

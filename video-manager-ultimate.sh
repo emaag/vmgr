@@ -63,6 +63,7 @@ load_module "utils.sh"
 load_module "file-ops.sh"
 load_module "duplicates.sh"
 load_module "covers.sh"
+load_module "junk.sh"
 load_module "organize.sh"
 load_module "subtitles.sh"
 load_module "catalog.sh"
@@ -145,6 +146,13 @@ ${COLOR_BOLD}RENAME OPTIONS:${COLOR_RESET}
     --date-first            Also move the date to just after the [Studio] tag:
                             "[Studio] Title (26.10.31)" -> "[Studio] 26.10.31 Title"
 
+${COLOR_BOLD}JUNK OPTIONS:${COLOR_RESET}
+    --junk-ext <list>       Extensions that count as junk, comma-separated
+                            (default nfo,parts,url,lnk)
+    --junk-partial          Also treat unfinished downloads (.!qB, .part ...) as junk
+    --apply                 Move the junk to the trash (default is report only;
+                            Undo restores; honors --dry-run)
+
 ${COLOR_BOLD}COVER OPTIONS:${COLOR_RESET}
     --cover-name <names>    Names that count as a cover, comma-separated
                             (default folder.jpg; e.g. folder.jpg,cover.jpg)
@@ -163,6 +171,8 @@ ${COLOR_BOLD}COMMANDS:${COLOR_RESET}
     flatten <dir>           Move all videos to top directory
     cleanup <dir>           Full cleanup (rename + spacing fixes)
     duplicates <dir>        Find duplicate files
+    junk <dir>              Report leftover files (.nfo, .url, Thumbs.db ...);
+                            with --apply, move them to the trash
     covers <dir>            Report folders missing a cover image (folder.jpg)
     similar <dir>           List files with the same studio, date and title once
                             names are standardized (report only)
@@ -421,6 +431,24 @@ parse_arguments() {
                     exit 1
                 fi
                 ;;
+            --junk-ext)
+                shift
+                if [[ -n "${1:-}" ]]; then
+                    JUNK_EXTENSIONS="$1"
+                    shift
+                else
+                    log_error "--junk-ext needs a comma-separated list (e.g. nfo,url)"
+                    exit 1
+                fi
+                ;;
+            --junk-partial)
+                JUNK_INCLUDE_PARTIAL=true
+                shift
+                ;;
+            --apply)
+                JUNK_APPLY=true
+                shift
+                ;;
             --cover-name)
                 shift
                 if [[ -n "${1:-}" ]]; then
@@ -611,7 +639,7 @@ parse_arguments() {
                     shift
                 fi
                 ;;
-            rename|flatten|cleanup|duplicates|similar|covers|subtitles|workflow-new|workflow-clean|batch|catalog)
+            rename|flatten|cleanup|duplicates|similar|covers|junk|subtitles|workflow-new|workflow-clean|batch|catalog)
                 command="$1"
                 shift
                 if [[ -n "$1" && "$1" != -* ]]; then
@@ -666,6 +694,11 @@ parse_arguments() {
         duplicates)
             start_operation "Find Duplicates"
             find_duplicates "$directory" "report"
+            end_operation
+            ;;
+        junk)
+            start_operation "Clean Junk Files"
+            clean_junk "$directory" "${JUNK_APPLY:-false}"
             end_operation
             ;;
         covers)

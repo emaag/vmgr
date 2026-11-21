@@ -181,6 +181,12 @@ CATALOG_DRIVES_DB="$HOME/.video-manager-drives.json" # Known drives database
 CATALOG_AUTO_SCAN=false # Auto-scan on drive connect
 CATALOG_INCLUDE_METADATA=true # Extract metadata (duration, resolution, dimensions, etc.)
 CATALOG_INCLUDE_HASH=true # Calculate file hashes (slower but detects duplicates)
+# Junk file cleanup (leftovers beside the videos)
+JUNK_EXTENSIONS="nfo,parts,url,lnk"          # Extensions that count as junk
+JUNK_NAMES="Thumbs.db,.DS_Store,desktop.ini" # Exact file names that count as junk
+JUNK_INCLUDE_PARTIAL=false                   # Also treat unfinished downloads as junk
+JUNK_PARTIAL_EXTENSIONS="!qb,part,crdownload,tmp,aria2,!ut" # Unfinished-download extensions
+
 # Cover art check (folder.jpg)
 COVER_FILENAMES="folder.jpg"   # Comma-separated names that count as a cover (e.g. folder.jpg,cover.jpg)
 COVER_CASE_INSENSITIVE=true    # Match Folder.JPG, FOLDER.jpg ...
