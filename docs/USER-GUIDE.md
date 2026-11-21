@@ -1,7 +1,7 @@
 # VIDEO MANAGER ULTIMATE - BASH EDITION
 ## Complete User Guide
 
-**Version:** 1.11.0  
+**Version:** 1.12.0  
 **Date:** October 2026  
 **Complements:** PowerShell Ultimate Edition
 
@@ -913,7 +913,7 @@ The script accepts both Windows and Unix path formats:
 
 ```
 [2025-10-19 14:30:00] [INFO] ==========================================
-[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.11.0
+[2025-10-19 14:30:00] [INFO] Video Manager Ultimate - Bash Edition v1.12.0
 [2025-10-19 14:30:00] [INFO] Session started: 2025-10-19 14:30:00
 [2025-10-19 14:30:00] [INFO] ==========================================
 [2025-10-19 14:30:05] [OPERATION] Started: Rename Files (Bracket Notation)

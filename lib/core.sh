@@ -9,15 +9,15 @@
 #
 # Author: Created for Eric's Video Management System
 # Module: core.sh
-# Version: 1.11.0
+# Version: 1.12.0
 # Date: October 22, 2026
 #
 ################################################################################
 
 # Script metadata
-readonly SCRIPT_VERSION="1.11.0"
+readonly SCRIPT_VERSION="1.12.0"
 readonly SCRIPT_NAME="Video Manager Ultimate - Bash Edition"
-readonly SCRIPT_DATE="2026-10-22"
+readonly SCRIPT_DATE="2026-11-21"
 
 # Plain mode: NO_COLOR (https://no-color.org) or a dumb terminal drops all
 # escape codes; a non-UTF-8 locale or the linux console falls back to ASCII glyphs.

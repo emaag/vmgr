@@ -2,7 +2,7 @@
 
 **Cross-platform video file management and organization tool for Linux, macOS, Windows (Git Bash), and WSL.**
 
-[![Version](https://img.shields.io/badge/version-1.11.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.11.0)
+[![Version](https://img.shields.io/badge/version-1.12.0-blue.svg)](https://github.com/emaag/vmgr/releases/tag/v1.12.0)
 [![CI](https://github.com/emaag/vmgr/workflows/CI/badge.svg)](https://github.com/emaag/vmgr/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/bash-4.0%2B-brightgreen.svg)](https://www.gnu.org/software/bash/)

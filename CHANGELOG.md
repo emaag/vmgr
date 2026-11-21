@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-21
+
 ### Added
 - **`vmgr covers <dir>`**: reports the folders that have no `folder.jpg`, with a summary of how many do and don't. By default it checks only folders without subfolders (`--all-folders` checks every folder), matches names case-insensitively, and can look for several names (`--cover-name folder.jpg,cover.jpg`), restrict itself to folders that hold videos (`--with-videos-only`), list the folders that already have a cover (`--show-present`) and write the missing ones to a file (`--cover-report <file>`). With no directory it uses the current folder. There is a Cover Art Check entry on the main menu, and every setting is saved with configuration profiles.
 - **`--make-covers`** (covers): creates the missing covers. A folder with a `folder.png` (or `.jpeg`/`.webp`/`.bmp`) gets it converted; otherwise a frame from the folder's first video is used (`--cover-position <pct>`, default 10; `--cover-width <px>`, default 640, never enlarges; needs ffmpeg). It never overwrites a cover, skips folders with nothing to make one from and says so, and `--dry-run` lists what it would create. A video ffmpeg cannot read falls back to the thumbnail saved next to it (`video.mp4.jpg`), and a failure shows ffmpeg's error.
