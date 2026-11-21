@@ -17,6 +17,50 @@ _teardown() { [[ -n "$TEST_TMPDIR" && -d "$TEST_TMPDIR" ]] && rm -rf "$TEST_TMPD
 
 # ── organize_by_subfolder_names ───────────────────────────────────────────────
 
+test_organize_several_subfolders_each_get_their_files() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/Alpha" "$TEST_TMPDIR/Beta"
+    touch "$TEST_TMPDIR/alpha one.mp4" "$TEST_TMPDIR/alpha two.mp4" "$TEST_TMPDIR/beta one.mp4"
+    ORGANIZE_LOG_OPERATIONS=false
+    organize_by_subfolder_names "$TEST_TMPDIR" "$TEST_TMPDIR" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/Alpha/alpha one.mp4" "organize: first subfolder, file 1"
+    assert_file_exists "$TEST_TMPDIR/Alpha/alpha two.mp4" "organize: first subfolder, file 2"
+    assert_file_exists "$TEST_TMPDIR/Beta/beta one.mp4" "organize: second subfolder"
+    _teardown
+}
+
+test_organize_earlier_matches_not_reprocessed() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/Alpha" "$TEST_TMPDIR/Beta"
+    touch "$TEST_TMPDIR/alpha one.mp4" "$TEST_TMPDIR/beta one.mp4"
+    ORGANIZE_LOG_OPERATIONS=false
+    local out; out=$(organize_by_subfolder_names "$TEST_TMPDIR" "$TEST_TMPDIR" 2>&1)
+    assert_not_contains "Failed to move" "$out" "organize: a file moved for one subfolder is not retried for the next"
+    _teardown
+}
+
+test_organize_search_path_outside_target() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/target/Alpha" "$TEST_TMPDIR/inbox"
+    touch "$TEST_TMPDIR/inbox/alpha scene.mp4"
+    ORGANIZE_LOG_OPERATIONS=false
+    organize_by_subfolder_names "$TEST_TMPDIR/target" "$TEST_TMPDIR/inbox" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/target/Alpha/alpha scene.mp4" "organize: files found in a separate search path are moved"
+    _teardown
+}
+
+test_organize_name_with_glob_characters_matches_literally() {
+    _setup
+    mkdir -p "$TEST_TMPDIR/[2006] Show"
+    touch "$TEST_TMPDIR/[2006] show part 1.mp4" "$TEST_TMPDIR/2 show other.mp4"
+    ORGANIZE_LOG_OPERATIONS=false
+    organize_by_subfolder_names "$TEST_TMPDIR" "$TEST_TMPDIR" >/dev/null 2>&1
+    assert_file_exists "$TEST_TMPDIR/[2006] Show/[2006] show part 1.mp4" "organize: [brackets] in a folder name match literally"
+    assert_file_exists "$TEST_TMPDIR/2 show other.mp4" "organize: a glob-lookalike name is not matched"
+    _teardown
+}
+
+
 test_organize_moves_matching_file() {
     _setup
     mkdir -p "$TEST_TMPDIR/ActorName"

@@ -425,19 +425,30 @@ organize_by_subfolder_names() {
     local skipped_count=0
     local total_files=0
 
+    # Scan the search path ONCE; every subfolder is matched against this list in
+    # memory (a find per subfolder re-reads the whole tree each time, which is
+    # very slow on a network share). Moves update the list, so a later subfolder
+    # sees files where the earlier ones left them, as separate scans did.
+    local search_abs
+    search_abs=$(cd "$search_path" 2>/dev/null && pwd -P) || search_abs="$search_path"
+    local -a scan_files=() scan_lower=()
+    local _f _b
+    while IFS= read -r -d '' _f; do
+        is_video_file "$_f" || continue
+        scan_files+=("$_f")
+        _b="${_f##*/}"
+        scan_lower+=("${_b,,}")
+    done < <(find "$search_path" -type f ! -path '*/.vmgr-trash/*' -print0 2>/dev/null)
+
     # First pass: count total files to process
     if [[ "$ORGANIZE_SHOW_PROGRESS" == true ]]; then
         log_verbose "Counting files to process..."
+        local _i _n
         for subfolder in "${subfolders[@]}"; do
-            local subfolder_name=$(basename "$subfolder")
-            local count=$(find "$search_path" -type f ! -path '*/.vmgr-trash/*' \( \
-                -iname "*${subfolder_name}*" \
-                \) \( \
-                -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
-                -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
-                -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \
-                \) 2>/dev/null | wc -l)
-            ((total_files += count))
+            _n="${subfolder##*/}"; _n="${_n,,}"
+            for _i in "${!scan_lower[@]}"; do
+                [[ "${scan_lower[$_i]}" == *"$_n"* ]] && ((total_files++))
+            done
         done
         log_info "Total files to process: $total_files"
         echo ""
@@ -452,9 +463,16 @@ organize_by_subfolder_names() {
 
         log_info "Searching for files matching: $subfolder_name"
 
-        # Find all video files in search path that match the subfolder name
-        local -a matching_files
-        while IFS= read -r file; do
+        # Files (from the single scan) whose name contains the subfolder name
+        local -a matching_files=() matching_idx=()
+        local sub_abs in_search=false i file
+        sub_abs=$(cd "$subfolder" 2>/dev/null && pwd -P)
+        [[ "$sub_abs/" == "$search_abs/"* ]] && in_search=true
+
+        for i in "${!scan_files[@]}"; do
+            [[ "${scan_lower[$i]}" == *"$subfolder_name_lower"* ]] || continue
+            file="${scan_files[$i]}"
+
             # Skip if file doesn't exist
             [[ ! -f "$file" ]] && continue
 
@@ -478,20 +496,17 @@ organize_by_subfolder_names() {
             fi
 
             matching_files+=("$file")
-        done < <(find "$search_path" -type f ! -path '*/.vmgr-trash/*' \( \
-            -iname "*${subfolder_name}*" -o \
-            -iname "*${subfolder_name_lower}*" \
-            \) \( \
-            -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" -o \
-            -iname "*.wmv" -o -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o \
-            -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.3gp" \
-            \) 2>/dev/null)
+            matching_idx+=("$i")
+        done
 
         # Move matching files
         if [[ ${#matching_files[@]} -gt 0 ]]; then
             log_info "Found ${#matching_files[@]} file(s) to move to: $subfolder_name"
 
-            for file in "${matching_files[@]}"; do
+            local k
+            for k in "${!matching_files[@]}"; do
+                file="${matching_files[$k]}"
+                i="${matching_idx[$k]}"
                 ((processed++))
 
                 # Show progress
@@ -526,6 +541,8 @@ organize_by_subfolder_names() {
                     ((moved_count++))
                 else
                     if mv "$file" "$dest"; then
+                        # Keep the scan list in step with the disk
+                        if $in_search; then scan_files[$i]="$dest"; else scan_lower[$i]=""; fi
                         # Log for undo
                         if [[ -n "$undo_log" ]]; then
                             _log_move_operation "$undo_log" "$file" "$dest"
